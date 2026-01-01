@@ -11,6 +11,7 @@ class RoomCleanupService {
     // Configuration
     this.checkInterval = options.checkInterval || 30000; // Check every 30 seconds
     this.hostGracePeriod = options.hostGracePeriod || 60000; // 1 minute for host to reconnect
+    this.playerGracePeriod = options.playerGracePeriod || 120000; // 2 minutes for player to reconnect
     this.emptyRoomTimeout = options.emptyRoomTimeout || 300000; // 5 minutes for empty rooms
     this.idleRoomTimeout = options.idleRoomTimeout || 3600000; // 1 hour for idle rooms
   }
@@ -40,6 +41,25 @@ class RoomCleanupService {
       for (const room of rooms) {
         let shouldDelete = false;
         let reason = '';
+
+        // Clean up stale disconnected players
+        const stalePlayers = room.removeStaleDisconnectedPlayers(this.playerGracePeriod);
+        if (stalePlayers.length > 0) {
+          console.log(`Removed ${stalePlayers.length} stale players from room ${room.pin}`);
+
+          // Notify room about removed players
+          if (this.io) {
+            stalePlayers.forEach(player => {
+              this.io.to(room.pin).emit('player_removed', {
+                playerId: player.id,
+                nickname: player.nickname,
+                reason: 'reconnection_timeout'
+              });
+            });
+          }
+
+          await this.roomRepository.save(room);
+        }
 
         // Check if host has been disconnected too long
         if (room.isHostDisconnected()) {

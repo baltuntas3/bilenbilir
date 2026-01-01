@@ -235,6 +235,23 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       socket.emit('error', { message: error.message });
     }
   });
+
+  // Request timer sync (for clients that need to resync)
+  socket.on('request_timer_sync', (data) => {
+    try {
+      const { pin } = data || {};
+
+      const timerSync = timerService.getTimerSync(pin);
+
+      if (timerSync) {
+        socket.emit('timer_sync', timerSync);
+      } else {
+        socket.emit('timer_sync', { active: false });
+      }
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
 };
 
 module.exports = { createGameHandler };

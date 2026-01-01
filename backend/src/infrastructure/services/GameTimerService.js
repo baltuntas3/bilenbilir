@@ -17,7 +17,8 @@ class GameTimerService {
     this.stopTimer(pin);
 
     const durationMs = durationSeconds * 1000;
-    const endTime = Date.now() + durationMs;
+    const startTime = Date.now();
+    const endTime = startTime + durationMs;
 
     // Main timeout for when time expires
     const timerId = setTimeout(async () => {
@@ -27,10 +28,19 @@ class GameTimerService {
       }
     }, durationMs);
 
-    // Interval for broadcasting remaining time (every second)
+    // Interval for broadcasting sync data (every second)
+    // Clients should use serverTime and endTime to calculate remaining locally
     const intervalId = setInterval(() => {
-      const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-      this.io.to(pin).emit('timer_tick', { remaining });
+      const now = Date.now();
+      const remainingMs = Math.max(0, endTime - now);
+      const remaining = Math.ceil(remainingMs / 1000);
+
+      this.io.to(pin).emit('timer_tick', {
+        remaining,           // For backwards compatibility
+        serverTime: now,     // Current server timestamp
+        endTime,             // When timer expires (absolute)
+        remainingMs          // Precise remaining milliseconds
+      });
 
       if (remaining <= 0) {
         clearInterval(intervalId);
@@ -41,12 +51,25 @@ class GameTimerService {
       timerId,
       intervalId,
       endTime,
-      startTime: Date.now(),
+      startTime,
       duration: durationMs
     });
 
-    // Emit initial time
-    this.io.to(pin).emit('timer_tick', { remaining: durationSeconds });
+    // Emit initial sync data with all timing info
+    this.io.to(pin).emit('timer_started', {
+      duration: durationSeconds,
+      durationMs,
+      serverTime: startTime,
+      endTime
+    });
+
+    // Also emit first tick for compatibility
+    this.io.to(pin).emit('timer_tick', {
+      remaining: durationSeconds,
+      serverTime: startTime,
+      endTime,
+      remainingMs: durationMs
+    });
   }
 
   /**
@@ -105,6 +128,29 @@ class GameTimerService {
       return true; // No timer = expired
     }
     return Date.now() >= timer.endTime;
+  }
+
+  /**
+   * Get current timer sync data for a room
+   * Useful for reconnecting clients
+   */
+  getTimerSync(pin) {
+    const timer = this.activeTimers.get(pin);
+    if (!timer) {
+      return null;
+    }
+
+    const now = Date.now();
+    const remainingMs = Math.max(0, timer.endTime - now);
+
+    return {
+      remaining: Math.ceil(remainingMs / 1000),
+      serverTime: now,
+      endTime: timer.endTime,
+      remainingMs,
+      startTime: timer.startTime,
+      duration: timer.duration
+    };
   }
 
   /**

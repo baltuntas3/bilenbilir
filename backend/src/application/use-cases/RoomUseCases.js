@@ -2,10 +2,14 @@ const { Room, RoomState, Player } = require('../../domain/entities');
 const { PIN } = require('../../domain/value-objects');
 const { generateId } = require('../../shared/utils/generateId');
 
+// Default grace period for player reconnection (2 minutes)
+const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
+
 class RoomUseCases {
-  constructor(roomRepository, quizRepository) {
+  constructor(roomRepository, quizRepository, options = {}) {
     this.roomRepository = roomRepository;
     this.quizRepository = quizRepository;
+    this.playerGracePeriod = options.playerGracePeriod || DEFAULT_PLAYER_GRACE_PERIOD;
   }
 
   /**
@@ -199,7 +203,7 @@ class RoomUseCases {
       throw new Error('Room not found');
     }
 
-    const player = room.reconnectPlayer(playerToken, newSocketId);
+    const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod);
     await this.roomRepository.save(room);
 
     return { room, player };

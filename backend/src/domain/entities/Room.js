@@ -97,13 +97,46 @@ class Room {
     return this.players.find(p => p.playerToken === playerToken) || null;
   }
 
-  reconnectPlayer(playerToken, newSocketId) {
+  reconnectPlayer(playerToken, newSocketId, gracePeriodMs = null) {
     const player = this.getPlayerByToken(playerToken);
     if (!player) {
       throw new Error('Invalid player token');
     }
+
+    // Check if player exceeded grace period
+    if (gracePeriodMs !== null && player.isDisconnected()) {
+      const disconnectedDuration = player.getDisconnectedDuration();
+      if (disconnectedDuration > gracePeriodMs) {
+        throw new Error('Reconnection timeout expired');
+      }
+    }
+
     player.reconnect(newSocketId);
     return player;
+  }
+
+  /**
+   * Remove players who have been disconnected longer than grace period
+   * @param {number} gracePeriodMs - Grace period in milliseconds
+   * @returns {Player[]} Removed players
+   */
+  removeStaleDisconnectedPlayers(gracePeriodMs) {
+    const stalePlayers = this.players.filter(p =>
+      p.isDisconnected() && p.getDisconnectedDuration() > gracePeriodMs
+    );
+
+    this.players = this.players.filter(p =>
+      !p.isDisconnected() || p.getDisconnectedDuration() <= gracePeriodMs
+    );
+
+    return stalePlayers;
+  }
+
+  /**
+   * Get all disconnected players
+   */
+  getDisconnectedPlayers() {
+    return this.players.filter(p => p.isDisconnected());
   }
 
   getPlayerCount() {

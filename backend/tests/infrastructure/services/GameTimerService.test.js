@@ -22,18 +22,29 @@ describe('GameTimerService', () => {
   });
 
   describe('startTimer', () => {
-    it('should start a timer and emit timer_tick', () => {
+    it('should start a timer and emit timer_started and timer_tick', () => {
       jest.useFakeTimers();
 
       timerService.startTimer('123456', 30, jest.fn());
 
       expect(mockIo.to).toHaveBeenCalledWith('123456');
-      expect(mockIo.emit).toHaveBeenCalledWith('timer_tick', { remaining: 30 });
+
+      // Should emit timer_started with sync data
+      expect(mockIo.emit).toHaveBeenCalledWith('timer_started', expect.objectContaining({
+        duration: 30,
+        durationMs: 30000
+      }));
+
+      // Should emit initial timer_tick with sync data
+      expect(mockIo.emit).toHaveBeenCalledWith('timer_tick', expect.objectContaining({
+        remaining: 30,
+        remainingMs: 30000
+      }));
 
       jest.useRealTimers();
     });
 
-    it('should emit timer_tick every second', () => {
+    it('should emit timer_tick with sync data every second', () => {
       jest.useFakeTimers();
 
       timerService.startTimer('123456', 30, jest.fn());
@@ -44,7 +55,10 @@ describe('GameTimerService', () => {
       // Advance 1 second
       jest.advanceTimersByTime(1000);
 
-      expect(mockIo.emit).toHaveBeenCalledWith('timer_tick', { remaining: 29 });
+      expect(mockIo.emit).toHaveBeenCalledWith('timer_tick', expect.objectContaining({
+        remaining: 29,
+        remainingMs: 29000
+      }));
 
       jest.useRealTimers();
     });
@@ -219,6 +233,49 @@ describe('GameTimerService', () => {
 
       expect(onExpire1).not.toHaveBeenCalled();
       expect(onExpire2).not.toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+  });
+
+  describe('getTimerSync', () => {
+    it('should return sync data for active timer', () => {
+      jest.useFakeTimers();
+
+      timerService.startTimer('123456', 30, jest.fn());
+
+      // Advance 10 seconds
+      jest.advanceTimersByTime(10000);
+
+      const sync = timerService.getTimerSync('123456');
+
+      expect(sync).not.toBeNull();
+      expect(sync.remaining).toBe(20);
+      expect(sync.remainingMs).toBe(20000);
+      expect(sync.duration).toBe(30000);
+      expect(sync.serverTime).toBeDefined();
+      expect(sync.endTime).toBeDefined();
+      expect(sync.startTime).toBeDefined();
+
+      jest.useRealTimers();
+    });
+
+    it('should return null for non-existent timer', () => {
+      expect(timerService.getTimerSync('nonexistent')).toBeNull();
+    });
+
+    it('should return 0 remaining after timer expires', () => {
+      jest.useFakeTimers();
+
+      timerService.startTimer('123456', 5, jest.fn());
+
+      // Advance past expiration
+      jest.advanceTimersByTime(6000);
+
+      // Timer is stopped after expiration, so getTimerSync returns null
+      // But if we call it before stopTimer clears it, remaining would be 0
+      const sync = timerService.getTimerSync('123456');
+      expect(sync).toBeNull(); // Timer is removed after onExpire
 
       jest.useRealTimers();
     });

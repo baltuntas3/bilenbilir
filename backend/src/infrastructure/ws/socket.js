@@ -28,7 +28,7 @@ const initializeSocket = (server) => {
     console.log('User connected:', socket.id);
 
     // Register handlers
-    createRoomHandler(io, socket, roomUseCases);
+    createRoomHandler(io, socket, roomUseCases, timerService);
     createGameHandler(io, socket, gameUseCases, timerService);
 
     socket.on('disconnect', async () => {

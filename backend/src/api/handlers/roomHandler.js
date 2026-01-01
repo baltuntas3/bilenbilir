@@ -2,7 +2,7 @@
  * Room WebSocket Handler
  * Handles room creation, joining, and leaving
  */
-const createRoomHandler = (io, socket, roomUseCases) => {
+const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Host creates a room
   socket.on('create_room', async (data) => {
     try {
@@ -168,13 +168,17 @@ const createRoomHandler = (io, socket, roomUseCases) => {
 
       socket.join(pin);
 
+      // Get timer sync data if in answering phase
+      const timerSync = timerService ? timerService.getTimerSync(pin) : null;
+
       socket.emit('player_reconnected', {
         pin: result.room.pin,
         playerId: result.player.id,
         nickname: result.player.nickname,
         score: result.player.score,
         state: result.room.state,
-        currentQuestionIndex: result.room.currentQuestionIndex
+        currentQuestionIndex: result.room.currentQuestionIndex,
+        timerSync // null if not in answering phase or no timer
       });
 
       socket.to(pin).emit('player_returned', {

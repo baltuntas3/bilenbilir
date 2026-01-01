@@ -262,4 +262,143 @@ describe('Room', () => {
       expect(podium[2].nickname).toBe('P2');
     });
   });
+
+  describe('reconnectPlayer with grace period', () => {
+    let player;
+
+    beforeEach(() => {
+      player = new Player({
+        id: 'player-1',
+        socketId: 'socket-1',
+        nickname: 'TestPlayer',
+        roomPin: '123456',
+        playerToken: 'token-123'
+      });
+      room.addPlayer(player);
+    });
+
+    it('should allow reconnection within grace period', () => {
+      player.setDisconnected();
+
+      const reconnected = room.reconnectPlayer('token-123', 'new-socket', 120000);
+
+      expect(reconnected).toBe(player);
+      expect(player.socketId).toBe('new-socket');
+      expect(player.isDisconnected()).toBe(false);
+    });
+
+    it('should throw error when grace period exceeded', () => {
+      // Simulate disconnection 3 minutes ago
+      player.disconnectedAt = new Date(Date.now() - 180000);
+
+      expect(() => room.reconnectPlayer('token-123', 'new-socket', 120000))
+        .toThrow('Reconnection timeout expired');
+    });
+
+    it('should allow reconnection when grace period is null', () => {
+      // Simulate disconnection 10 minutes ago
+      player.disconnectedAt = new Date(Date.now() - 600000);
+
+      const reconnected = room.reconnectPlayer('token-123', 'new-socket', null);
+
+      expect(reconnected).toBe(player);
+      expect(player.isDisconnected()).toBe(false);
+    });
+
+    it('should allow reconnection when player never disconnected', () => {
+      const reconnected = room.reconnectPlayer('token-123', 'new-socket', 120000);
+
+      expect(reconnected).toBe(player);
+      expect(player.socketId).toBe('new-socket');
+    });
+  });
+
+  describe('removeStaleDisconnectedPlayers', () => {
+    beforeEach(() => {
+      const player1 = new Player({
+        id: 'player-1',
+        socketId: 'socket-1',
+        nickname: 'Player1',
+        roomPin: '123456'
+      });
+      const player2 = new Player({
+        id: 'player-2',
+        socketId: 'socket-2',
+        nickname: 'Player2',
+        roomPin: '123456'
+      });
+      const player3 = new Player({
+        id: 'player-3',
+        socketId: 'socket-3',
+        nickname: 'Player3',
+        roomPin: '123456'
+      });
+
+      room.addPlayer(player1);
+      room.addPlayer(player2);
+      room.addPlayer(player3);
+    });
+
+    it('should remove players disconnected longer than grace period', () => {
+      const player1 = room.getPlayer('socket-1');
+      const player2 = room.getPlayer('socket-2');
+
+      // Player1 disconnected 3 minutes ago
+      player1.disconnectedAt = new Date(Date.now() - 180000);
+      // Player2 disconnected 1 minute ago
+      player2.disconnectedAt = new Date(Date.now() - 60000);
+      // Player3 is still connected
+
+      const removed = room.removeStaleDisconnectedPlayers(120000); // 2 min grace
+
+      expect(removed.length).toBe(1);
+      expect(removed[0].id).toBe('player-1');
+      expect(room.getPlayerCount()).toBe(2);
+      expect(room.getPlayer('socket-1')).toBeNull();
+      expect(room.getPlayer('socket-2')).not.toBeNull();
+    });
+
+    it('should return empty array when no stale players', () => {
+      const removed = room.removeStaleDisconnectedPlayers(120000);
+
+      expect(removed.length).toBe(0);
+      expect(room.getPlayerCount()).toBe(3);
+    });
+  });
+
+  describe('getDisconnectedPlayers', () => {
+    beforeEach(() => {
+      const player1 = new Player({
+        id: 'player-1',
+        socketId: 'socket-1',
+        nickname: 'Player1',
+        roomPin: '123456'
+      });
+      const player2 = new Player({
+        id: 'player-2',
+        socketId: 'socket-2',
+        nickname: 'Player2',
+        roomPin: '123456'
+      });
+
+      room.addPlayer(player1);
+      room.addPlayer(player2);
+    });
+
+    it('should return only disconnected players', () => {
+      const player1 = room.getPlayer('socket-1');
+      player1.setDisconnected();
+
+      const disconnected = room.getDisconnectedPlayers();
+
+      expect(disconnected.length).toBe(1);
+      expect(disconnected[0].id).toBe('player-1');
+    });
+
+    it('should return empty array when no disconnected players', () => {
+      const disconnected = room.getDisconnectedPlayers();
+
+      expect(disconnected.length).toBe(0);
+    });
+  });
 });
