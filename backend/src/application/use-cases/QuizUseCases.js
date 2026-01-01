@@ -26,10 +26,14 @@ class QuizUseCases {
   /**
    * Add question to quiz
    */
-  async addQuestion({ quizId, questionData }) {
+  async addQuestion({ quizId, questionData, requesterId }) {
     const quiz = await this.quizRepository.findById(quizId);
     if (!quiz) {
       throw new Error('Quiz not found');
+    }
+
+    if (quiz.createdBy !== requesterId) {
+      throw new Error('Not authorized to modify this quiz');
     }
 
     const question = new Question({
@@ -47,10 +51,14 @@ class QuizUseCases {
   /**
    * Remove question from quiz
    */
-  async removeQuestion({ quizId, questionId }) {
+  async removeQuestion({ quizId, questionId, requesterId }) {
     const quiz = await this.quizRepository.findById(quizId);
     if (!quiz) {
       throw new Error('Quiz not found');
+    }
+
+    if (quiz.createdBy !== requesterId) {
+      throw new Error('Not authorized to modify this quiz');
     }
 
     quiz.removeQuestion(questionId);
@@ -93,10 +101,14 @@ class QuizUseCases {
   /**
    * Update quiz details
    */
-  async updateQuiz({ quizId, title, description, isPublic }) {
+  async updateQuiz({ quizId, title, description, isPublic, requesterId }) {
     const quiz = await this.quizRepository.findById(quizId);
     if (!quiz) {
       throw new Error('Quiz not found');
+    }
+
+    if (quiz.createdBy !== requesterId) {
+      throw new Error('Not authorized to modify this quiz');
     }
 
     if (title !== undefined) quiz.updateTitle(title);
@@ -111,10 +123,14 @@ class QuizUseCases {
   /**
    * Delete quiz
    */
-  async deleteQuiz({ quizId }) {
-    const exists = await this.quizRepository.exists(quizId);
-    if (!exists) {
+  async deleteQuiz({ quizId, requesterId }) {
+    const quiz = await this.quizRepository.findById(quizId);
+    if (!quiz) {
       throw new Error('Quiz not found');
+    }
+
+    if (quiz.createdBy !== requesterId) {
+      throw new Error('Not authorized to delete this quiz');
     }
 
     await this.quizRepository.delete(quizId);
@@ -125,10 +141,14 @@ class QuizUseCases {
   /**
    * Reorder questions in quiz
    */
-  async reorderQuestions({ quizId, questionOrder }) {
+  async reorderQuestions({ quizId, questionOrder, requesterId }) {
     const quiz = await this.quizRepository.findById(quizId);
     if (!quiz) {
       throw new Error('Quiz not found');
+    }
+
+    if (quiz.createdBy !== requesterId) {
+      throw new Error('Not authorized to modify this quiz');
     }
 
     quiz.reorderQuestions(questionOrder);

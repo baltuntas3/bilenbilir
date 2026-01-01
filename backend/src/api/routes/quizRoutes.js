@@ -1,26 +1,27 @@
 const express = require('express');
 const { QuizUseCases } = require('../../application/use-cases');
 const { mongoQuizRepository } = require('../../infrastructure/repositories/MongoQuizRepository');
+const { authenticate } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 const quizUseCases = new QuizUseCases(mongoQuizRepository);
 
 /**
  * POST /api/quizzes
- * Create a new quiz
+ * Create a new quiz (requires auth)
  */
-router.post('/', async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   try {
-    const { title, description, createdBy, isPublic } = req.body;
+    const { title, description, isPublic } = req.body;
 
-    if (!title || !createdBy) {
-      return res.status(400).json({ error: 'Title and createdBy are required' });
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' });
     }
 
     const result = await quizUseCases.createQuiz({
       title,
       description,
-      createdBy,
+      createdBy: req.user.id,
       isPublic
     });
 
@@ -44,13 +45,12 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/quizzes/user/:userId
- * Get quizzes by creator
+ * GET /api/quizzes/my
+ * Get current user's quizzes (requires auth)
  */
-router.get('/user/:userId', async (req, res) => {
+router.get('/my', authenticate, async (req, res) => {
   try {
-    const { userId } = req.params;
-    const result = await quizUseCases.getQuizzesByCreator({ createdBy: userId });
+    const result = await quizUseCases.getQuizzesByCreator({ createdBy: req.user.id });
     res.json(result.quizzes);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -76,9 +76,9 @@ router.get('/:id', async (req, res) => {
 
 /**
  * PUT /api/quizzes/:id
- * Update quiz
+ * Update quiz (requires auth + ownership)
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, isPublic } = req.body;
@@ -87,7 +87,8 @@ router.put('/:id', async (req, res) => {
       quizId: id,
       title,
       description,
-      isPublic
+      isPublic,
+      requesterId: req.user.id
     });
 
     res.json(result.quiz);
@@ -95,22 +96,31 @@ router.put('/:id', async (req, res) => {
     if (error.message === 'Quiz not found') {
       return res.status(404).json({ error: error.message });
     }
+    if (error.message === 'Not authorized to modify this quiz') {
+      return res.status(403).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * DELETE /api/quizzes/:id
- * Delete quiz
+ * Delete quiz (requires auth + ownership)
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    await quizUseCases.deleteQuiz({ quizId: id });
+    await quizUseCases.deleteQuiz({
+      quizId: id,
+      requesterId: req.user.id
+    });
     res.status(204).send();
   } catch (error) {
     if (error.message === 'Quiz not found') {
       return res.status(404).json({ error: error.message });
+    }
+    if (error.message === 'Not authorized to delete this quiz') {
+      return res.status(403).json({ error: error.message });
     }
     res.status(500).json({ error: error.message });
   }
@@ -118,9 +128,9 @@ router.delete('/:id', async (req, res) => {
 
 /**
  * POST /api/quizzes/:id/questions
- * Add question to quiz
+ * Add question to quiz (requires auth + ownership)
  */
-router.post('/:id/questions', async (req, res) => {
+router.post('/:id/questions', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const questionData = req.body;
@@ -131,7 +141,8 @@ router.post('/:id/questions', async (req, res) => {
 
     const result = await quizUseCases.addQuestion({
       quizId: id,
-      questionData
+      questionData,
+      requesterId: req.user.id
     });
 
     res.status(201).json(result.question);
@@ -139,21 +150,25 @@ router.post('/:id/questions', async (req, res) => {
     if (error.message === 'Quiz not found') {
       return res.status(404).json({ error: error.message });
     }
+    if (error.message === 'Not authorized to modify this quiz') {
+      return res.status(403).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * DELETE /api/quizzes/:id/questions/:questionId
- * Remove question from quiz
+ * Remove question from quiz (requires auth + ownership)
  */
-router.delete('/:id/questions/:questionId', async (req, res) => {
+router.delete('/:id/questions/:questionId', authenticate, async (req, res) => {
   try {
     const { id, questionId } = req.params;
 
     await quizUseCases.removeQuestion({
       quizId: id,
-      questionId
+      questionId,
+      requesterId: req.user.id
     });
 
     res.status(204).send();
@@ -161,15 +176,18 @@ router.delete('/:id/questions/:questionId', async (req, res) => {
     if (error.message === 'Quiz not found') {
       return res.status(404).json({ error: error.message });
     }
+    if (error.message === 'Not authorized to modify this quiz') {
+      return res.status(403).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * PUT /api/quizzes/:id/questions/reorder
- * Reorder questions in quiz
+ * Reorder questions in quiz (requires auth + ownership)
  */
-router.put('/:id/questions/reorder', async (req, res) => {
+router.put('/:id/questions/reorder', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const { questionOrder } = req.body;
@@ -180,13 +198,17 @@ router.put('/:id/questions/reorder', async (req, res) => {
 
     const result = await quizUseCases.reorderQuestions({
       quizId: id,
-      questionOrder
+      questionOrder,
+      requesterId: req.user.id
     });
 
     res.json(result.quiz);
   } catch (error) {
     if (error.message === 'Quiz not found') {
       return res.status(404).json({ error: error.message });
+    }
+    if (error.message === 'Not authorized to modify this quiz') {
+      return res.status(403).json({ error: error.message });
     }
     res.status(500).json({ error: error.message });
   }

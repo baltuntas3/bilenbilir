@@ -5,6 +5,7 @@ const { QuestionType } = require('../../../domain/entities');
 describe('QuizUseCases', () => {
   let quizUseCases;
   let quizRepository;
+  const userId = 'user-1';
 
   beforeEach(() => {
     quizRepository = new QuizRepository();
@@ -20,21 +21,21 @@ describe('QuizUseCases', () => {
       const result = await quizUseCases.createQuiz({
         title: 'My Quiz',
         description: 'A test quiz',
-        createdBy: 'user-1'
+        createdBy: userId
       });
 
       expect(result.quiz).toBeDefined();
       expect(result.quiz.id).toBeDefined();
       expect(result.quiz.title).toBe('My Quiz');
       expect(result.quiz.description).toBe('A test quiz');
-      expect(result.quiz.createdBy).toBe('user-1');
+      expect(result.quiz.createdBy).toBe(userId);
       expect(result.quiz.isPublic).toBe(false);
     });
 
     it('should create public quiz', async () => {
       const result = await quizUseCases.createQuiz({
         title: 'Public Quiz',
-        createdBy: 'user-1',
+        createdBy: userId,
         isPublic: true
       });
 
@@ -48,7 +49,7 @@ describe('QuizUseCases', () => {
     beforeEach(async () => {
       const result = await quizUseCases.createQuiz({
         title: 'My Quiz',
-        createdBy: 'user-1'
+        createdBy: userId
       });
       quizId = result.quiz.id;
     });
@@ -62,7 +63,8 @@ describe('QuizUseCases', () => {
           options: ['3', '4', '5', '6'],
           correctAnswerIndex: 1,
           timeLimit: 30
-        }
+        },
+        requesterId: userId
       });
 
       expect(result.question).toBeDefined();
@@ -77,8 +79,21 @@ describe('QuizUseCases', () => {
           text: 'Question',
           options: ['A', 'B'],
           correctAnswerIndex: 0
-        }
+        },
+        requesterId: userId
       })).rejects.toThrow('Quiz not found');
+    });
+
+    it('should throw error for unauthorized user', async () => {
+      await expect(quizUseCases.addQuestion({
+        quizId,
+        questionData: {
+          text: 'Question',
+          options: ['A', 'B'],
+          correctAnswerIndex: 0
+        },
+        requesterId: 'another-user'
+      })).rejects.toThrow('Not authorized to modify this quiz');
     });
 
     it('should validate question data', async () => {
@@ -88,7 +103,8 @@ describe('QuizUseCases', () => {
           text: '',
           options: ['A', 'B'],
           correctAnswerIndex: 0
-        }
+        },
+        requesterId: userId
       })).rejects.toThrow('Question text is required');
     });
   });
@@ -100,7 +116,7 @@ describe('QuizUseCases', () => {
     beforeEach(async () => {
       const quizResult = await quizUseCases.createQuiz({
         title: 'My Quiz',
-        createdBy: 'user-1'
+        createdBy: userId
       });
       quizId = quizResult.quiz.id;
 
@@ -111,7 +127,8 @@ describe('QuizUseCases', () => {
           type: QuestionType.MULTIPLE_CHOICE,
           options: ['3', '4', '5', '6'],
           correctAnswerIndex: 1
-        }
+        },
+        requesterId: userId
       });
       questionId = questionResult.question.id;
     });
@@ -119,7 +136,8 @@ describe('QuizUseCases', () => {
     it('should remove question from quiz', async () => {
       const result = await quizUseCases.removeQuestion({
         quizId,
-        questionId
+        questionId,
+        requesterId: userId
       });
 
       expect(result.quiz.getTotalQuestions()).toBe(0);
@@ -128,8 +146,17 @@ describe('QuizUseCases', () => {
     it('should throw error for non-existent quiz', async () => {
       await expect(quizUseCases.removeQuestion({
         quizId: 'non-existent',
-        questionId
+        questionId,
+        requesterId: userId
       })).rejects.toThrow('Quiz not found');
+    });
+
+    it('should throw error for unauthorized user', async () => {
+      await expect(quizUseCases.removeQuestion({
+        quizId,
+        questionId,
+        requesterId: 'another-user'
+      })).rejects.toThrow('Not authorized to modify this quiz');
     });
   });
 
@@ -137,7 +164,7 @@ describe('QuizUseCases', () => {
     it('should return quiz by ID', async () => {
       const createResult = await quizUseCases.createQuiz({
         title: 'My Quiz',
-        createdBy: 'user-1'
+        createdBy: userId
       });
 
       const result = await quizUseCases.getQuiz({
@@ -158,11 +185,11 @@ describe('QuizUseCases', () => {
     beforeEach(async () => {
       await quizUseCases.createQuiz({
         title: 'Quiz 1',
-        createdBy: 'user-1'
+        createdBy: userId
       });
       await quizUseCases.createQuiz({
         title: 'Quiz 2',
-        createdBy: 'user-1'
+        createdBy: userId
       });
       await quizUseCases.createQuiz({
         title: 'Quiz 3',
@@ -172,11 +199,11 @@ describe('QuizUseCases', () => {
 
     it('should return quizzes by creator', async () => {
       const result = await quizUseCases.getQuizzesByCreator({
-        createdBy: 'user-1'
+        createdBy: userId
       });
 
       expect(result.quizzes).toHaveLength(2);
-      expect(result.quizzes.every(q => q.createdBy === 'user-1')).toBe(true);
+      expect(result.quizzes.every(q => q.createdBy === userId)).toBe(true);
     });
 
     it('should return empty array for creator with no quizzes', async () => {
@@ -192,12 +219,12 @@ describe('QuizUseCases', () => {
     beforeEach(async () => {
       await quizUseCases.createQuiz({
         title: 'Public Quiz 1',
-        createdBy: 'user-1',
+        createdBy: userId,
         isPublic: true
       });
       await quizUseCases.createQuiz({
         title: 'Private Quiz',
-        createdBy: 'user-1',
+        createdBy: userId,
         isPublic: false
       });
       await quizUseCases.createQuiz({
@@ -222,7 +249,7 @@ describe('QuizUseCases', () => {
       const result = await quizUseCases.createQuiz({
         title: 'Original Title',
         description: 'Original description',
-        createdBy: 'user-1',
+        createdBy: userId,
         isPublic: false
       });
       quizId = result.quiz.id;
@@ -231,7 +258,8 @@ describe('QuizUseCases', () => {
     it('should update quiz title', async () => {
       const result = await quizUseCases.updateQuiz({
         quizId,
-        title: 'New Title'
+        title: 'New Title',
+        requesterId: userId
       });
 
       expect(result.quiz.title).toBe('New Title');
@@ -243,7 +271,8 @@ describe('QuizUseCases', () => {
         quizId,
         title: 'New Title',
         description: 'New description',
-        isPublic: true
+        isPublic: true,
+        requesterId: userId
       });
 
       expect(result.quiz.title).toBe('New Title');
@@ -254,8 +283,17 @@ describe('QuizUseCases', () => {
     it('should throw error for non-existent quiz', async () => {
       await expect(quizUseCases.updateQuiz({
         quizId: 'non-existent',
-        title: 'New Title'
+        title: 'New Title',
+        requesterId: userId
       })).rejects.toThrow('Quiz not found');
+    });
+
+    it('should throw error for unauthorized user', async () => {
+      await expect(quizUseCases.updateQuiz({
+        quizId,
+        title: 'New Title',
+        requesterId: 'another-user'
+      })).rejects.toThrow('Not authorized to modify this quiz');
     });
   });
 
@@ -265,13 +303,16 @@ describe('QuizUseCases', () => {
     beforeEach(async () => {
       const result = await quizUseCases.createQuiz({
         title: 'To Delete',
-        createdBy: 'user-1'
+        createdBy: userId
       });
       quizId = result.quiz.id;
     });
 
     it('should delete quiz', async () => {
-      const result = await quizUseCases.deleteQuiz({ quizId });
+      const result = await quizUseCases.deleteQuiz({
+        quizId,
+        requesterId: userId
+      });
 
       expect(result.success).toBe(true);
 
@@ -281,8 +322,16 @@ describe('QuizUseCases', () => {
 
     it('should throw error for non-existent quiz', async () => {
       await expect(quizUseCases.deleteQuiz({
-        quizId: 'non-existent'
+        quizId: 'non-existent',
+        requesterId: userId
       })).rejects.toThrow('Quiz not found');
+    });
+
+    it('should throw error for unauthorized user', async () => {
+      await expect(quizUseCases.deleteQuiz({
+        quizId,
+        requesterId: 'another-user'
+      })).rejects.toThrow('Not authorized to delete this quiz');
     });
   });
 
@@ -293,7 +342,7 @@ describe('QuizUseCases', () => {
     beforeEach(async () => {
       const quizResult = await quizUseCases.createQuiz({
         title: 'Quiz',
-        createdBy: 'user-1'
+        createdBy: userId
       });
       quizId = quizResult.quiz.id;
 
@@ -303,7 +352,8 @@ describe('QuizUseCases', () => {
           text: 'Q1',
           options: ['A', 'B'],
           correctAnswerIndex: 0
-        }
+        },
+        requesterId: userId
       });
       q1Id = r1.question.id;
 
@@ -313,7 +363,8 @@ describe('QuizUseCases', () => {
           text: 'Q2',
           options: ['A', 'B'],
           correctAnswerIndex: 0
-        }
+        },
+        requesterId: userId
       });
       q2Id = r2.question.id;
 
@@ -323,7 +374,8 @@ describe('QuizUseCases', () => {
           text: 'Q3',
           options: ['A', 'B'],
           correctAnswerIndex: 0
-        }
+        },
+        requesterId: userId
       });
       q3Id = r3.question.id;
     });
@@ -331,7 +383,8 @@ describe('QuizUseCases', () => {
     it('should reorder questions', async () => {
       const result = await quizUseCases.reorderQuestions({
         quizId,
-        questionOrder: [q3Id, q1Id, q2Id]
+        questionOrder: [q3Id, q1Id, q2Id],
+        requesterId: userId
       });
 
       expect(result.quiz.getQuestion(0).text).toBe('Q3');
@@ -342,8 +395,17 @@ describe('QuizUseCases', () => {
     it('should throw error for invalid order', async () => {
       await expect(quizUseCases.reorderQuestions({
         quizId,
-        questionOrder: [q1Id, 'invalid', q3Id]
+        questionOrder: [q1Id, 'invalid', q3Id],
+        requesterId: userId
       })).rejects.toThrow('Invalid question order');
+    });
+
+    it('should throw error for unauthorized user', async () => {
+      await expect(quizUseCases.reorderQuestions({
+        quizId,
+        questionOrder: [q3Id, q1Id, q2Id],
+        requesterId: 'another-user'
+      })).rejects.toThrow('Not authorized to modify this quiz');
     });
   });
 });
