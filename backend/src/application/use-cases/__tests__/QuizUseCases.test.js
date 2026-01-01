@@ -397,7 +397,7 @@ describe('QuizUseCases', () => {
         quizId,
         questionOrder: [q1Id, 'invalid', q3Id],
         requesterId: userId
-      })).rejects.toThrow('Invalid question order');
+      })).rejects.toThrow('Invalid question IDs in order');
     });
 
     it('should throw error for unauthorized user', async () => {

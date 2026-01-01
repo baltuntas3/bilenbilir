@@ -19,10 +19,10 @@ router.get('/history', authenticate, async (req, res, next) => {
 
     res.json({
       games: result.sessions.map(session => ({
-        id: session._id,
+        id: session.id,
         pin: session.pin,
         quiz: session.quiz ? {
-          id: session.quiz._id,
+          id: session.quiz.id,
           title: session.quiz.title
         } : null,
         playerCount: session.playerCount,
@@ -54,12 +54,12 @@ router.get('/quiz/:quizId/history', authenticate, async (req, res, next) => {
 
     // Filter to only show sessions where user was the host
     const userSessions = result.sessions.filter(s =>
-      s.host && s.host.toString() === req.user.id
+      s.hostId === req.user.id
     );
 
     res.json({
       games: userSessions.map(session => ({
-        id: session._id,
+        id: session.id,
         pin: session.pin,
         playerCount: session.playerCount,
         playerResults: session.playerResults,
@@ -88,20 +88,20 @@ router.get('/:id', authenticate, async (req, res, next) => {
     }
 
     // Only allow the host to view the session
-    if (session.host._id.toString() !== req.user.id) {
+    if (session.hostId !== req.user.id) {
       throw new NotFoundError('Game session not found');
     }
 
     res.json({
-      id: session._id,
+      id: session.id,
       pin: session.pin,
       quiz: session.quiz ? {
-        id: session.quiz._id,
+        id: session.quiz.id,
         title: session.quiz.title,
         description: session.quiz.description
       } : null,
       host: session.host ? {
-        id: session.host._id,
+        id: session.host.id,
         username: session.host.username
       } : null,
       playerCount: session.playerCount,
@@ -111,6 +111,32 @@ router.get('/:id', authenticate, async (req, res, next) => {
       endedAt: session.endedAt,
       status: session.status
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/games/:id
+ * Delete a specific game session (host only)
+ */
+router.delete('/:id', authenticate, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const session = await gameSessionRepository.findById(id);
+
+    if (!session) {
+      throw new NotFoundError('Game session not found');
+    }
+
+    // Only allow the host to delete the session
+    if (session.hostId !== req.user.id) {
+      throw new NotFoundError('Game session not found');
+    }
+
+    await gameSessionRepository.delete(id);
+
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

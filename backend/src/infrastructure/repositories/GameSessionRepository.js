@@ -13,6 +13,16 @@ class GameSessionRepository {
   _toDomain(doc) {
     if (!doc) return null;
 
+    // Extract populated quiz info if available
+    const quiz = doc.quiz && typeof doc.quiz === 'object' && doc.quiz._id
+      ? { id: doc.quiz._id.toString(), title: doc.quiz.title, description: doc.quiz.description }
+      : null;
+
+    // Extract populated host info if available
+    const host = doc.host && typeof doc.host === 'object' && doc.host._id
+      ? { id: doc.host._id.toString(), username: doc.host.username }
+      : null;
+
     return new GameSession({
       id: doc._id.toString(),
       pin: doc.pin,
@@ -28,7 +38,10 @@ class GameSessionRepository {
       // Interrupted game metadata
       interruptionReason: doc.interruptionReason || null,
       lastQuestionIndex: doc.lastQuestionIndex ?? null,
-      lastState: doc.lastState || null
+      lastState: doc.lastState || null,
+      // Populated fields
+      quiz,
+      host
     });
   }
 

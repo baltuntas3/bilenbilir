@@ -121,7 +121,10 @@ class GameSession {
     // Fields for interrupted games
     interruptionReason = null,
     lastQuestionIndex = null,
-    lastState = null
+    lastState = null,
+    // Optional populated fields for display purposes
+    quiz = null,
+    host = null
   }) {
     if (!pin || !/^\d{6}$/.test(pin)) {
       throw new ValidationError('Valid 6-digit PIN is required');
@@ -162,9 +165,15 @@ class GameSession {
     this.lastQuestionIndex = typeof lastQuestionIndex === 'number' ? lastQuestionIndex : null;
     this.lastState = lastState;
 
+    // Optional populated fields (for display purposes in list/detail views)
+    this.quiz = quiz ? { id: quiz.id, title: quiz.title, description: quiz.description } : null;
+    this.host = host ? { id: host.id, username: host.username } : null;
+
     // Freeze to enforce immutability
     Object.freeze(this.playerResults);
     Object.freeze(this.answers);
+    if (this.quiz) Object.freeze(this.quiz);
+    if (this.host) Object.freeze(this.host);
     Object.freeze(this);
   }
 

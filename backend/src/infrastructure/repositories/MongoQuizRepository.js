@@ -211,6 +211,51 @@ class MongoQuizRepository {
       console.error('Failed to increment play count:', error.message);
     }
   }
+
+  /**
+   * Delete all quizzes by creator
+   * @param {string} createdBy - Creator user ID
+   * @returns {Promise<number>} Number of deleted quizzes
+   */
+  async deleteByCreator(createdBy) {
+    const result = await QuizModel.deleteMany({ createdBy });
+    return result.deletedCount || 0;
+  }
+
+  /**
+   * Search public quizzes by title or description
+   * @param {string} query - Search query
+   * @param {Object} options - Pagination options
+   * @returns {Promise<{quizzes: Quiz[], pagination: Object}>}
+   */
+  async searchPublic(query, { page = 1, limit = 20 } = {}) {
+    const skip = (page - 1) * limit;
+    const searchRegex = new RegExp(query, 'i');
+
+    const filter = {
+      isPublic: true,
+      $or: [
+        { title: searchRegex },
+        { description: searchRegex }
+      ]
+    };
+
+    const [docs, total] = await Promise.all([
+      QuizModel.find(filter).sort({ playCount: -1, createdAt: -1 }).skip(skip).limit(limit),
+      QuizModel.countDocuments(filter)
+    ]);
+
+    return {
+      quizzes: docs.map(doc => this._toDomain(doc)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
+  }
 }
 
 const mongoQuizRepository = new MongoQuizRepository();

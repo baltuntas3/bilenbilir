@@ -6,7 +6,7 @@ const { authLimiter, passwordResetLimiter } = require('../middlewares/rateLimite
 const { ValidationError, UnauthorizedError, ForbiddenError, NotFoundError, ConflictError } = require('../../shared/errors');
 const { sanitizeEmail } = require('../../shared/utils/sanitize');
 const { emailService } = require('../../infrastructure/services');
-const { mongoUserRepository } = require('../../infrastructure/repositories');
+const { mongoUserRepository, mongoQuizRepository } = require('../../infrastructure/repositories');
 
 const router = express.Router();
 
@@ -58,7 +58,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
     res.status(201).json({
       message: 'User registered successfully',
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         username: user.username
       },
@@ -105,7 +105,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
     res.json({
       message: 'Login successful',
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         username: user.username
       },
@@ -129,7 +129,7 @@ router.get('/me', authenticate, async (req, res, next) => {
     }
 
     res.json({
-      id: user._id,
+      id: user.id,
       email: user.email,
       username: user.username,
       role: user.role
@@ -171,7 +171,7 @@ router.put('/profile', authenticate, async (req, res, next) => {
     res.json({
       message: 'Profile updated successfully',
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         username: user.username,
         role: user.role
@@ -213,8 +213,7 @@ router.put('/change-password', authenticate, async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    user.password = hashedPassword;
-    await mongoUserRepository.save(user);
+    await mongoUserRepository.updateById(req.user.id, { password: hashedPassword });
 
     // Send password changed notification (non-blocking)
     emailService.sendPasswordChanged(user.email).catch(err => {
@@ -257,9 +256,10 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => 
     const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
     // Set token and expiration (1 hour)
-    user.passwordResetToken = hashedToken;
-    user.passwordResetExpires = Date.now() + 60 * 60 * 1000;
-    await mongoUserRepository.save(user);
+    await mongoUserRepository.updateById(user.id, {
+      passwordResetToken: hashedToken,
+      passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000)
+    });
 
     // Send password reset email
     const emailResult = await emailService.sendPasswordReset(user.email, resetToken);
@@ -312,12 +312,56 @@ router.post('/reset-password', async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     // Update password and clear reset token
-    user.password = hashedPassword;
-    user.passwordResetToken = null;
-    user.passwordResetExpires = null;
-    await mongoUserRepository.save(user);
+    await mongoUserRepository.updateById(user.id, {
+      password: hashedPassword,
+      passwordResetToken: null,
+      passwordResetExpires: null
+    });
 
     res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/auth/account
+ * Delete user account and all associated data
+ * Requires password confirmation for security
+ */
+router.delete('/account', authenticate, async (req, res, next) => {
+  try {
+    const { password } = req.body;
+
+    if (!password) {
+      throw new ValidationError('Password is required to delete account');
+    }
+
+    // Verify password
+    const user = await mongoUserRepository.findById(req.user.id, { includePassword: true });
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedError('Invalid password');
+    }
+
+    // Delete user's quizzes
+    const deletedQuizzes = await mongoQuizRepository.deleteByCreator(req.user.id);
+
+    // Delete user account
+    const deleted = await mongoUserRepository.deleteById(req.user.id);
+
+    if (!deleted) {
+      throw new Error('Failed to delete account');
+    }
+
+    res.json({
+      message: 'Account deleted successfully',
+      deletedQuizzes
+    });
   } catch (error) {
     next(error);
   }

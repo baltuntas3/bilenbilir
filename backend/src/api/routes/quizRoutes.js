@@ -1,7 +1,8 @@
 const express = require('express');
 const { QuizUseCases } = require('../../application/use-cases');
 const { mongoQuizRepository } = require('../../infrastructure/repositories/MongoQuizRepository');
-const { authenticate } = require('../middlewares/authMiddleware');
+const { authenticate, optionalAuthenticate } = require('../middlewares/authMiddleware');
+const { ForbiddenError } = require('../../shared/errors');
 const { quizCreationLimiter } = require('../middlewares/rateLimiter');
 const { ValidationError } = require('../../shared/errors');
 
@@ -51,6 +52,29 @@ router.get('/', async (req, res, next) => {
 });
 
 /**
+ * GET /api/quizzes/search
+ * Search public quizzes by title or description
+ * Query params: q (required), page (default 1), limit (default 20, max 100)
+ */
+router.get('/search', async (req, res, next) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      throw new ValidationError('Search query must be at least 2 characters');
+    }
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+    const result = await mongoQuizRepository.searchPublic(q.trim(), { page, limit });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /api/quizzes/my
  * Get current user's quizzes with pagination (requires auth)
  * Query params: page (default 1), limit (default 20, max 100)
@@ -74,12 +98,23 @@ router.get('/my', authenticate, async (req, res, next) => {
 /**
  * GET /api/quizzes/:id
  * Get quiz by ID
+ * Public quizzes are accessible to everyone
+ * Private quizzes are only accessible to their owner
  */
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', optionalAuthenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
     const result = await quizUseCases.getQuiz({ quizId: id });
-    res.json(result.quiz);
+    const quiz = result.quiz;
+
+    // Check access for private quizzes
+    if (!quiz.isPublic) {
+      if (!req.user || req.user.id !== quiz.createdBy) {
+        throw new ForbiddenError('Access denied to private quiz');
+      }
+    }
+
+    res.json(quiz);
   } catch (error) {
     next(error);
   }
@@ -128,10 +163,23 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 /**
  * GET /api/quizzes/:id/questions
  * Get all questions for a quiz
+ * Public quizzes: questions accessible to everyone
+ * Private quizzes: questions only accessible to owner
  */
-router.get('/:id/questions', async (req, res, next) => {
+router.get('/:id/questions', optionalAuthenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // First check quiz access
+    const quizResult = await quizUseCases.getQuiz({ quizId: id });
+    const quiz = quizResult.quiz;
+
+    if (!quiz.isPublic) {
+      if (!req.user || req.user.id !== quiz.createdBy) {
+        throw new ForbiddenError('Access denied to private quiz');
+      }
+    }
+
     const result = await quizUseCases.getQuestions({ quizId: id });
     res.json(result.questions);
   } catch (error) {

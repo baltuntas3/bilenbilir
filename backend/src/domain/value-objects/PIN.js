@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { ValidationError } = require('../../shared/errors');
 
 class PIN {
@@ -21,7 +22,7 @@ class PIN {
   static generate() {
     let pin = '';
     for (let i = 0; i < PIN.LENGTH; i++) {
-      const randomIndex = Math.floor(Math.random() * PIN.ALLOWED_CHARS.length);
+      const randomIndex = crypto.randomInt(PIN.ALLOWED_CHARS.length);
       pin += PIN.ALLOWED_CHARS[randomIndex];
     }
     return new PIN(pin);

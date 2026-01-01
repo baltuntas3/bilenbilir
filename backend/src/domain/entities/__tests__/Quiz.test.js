@@ -119,7 +119,7 @@ describe('Quiz', () => {
 
     it('should throw error for invalid order', () => {
       expect(() => quiz.reorderQuestions(['q1', 'q2', 'invalid']))
-        .toThrow('Invalid question order');
+        .toThrow('Invalid question IDs in order');
     });
   });
 });

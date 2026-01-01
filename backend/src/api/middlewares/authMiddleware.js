@@ -41,6 +41,35 @@ const authenticate = (req, res, next) => {
 };
 
 /**
+ * Optional authentication middleware
+ * Attaches user to request if valid token exists, otherwise continues without user
+ */
+const optionalAuthenticate = (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    req.user = {
+      id: decoded.userId,
+      email: decoded.email,
+      username: decoded.username,
+      role: decoded.role
+    };
+
+    next();
+  } catch {
+    // Invalid token - continue without user
+    next();
+  }
+};
+
+/**
  * Generate JWT token
  */
 const generateToken = (user) => {
@@ -56,4 +85,4 @@ const generateToken = (user) => {
   );
 };
 
-module.exports = { authenticate, generateToken, JWT_SECRET };
+module.exports = { authenticate, optionalAuthenticate, generateToken, JWT_SECRET };

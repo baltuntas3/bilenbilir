@@ -166,33 +166,6 @@ class MongoUserRepository {
   }
 
   /**
-   * Save user document instance (for complex updates like password reset)
-   * Returns the raw Mongoose document - use for operations that need
-   * direct document access (e.g., password hashing middleware)
-   * @param {Object} userDoc - Mongoose User document instance
-   * @returns {Promise<User>} Domain entity (without password)
-   */
-  async save(userDoc) {
-    const doc = await userDoc.save();
-    return this._toDomain(doc, false);
-  }
-
-  /**
-   * Get raw Mongoose document by ID (for operations needing document methods)
-   * Use sparingly - prefer domain entity methods when possible
-   * @param {string} id - User ID
-   * @returns {Promise<Object|null>} Mongoose document
-   */
-  async findDocumentById(id) {
-    try {
-      return await UserModel.findById(id);
-    } catch (error) {
-      console.error(`[MongoUserRepository.findDocumentById] Error finding user document ${id}:`, error.message);
-      return null;
-    }
-  }
-
-  /**
    * Check if email exists
    * @param {string} email - Email to check
    * @returns {Promise<boolean>}
@@ -210,6 +183,21 @@ class MongoUserRepository {
   async usernameExists(username) {
     const count = await UserModel.countDocuments({ username });
     return count > 0;
+  }
+
+  /**
+   * Delete user by ID
+   * @param {string} id - User ID
+   * @returns {Promise<boolean>} True if user was deleted
+   */
+  async deleteById(id) {
+    try {
+      const result = await UserModel.findByIdAndDelete(id);
+      return !!result;
+    } catch (error) {
+      console.error(`[MongoUserRepository.deleteById] Error deleting user ${id}:`, error.message);
+      return false;
+    }
   }
 }
 
