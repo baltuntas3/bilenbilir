@@ -37,13 +37,25 @@ class GameUseCases {
 
     await this.roomRepository.save(room);
 
-    const currentQuestion = quiz.getQuestion(room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
     return {
       room,
       totalQuestions: quiz.getTotalQuestions(),
       currentQuestion: currentQuestion.getPublicData()
     };
+  }
+
+  /**
+   * Get question with null check
+   * @private
+   */
+  _getQuestionOrThrow(quiz, index) {
+    const question = quiz.getQuestion(index);
+    if (!question) {
+      throw new Error(`Question at index ${index} not found. Quiz may have been modified.`);
+    }
+    return question;
   }
 
   /**
@@ -56,7 +68,7 @@ class GameUseCases {
     }
 
     const quiz = await this.quizRepository.findById(room.quizId);
-    const currentQuestion = quiz.getQuestion(room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
     return {
       questionIndex: room.currentQuestionIndex,
@@ -89,7 +101,7 @@ class GameUseCases {
     await this.roomRepository.save(room);
 
     const quiz = await this.quizRepository.findById(room.quizId);
-    const currentQuestion = quiz.getQuestion(room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
     return {
       room,
@@ -131,7 +143,7 @@ class GameUseCases {
       }
 
       const quiz = await this.quizRepository.findById(room.quizId);
-      const currentQuestion = quiz.getQuestion(room.currentQuestionIndex);
+      const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
       // Validate elapsed time is non-negative
       const validElapsedTime = Math.max(0, elapsedTimeMs || 0);
@@ -204,7 +216,7 @@ class GameUseCases {
     await this.roomRepository.save(room);
 
     const quiz = await this.quizRepository.findById(room.quizId);
-    const currentQuestion = quiz.getQuestion(room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
     // Get answer distribution via Aggregate Root
     const { distribution, correctCount } = room.getAnswerDistribution(
@@ -268,7 +280,7 @@ class GameUseCases {
       };
     }
 
-    const currentQuestion = quiz.getQuestion(room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
     return {
       room,

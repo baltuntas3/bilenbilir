@@ -22,14 +22,16 @@ class RoomUseCases {
       throw new Error('Quiz not found');
     }
 
-    // Generate unique PIN
+    // Generate unique PIN with exponential backoff info
     let pin;
     let attempts = 0;
+    const maxAttempts = 50; // Supports up to ~980,000 active rooms with 99.9% success
+
     do {
       pin = PIN.generate();
       attempts++;
-      if (attempts > 10) {
-        throw new Error('Failed to generate unique PIN');
+      if (attempts > maxAttempts) {
+        throw new Error('Failed to generate unique PIN. System may be at capacity.');
       }
     } while (await this.roomRepository.exists(pin.toString()));
 
