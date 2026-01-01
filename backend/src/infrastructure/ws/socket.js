@@ -1,7 +1,8 @@
 const { Server } = require('socket.io');
 const { createRoomHandler, createGameHandler } = require('../../api/handlers');
 const { RoomUseCases, GameUseCases } = require('../../application/use-cases');
-const { roomRepository, quizRepository, gameSessionRepository } = require('../repositories');
+const { roomRepository, gameSessionRepository } = require('../repositories');
+const { mongoQuizRepository } = require('../repositories/MongoQuizRepository');
 const { RoomCleanupService } = require('../services/RoomCleanupService');
 const { GameTimerService } = require('../services/GameTimerService');
 
@@ -10,8 +11,8 @@ let cleanupService;
 let timerService;
 
 // Initialize use cases
-const roomUseCases = new RoomUseCases(roomRepository, quizRepository);
-const gameUseCases = new GameUseCases(roomRepository, quizRepository, gameSessionRepository);
+const roomUseCases = new RoomUseCases(roomRepository, mongoQuizRepository);
+const gameUseCases = new GameUseCases(roomRepository, mongoQuizRepository, gameSessionRepository);
 
 const initializeSocket = (server) => {
   io = new Server(server, {

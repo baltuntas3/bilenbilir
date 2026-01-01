@@ -5,7 +5,9 @@ const http = require('http');
 const cors = require('cors');
 const connectDB = require('./src/infrastructure/db/connection');
 const { initializeSocket } = require('./src/infrastructure/ws/socket');
-const { quizRoutes, authRoutes } = require('./src/api/routes');
+const { quizRoutes, authRoutes, gameRoutes } = require('./src/api/routes');
+const { errorHandler } = require('./src/api/middlewares/errorHandler');
+const { sanitize } = require('./src/api/middlewares/sanitizeMiddleware');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +21,7 @@ const io = initializeSocket(server);
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(sanitize); // XSS protection - sanitize all inputs
 
 // Routes
 app.get('/', (req, res) => {
@@ -27,6 +30,10 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/quizzes', quizRoutes);
+app.use('/api/games', gameRoutes);
+
+// Global error handler (must be last middleware)
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 

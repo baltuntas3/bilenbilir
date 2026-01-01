@@ -1,12 +1,28 @@
+const { handleSocketError } = require('../middlewares/errorHandler');
+const { ConflictError } = require('../../shared/errors');
+const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
+
 /**
  * Room WebSocket Handler
  * Handles room creation, joining, and leaving
  */
 const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
+  /**
+   * Ensure socket is not already in a room
+   * @private
+   */
+  const ensureNotInRoom = async () => {
+    const existingRoom = await roomUseCases.findRoomBySocketId({ socketId: socket.id });
+    if (existingRoom) {
+      throw new ConflictError('Already in a room. Leave current room first.');
+    }
+  };
+
   // Host creates a room
   socket.on('create_room', async (data) => {
     try {
       const { quizId } = data || {};
+      await ensureNotInRoom();
 
       const result = await roomUseCases.createRoom({
         hostId: socket.id,
@@ -22,18 +38,26 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         totalQuestions: result.quiz.getTotalQuestions()
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
   // Player joins a room
   socket.on('join_room', async (data) => {
     try {
-      const { pin, nickname } = data || {};
+      const { pin, nickname } = sanitizeObject(data || {});
+      await ensureNotInRoom();
+
+      // Validate and sanitize nickname
+      const sanitizedNickname = sanitizeNickname(nickname);
+      if (!sanitizedNickname) {
+        socket.emit('error', { message: 'Invalid nickname format' });
+        return;
+      }
 
       const result = await roomUseCases.joinRoom({
         pin,
-        nickname,
+        nickname: sanitizedNickname,
         socketId: socket.id
       });
 
@@ -54,7 +78,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         playerCount: result.room.getPlayerCount()
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -90,7 +114,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         playerCount: result.room.getPlayerCount()
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -108,7 +132,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         }))
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -125,7 +149,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       io.to(pin).emit('room_closed');
       io.in(pin).socketsLeave(pin);
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -151,7 +175,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
 
       socket.to(pin).emit('host_returned');
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -186,7 +210,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         nickname: result.player.nickname
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 };

@@ -1,6 +1,7 @@
 const { Room, RoomState, Player } = require('../../domain/entities');
 const { PIN } = require('../../domain/value-objects');
 const { generateId } = require('../../shared/utils/generateId');
+const { NotFoundError, ForbiddenError, ValidationError } = require('../../shared/errors');
 
 // Default grace period for player reconnection (2 minutes)
 const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
@@ -13,14 +14,44 @@ class RoomUseCases {
   }
 
   /**
+   * Get room by PIN or throw NotFoundError
+   * @private
+   */
+  async _getRoomOrThrow(pin) {
+    const room = await this.roomRepository.findByPin(pin);
+    if (!room) {
+      throw new NotFoundError('Room not found');
+    }
+    return room;
+  }
+
+  /**
+   * Get quiz by ID or throw NotFoundError
+   * @private
+   */
+  async _getQuizOrThrow(quizId) {
+    const quiz = await this.quizRepository.findById(quizId);
+    if (!quiz) {
+      throw new NotFoundError('Quiz not found');
+    }
+    return quiz;
+  }
+
+  /**
+   * Validate that requester is host or throw ForbiddenError
+   * @private
+   */
+  _throwIfNotHost(room, requesterId) {
+    if (!room.isHost(requesterId)) {
+      throw new ForbiddenError('Only host can perform this action');
+    }
+  }
+
+  /**
    * Create a new room for a quiz
    */
   async createRoom({ hostId, quizId }) {
-    // Verify quiz exists
-    const quiz = await this.quizRepository.findById(quizId);
-    if (!quiz) {
-      throw new Error('Quiz not found');
-    }
+    const quiz = await this._getQuizOrThrow(quizId);
 
     // Generate unique PIN with exponential backoff info
     let pin;
@@ -31,7 +62,7 @@ class RoomUseCases {
       pin = PIN.generate();
       attempts++;
       if (attempts > maxAttempts) {
-        throw new Error('Failed to generate unique PIN. System may be at capacity.');
+        throw new ValidationError('Failed to generate unique PIN. System may be at capacity.');
       }
     } while (await this.roomRepository.exists(pin.toString()));
 
@@ -55,11 +86,7 @@ class RoomUseCases {
    * Join an existing room
    */
   async joinRoom({ pin, nickname, socketId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     const playerToken = generateId(); // Token for player reconnection
 
     const player = new Player({
@@ -81,11 +108,7 @@ class RoomUseCases {
    * Leave a room
    */
   async leaveRoom({ pin, socketId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     room.removePlayer(socketId);
 
     await this.roomRepository.save(room);
@@ -97,11 +120,7 @@ class RoomUseCases {
    * Get room by PIN
    */
   async getRoom({ pin }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     return { room };
   }
 
@@ -109,11 +128,7 @@ class RoomUseCases {
    * Get players in a room
    */
   async getPlayers({ pin }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     return { players: room.getAllPlayers() };
   }
 
@@ -121,17 +136,9 @@ class RoomUseCases {
    * Close/delete a room (host only)
    */
   async closeRoom({ pin, requesterId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
-    if (!room.isHost(requesterId)) {
-      throw new Error('Only host can close the room');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
     await this.roomRepository.delete(pin);
-
     return { success: true };
   }
 
@@ -183,16 +190,10 @@ class RoomUseCases {
    * Reconnect host to room using hostToken
    */
   async reconnectHost({ pin, hostToken, newSocketId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     room.reconnectHost(newSocketId, hostToken);
     await this.roomRepository.save(room);
-
     const quiz = await this.quizRepository.findById(room.quizId);
-
     return { room, quiz };
   }
 
@@ -200,14 +201,9 @@ class RoomUseCases {
    * Reconnect player to room using playerToken
    */
   async reconnectPlayer({ pin, playerToken, newSocketId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod);
     await this.roomRepository.save(room);
-
     return { room, player };
   }
 
@@ -235,6 +231,29 @@ class RoomUseCases {
       const player = room.getPlayerByToken(playerToken);
       if (player) {
         return { room, player };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find room where socket is participating (as host or player)
+   * Used to prevent same socket from joining multiple rooms
+   */
+  async findRoomBySocketId({ socketId }) {
+    const rooms = await this.roomRepository.getAll();
+
+    for (const room of rooms) {
+      // Check if socket is host
+      if (room.isHost(socketId)) {
+        return { room, role: 'host' };
+      }
+
+      // Check if socket is a player
+      const player = room.getPlayer(socketId);
+      if (player) {
+        return { room, role: 'player', player };
       }
     }
 

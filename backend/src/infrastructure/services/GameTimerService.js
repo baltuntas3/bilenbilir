@@ -10,17 +10,33 @@ class GameTimerService {
   }
 
   /**
+   * Build timer sync data object
+   * @private
+   */
+  _buildTimerSync(endTime, startTime = null, duration = null) {
+    const now = Date.now();
+    const remainingMs = Math.max(0, endTime - now);
+    const result = {
+      remaining: Math.ceil(remainingMs / 1000),
+      serverTime: now,
+      endTime,
+      remainingMs
+    };
+    if (startTime !== null) result.startTime = startTime;
+    if (duration !== null) result.duration = duration;
+    return result;
+  }
+
+  /**
    * Start a timer for a room's answering phase
    */
   startTimer(pin, durationSeconds, onExpire) {
-    // Clear any existing timer for this room
     this.stopTimer(pin);
 
     const durationMs = durationSeconds * 1000;
     const startTime = Date.now();
     const endTime = startTime + durationMs;
 
-    // Main timeout for when time expires
     const timerId = setTimeout(async () => {
       this.stopTimer(pin);
       if (onExpire) {
@@ -28,21 +44,11 @@ class GameTimerService {
       }
     }, durationMs);
 
-    // Interval for broadcasting sync data (every second)
-    // Clients should use serverTime and endTime to calculate remaining locally
     const intervalId = setInterval(() => {
-      const now = Date.now();
-      const remainingMs = Math.max(0, endTime - now);
-      const remaining = Math.ceil(remainingMs / 1000);
+      const syncData = this._buildTimerSync(endTime);
+      this.io.to(pin).emit('timer_tick', syncData);
 
-      this.io.to(pin).emit('timer_tick', {
-        remaining,           // For backwards compatibility
-        serverTime: now,     // Current server timestamp
-        endTime,             // When timer expires (absolute)
-        remainingMs          // Precise remaining milliseconds
-      });
-
-      if (remaining <= 0) {
+      if (syncData.remaining <= 0) {
         clearInterval(intervalId);
       }
     }, 1000);
@@ -55,7 +61,6 @@ class GameTimerService {
       duration: durationMs
     });
 
-    // Emit initial sync data with all timing info
     this.io.to(pin).emit('timer_started', {
       duration: durationSeconds,
       durationMs,
@@ -63,13 +68,8 @@ class GameTimerService {
       endTime
     });
 
-    // Also emit first tick for compatibility
-    this.io.to(pin).emit('timer_tick', {
-      remaining: durationSeconds,
-      serverTime: startTime,
-      endTime,
-      remainingMs: durationMs
-    });
+    // Emit first tick for compatibility
+    this.io.to(pin).emit('timer_tick', this._buildTimerSync(endTime));
   }
 
   /**
@@ -139,18 +139,7 @@ class GameTimerService {
     if (!timer) {
       return null;
     }
-
-    const now = Date.now();
-    const remainingMs = Math.max(0, timer.endTime - now);
-
-    return {
-      remaining: Math.ceil(remainingMs / 1000),
-      serverTime: now,
-      endTime: timer.endTime,
-      remainingMs,
-      startTime: timer.startTime,
-      duration: timer.duration
-    };
+    return this._buildTimerSync(timer.endTime, timer.startTime, timer.duration);
   }
 
   /**

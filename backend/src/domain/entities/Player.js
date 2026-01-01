@@ -74,6 +74,31 @@ class Player {
     if (!this.disconnectedAt) return 0;
     return Date.now() - this.disconnectedAt.getTime();
   }
+
+  /**
+   * Convert to plain object for serialization
+   * @param {Object} options - Serialization options
+   * @param {boolean} options.includeScore - Include score in output (default: true)
+   * @param {boolean} options.includeStats - Include stats like streak, correctAnswers (default: false)
+   */
+  toJSON({ includeScore = true, includeStats = false } = {}) {
+    const result = {
+      id: this.id,
+      nickname: this.nickname
+    };
+
+    if (includeScore) {
+      result.score = this.score;
+    }
+
+    if (includeStats) {
+      result.streak = this.streak;
+      result.correctAnswers = this.correctAnswers;
+      result.longestStreak = this.longestStreak;
+    }
+
+    return result;
+  }
 }
 
 module.exports = { Player };

@@ -65,6 +65,22 @@ class Question {
       imageUrl: this.imageUrl
     };
   }
+
+  /**
+   * Get question data for host (includes correct answer)
+   */
+  getHostData() {
+    return {
+      id: this.id,
+      text: this.text,
+      type: this.type,
+      options: this.options,
+      correctAnswerIndex: this.correctAnswerIndex,
+      timeLimit: this.timeLimit,
+      points: this.points,
+      imageUrl: this.imageUrl
+    };
+  }
 }
 
 module.exports = { Question, QuestionType };

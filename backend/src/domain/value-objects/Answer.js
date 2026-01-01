@@ -1,3 +1,5 @@
+const MAX_STREAK_BONUS = 500;
+
 class Answer {
   constructor({ playerId, questionId, roomPin, answerIndex, isCorrect, elapsedTimeMs, score = 0, streakBonus = 0, submittedAt = new Date() }) {
     this.playerId = playerId;
@@ -32,7 +34,7 @@ class Answer {
 
     let streakBonus = 0;
     if (isCorrect && currentStreak > 0) {
-      streakBonus = currentStreak * 100;
+      streakBonus = Math.min(currentStreak * 100, MAX_STREAK_BONUS);
     }
 
     return new Answer({

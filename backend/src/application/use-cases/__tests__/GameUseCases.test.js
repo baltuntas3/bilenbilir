@@ -79,7 +79,9 @@ describe('GameUseCases', () => {
       expect(result.totalQuestions).toBe(2);
       expect(result.currentQuestion).toBeDefined();
       expect(result.currentQuestion.text).toBe('What is 2+2?');
-      expect(result.currentQuestion).not.toHaveProperty('correctAnswerIndex');
+      // Host should receive correctAnswerIndex
+      expect(result.currentQuestion.correctAnswerIndex).toBe(1);
+      expect(result.currentQuestion.points).toBeDefined();
     });
 
     it('should throw error when called by non-host', async () => {

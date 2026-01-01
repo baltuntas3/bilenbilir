@@ -331,7 +331,7 @@ describe('QuizUseCases', () => {
       await expect(quizUseCases.deleteQuiz({
         quizId,
         requesterId: 'another-user'
-      })).rejects.toThrow('Not authorized to delete this quiz');
+      })).rejects.toThrow('Not authorized to modify this quiz');
     });
   });
 

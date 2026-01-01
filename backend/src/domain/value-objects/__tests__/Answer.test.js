@@ -173,6 +173,45 @@ describe('Answer', () => {
       expect(answer.streakBonus).toBe(0);
     });
 
+    it('should cap streak bonus at 500', () => {
+      const answer = Answer.create({
+        playerId: 'player-1',
+        questionId: 'q-1',
+        roomPin: '123456',
+        answerIndex: 1,
+        question: mockQuestion,
+        elapsedTimeMs: 0,
+        currentStreak: 10 // Would be 1000 without cap
+      });
+
+      expect(answer.streakBonus).toBe(500);
+    });
+
+    it('should allow streak bonus up to cap', () => {
+      const answer5 = Answer.create({
+        playerId: 'player-1',
+        questionId: 'q-1',
+        roomPin: '123456',
+        answerIndex: 1,
+        question: mockQuestion,
+        elapsedTimeMs: 0,
+        currentStreak: 5 // Exactly at cap
+      });
+
+      const answer6 = Answer.create({
+        playerId: 'player-1',
+        questionId: 'q-1',
+        roomPin: '123456',
+        answerIndex: 1,
+        question: mockQuestion,
+        elapsedTimeMs: 0,
+        currentStreak: 6 // Over cap
+      });
+
+      expect(answer5.streakBonus).toBe(500);
+      expect(answer6.streakBonus).toBe(500); // Capped
+    });
+
     it('should calculate lower score for slower answers', () => {
       const fastAnswer = Answer.create({
         playerId: 'player-1',

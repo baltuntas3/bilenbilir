@@ -253,7 +253,7 @@ describe('RoomUseCases', () => {
       await expect(roomUseCases.closeRoom({
         pin: roomPin,
         requesterId: 'someone-else'
-      })).rejects.toThrow('Only host can close the room');
+      })).rejects.toThrow('Only host can perform this action');
     });
 
     it('should throw error for non-existent room', async () => {
@@ -261,6 +261,47 @@ describe('RoomUseCases', () => {
         pin: '999999',
         requesterId: 'host-socket-1'
       })).rejects.toThrow('Room not found');
+    });
+  });
+
+  describe('findRoomBySocketId', () => {
+    let roomPin;
+
+    beforeEach(async () => {
+      const result = await roomUseCases.createRoom({
+        hostId: 'host-socket-1',
+        quizId: 'quiz-1'
+      });
+      roomPin = result.room.pin;
+    });
+
+    it('should find room where socket is host', async () => {
+      const result = await roomUseCases.findRoomBySocketId({ socketId: 'host-socket-1' });
+
+      expect(result).not.toBeNull();
+      expect(result.room.pin).toBe(roomPin);
+      expect(result.role).toBe('host');
+    });
+
+    it('should find room where socket is player', async () => {
+      await roomUseCases.joinRoom({
+        pin: roomPin,
+        nickname: 'Player1',
+        socketId: 'player-socket-1'
+      });
+
+      const result = await roomUseCases.findRoomBySocketId({ socketId: 'player-socket-1' });
+
+      expect(result).not.toBeNull();
+      expect(result.room.pin).toBe(roomPin);
+      expect(result.role).toBe('player');
+      expect(result.player.nickname).toBe('Player1');
+    });
+
+    it('should return null for socket not in any room', async () => {
+      const result = await roomUseCases.findRoomBySocketId({ socketId: 'unknown-socket' });
+
+      expect(result).toBeNull();
     });
   });
 });

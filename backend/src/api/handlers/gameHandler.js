@@ -1,3 +1,5 @@
+const { handleSocketError } = require('../middlewares/errorHandler');
+
 /**
  * Game WebSocket Handler
  * Handles game flow: start, questions, answers, results
@@ -23,7 +25,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         questionIndex: 0
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -66,7 +68,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         optionCount: result.optionCount
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -78,16 +80,6 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Check if timer has expired (server-side validation)
       if (timerService.isTimeExpired(pin)) {
         socket.emit('error', { message: 'Time expired' });
-        return;
-      }
-
-      // Basic answerIndex validation (no Value Object for this)
-      if (answerIndex === null || answerIndex === undefined) {
-        socket.emit('error', { message: 'Answer index is required' });
-        return;
-      }
-      if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex)) {
-        socket.emit('error', { message: 'Answer index must be an integer' });
         return;
       }
 
@@ -118,7 +110,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         io.to(pin).emit('all_players_answered');
       }
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -145,7 +137,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         correctAnswerIndex: result.correctAnswerIndex
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -167,7 +159,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         }))
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -208,7 +200,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         });
       }
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -232,7 +224,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         }))
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 
@@ -249,7 +241,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         socket.emit('timer_sync', { active: false });
       }
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      handleSocketError(socket, error);
     }
   });
 };

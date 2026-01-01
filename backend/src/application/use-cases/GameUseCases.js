@@ -1,5 +1,6 @@
 const { RoomState } = require('../../domain/entities');
 const { Answer } = require('../../domain/value-objects');
+const { NotFoundError, ForbiddenError, ValidationError, ConflictError } = require('../../shared/errors');
 
 class GameUseCases {
   constructor(roomRepository, quizRepository, gameSessionRepository = null) {
@@ -12,22 +13,49 @@ class GameUseCases {
   }
 
   /**
+   * Get room by PIN or throw NotFoundError
+   * @private
+   */
+  async _getRoomOrThrow(pin) {
+    const room = await this.roomRepository.findByPin(pin);
+    if (!room) {
+      throw new NotFoundError('Room not found');
+    }
+    return room;
+  }
+
+  /**
+   * Get quiz by ID or throw NotFoundError
+   * @private
+   */
+  async _getQuizOrThrow(quizId) {
+    const quiz = await this.quizRepository.findById(quizId);
+    if (!quiz) {
+      throw new NotFoundError('Quiz not found');
+    }
+    return quiz;
+  }
+
+  /**
+   * Validate that requester is host or throw ForbiddenError
+   * @private
+   */
+  _throwIfNotHost(room, requesterId) {
+    if (!room.isHost(requesterId)) {
+      throw new ForbiddenError('Only host can control game flow');
+    }
+  }
+
+  /**
    * Start the game (host only)
    */
   async startGame({ pin, requesterId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
-    const quiz = await this.quizRepository.findById(room.quizId);
-    if (!quiz) {
-      throw new Error('Quiz not found');
-    }
+    const room = await this._getRoomOrThrow(pin);
+    const quiz = await this._getQuizOrThrow(room.quizId);
 
     // Validate quiz has at least one question
     if (quiz.getTotalQuestions() === 0) {
-      throw new Error('Quiz must have at least one question');
+      throw new ValidationError('Quiz must have at least one question');
     }
 
     room.startGame(requesterId); // Entity validates host and state
@@ -42,7 +70,7 @@ class GameUseCases {
     return {
       room,
       totalQuestions: quiz.getTotalQuestions(),
-      currentQuestion: currentQuestion.getPublicData()
+      currentQuestion: currentQuestion.getHostData()
     };
   }
 
@@ -53,7 +81,7 @@ class GameUseCases {
   _getQuestionOrThrow(quiz, index) {
     const question = quiz.getQuestion(index);
     if (!question) {
-      throw new Error(`Question at index ${index} not found. Quiz may have been modified.`);
+      throw new NotFoundError(`Question at index ${index} not found. Quiz may have been modified.`);
     }
     return question;
   }
@@ -75,12 +103,8 @@ class GameUseCases {
    * Get current question (called after intro timer)
    */
   async getCurrentQuestion({ pin }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
-    const quiz = await this.quizRepository.findById(room.quizId);
+    const room = await this._getRoomOrThrow(pin);
+    const quiz = await this._getQuizOrThrow(room.quizId);
     const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
     return {
@@ -94,26 +118,16 @@ class GameUseCases {
    * Start answering phase (called after intro countdown)
    */
   async startAnsweringPhase({ pin, requesterId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
-    if (!room.isHost(requesterId)) {
-      throw new Error('Only host can control game flow');
-    }
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
 
     room.setState(RoomState.ANSWERING_PHASE);
-
-    // Clear all player answer attempts for new question (via Aggregate Root)
     room.clearAllAnswerAttempts();
-
-    // Clear pending answers for this room
     this._clearPendingAnswersForRoom(pin);
 
     await this.roomRepository.save(room);
 
-    const quiz = await this.quizRepository.findById(room.quizId);
+    const quiz = await this._getQuizOrThrow(room.quizId);
     const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
     return {
@@ -127,43 +141,40 @@ class GameUseCases {
    * Submit an answer with race condition protection
    */
   async submitAnswer({ pin, socketId, answerIndex, elapsedTimeMs }) {
-    // Create unique key for this submission
     const submissionKey = `${pin}:${socketId}`;
 
-    // Check and set pending flag atomically (race condition protection)
     if (this.pendingAnswers.has(submissionKey)) {
-      throw new Error('Answer submission in progress');
+      throw new ConflictError('Answer submission in progress');
     }
     this.pendingAnswers.set(submissionKey, true);
 
     try {
-      const room = await this.roomRepository.findByPin(pin);
-      if (!room) {
-        throw new Error('Room not found');
-      }
+      const room = await this._getRoomOrThrow(pin);
 
       if (room.state !== RoomState.ANSWERING_PHASE) {
-        throw new Error('Not in answering phase');
+        throw new ConflictError('Not in answering phase');
       }
 
       const player = room.getPlayer(socketId);
       if (!player) {
-        throw new Error('Player not found');
+        throw new NotFoundError('Player not found');
       }
 
       if (player.hasAnswered()) {
-        throw new Error('Already answered');
+        throw new ConflictError('Already answered');
       }
 
-      const quiz = await this.quizRepository.findById(room.quizId);
+      const quiz = await this._getQuizOrThrow(room.quizId);
       const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
       // Validate elapsed time is non-negative
       const validElapsedTime = Math.max(0, elapsedTimeMs || 0);
 
-      // Validate answer index is within range
-      if (answerIndex < 0 || answerIndex >= currentQuestion.options.length) {
-        throw new Error('Invalid answer index');
+      // Validate answer index (type, range)
+      if (answerIndex === null || answerIndex === undefined ||
+          typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) ||
+          answerIndex < 0 || answerIndex >= currentQuestion.options.length) {
+        throw new ValidationError('Invalid answer index');
       }
 
       // Create answer and calculate score
@@ -209,29 +220,23 @@ class GameUseCases {
    * End answering phase and show results
    */
   async endAnsweringPhase({ pin, requesterId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
+    const room = await this._getRoomOrThrow(pin);
 
-    // Check if already ended (race condition protection)
     if (room.state !== RoomState.ANSWERING_PHASE) {
-      throw new Error('Not in answering phase');
+      throw new ConflictError('Not in answering phase');
     }
 
     // Allow server-triggered end or host-triggered end
-    if (requesterId !== 'server' && !room.isHost(requesterId)) {
-      throw new Error('Only host can control game flow');
+    if (requesterId !== 'server') {
+      this._throwIfNotHost(room, requesterId);
     }
 
     room.setState(RoomState.SHOW_RESULTS);
-
     await this.roomRepository.save(room);
 
-    const quiz = await this.quizRepository.findById(room.quizId);
+    const quiz = await this._getQuizOrThrow(room.quizId);
     const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
 
-    // Get answer distribution via Aggregate Root
     const { distribution, correctCount } = room.getAnswerDistribution(
       currentQuestion.options.length,
       (idx) => currentQuestion.isCorrect(idx)
@@ -250,17 +255,10 @@ class GameUseCases {
    * Show leaderboard
    */
   async showLeaderboard({ pin, requesterId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
-    if (!room.isHost(requesterId)) {
-      throw new Error('Only host can control game flow');
-    }
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
 
     room.setState(RoomState.LEADERBOARD);
-
     await this.roomRepository.save(room);
 
     return {
@@ -273,16 +271,11 @@ class GameUseCases {
    * Move to next question (host only)
    */
   async nextQuestion({ pin, requesterId }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
-    const quiz = await this.quizRepository.findById(room.quizId);
+    const room = await this._getRoomOrThrow(pin);
+    const quiz = await this._getQuizOrThrow(room.quizId);
     const totalQuestions = quiz.getTotalQuestions();
 
     const hasMore = room.nextQuestion(requesterId, totalQuestions);
-
     await this.roomRepository.save(room);
 
     if (!hasMore) {
@@ -300,7 +293,7 @@ class GameUseCases {
       isGameOver: false,
       questionIndex: room.currentQuestionIndex,
       totalQuestions,
-      currentQuestion: currentQuestion.getPublicData()
+      currentQuestion: currentQuestion.getHostData()
     };
   }
 
@@ -308,11 +301,7 @@ class GameUseCases {
    * Get final results / podium
    */
   async getResults({ pin }) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     return {
       leaderboard: room.getLeaderboard(),
       podium: room.getPodium()
@@ -324,14 +313,10 @@ class GameUseCases {
    */
   async archiveGame({ pin, startedAt }) {
     if (!this.gameSessionRepository) {
-      return null; // Skip if no repository configured
+      return null;
     }
 
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new Error('Room not found');
-    }
-
+    const room = await this._getRoomOrThrow(pin);
     const leaderboard = room.getLeaderboard();
 
     // Build player results

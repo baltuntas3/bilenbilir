@@ -5,6 +5,7 @@
  */
 
 const { PIN } = require('../value-objects/PIN');
+const { ValidationError, ForbiddenError, UnauthorizedError, ConflictError } = require('../../shared/errors');
 
 const RoomState = {
   WAITING_PLAYERS: 'WAITING_PLAYERS',
@@ -49,7 +50,7 @@ class Room {
 
   reconnectHost(newSocketId, token) {
     if (token !== this.hostToken) {
-      throw new Error('Invalid host token');
+      throw new UnauthorizedError('Invalid host token');
     }
     this.hostId = newSocketId;
     this.hostDisconnectedAt = null;
@@ -66,12 +67,12 @@ class Room {
 
   addPlayer(player) {
     if (this.state !== RoomState.WAITING_PLAYERS) {
-      throw new Error('Players can only join during lobby phase');
+      throw new ValidationError('Players can only join during lobby phase');
     }
 
     const nicknameExists = this.players.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
     if (nicknameExists) {
-      throw new Error('Nickname already taken');
+      throw new ConflictError('Nickname already taken');
     }
 
     this.players.push(player);
@@ -100,14 +101,14 @@ class Room {
   reconnectPlayer(playerToken, newSocketId, gracePeriodMs = null) {
     const player = this.getPlayerByToken(playerToken);
     if (!player) {
-      throw new Error('Invalid player token');
+      throw new UnauthorizedError('Invalid player token');
     }
 
     // Check if player exceeded grace period
     if (gracePeriodMs !== null && player.isDisconnected()) {
       const disconnectedDuration = player.getDisconnectedDuration();
       if (disconnectedDuration > gracePeriodMs) {
-        throw new Error('Reconnection timeout expired');
+        throw new ForbiddenError('Reconnection timeout expired');
       }
     }
 
@@ -177,19 +178,19 @@ class Room {
 
   startGame(requesterId) {
     if (!this.isHost(requesterId)) {
-      throw new Error('Only host can start the game');
+      throw new ForbiddenError('Only host can start the game');
     }
     if (this.state !== RoomState.WAITING_PLAYERS) {
-      throw new Error('Game can only start from lobby');
+      throw new ValidationError('Game can only start from lobby');
     }
     if (this.players.length === 0) {
-      throw new Error('At least one player required');
+      throw new ValidationError('At least one player required');
     }
   }
 
   nextQuestion(requesterId, totalQuestions) {
     if (!this.isHost(requesterId)) {
-      throw new Error('Only host can advance questions');
+      throw new ForbiddenError('Only host can advance questions');
     }
     if (this.currentQuestionIndex >= totalQuestions - 1) {
       this.state = RoomState.PODIUM;
@@ -203,7 +204,7 @@ class Room {
   setState(newState) {
     const allowedTransitions = validTransitions[this.state];
     if (!allowedTransitions || !allowedTransitions.includes(newState)) {
-      throw new Error(`Invalid state transition: ${this.state} → ${newState}`);
+      throw new ValidationError(`Invalid state transition: ${this.state} → ${newState}`);
     }
     this.state = newState;
   }

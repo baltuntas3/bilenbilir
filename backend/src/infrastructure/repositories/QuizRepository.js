@@ -1,6 +1,7 @@
 /**
  * In-memory Quiz Repository
- * Stores quizzes in memory - can be swapped with MongoDB later
+ * Used ONLY for unit tests - provides fast, isolated testing without MongoDB.
+ * Production code uses MongoQuizRepository instead.
  */
 class QuizRepository {
   constructor() {

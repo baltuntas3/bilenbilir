@@ -124,4 +124,36 @@ describe('Question', () => {
       expect(publicData).not.toHaveProperty('points');
     });
   });
+
+  describe('getHostData', () => {
+    it('should return question with correct answer for host', () => {
+      const question = new Question(validQuestionData);
+      const hostData = question.getHostData();
+
+      expect(hostData.id).toBe('q-1');
+      expect(hostData.text).toBe('What is 2 + 2?');
+      expect(hostData.options).toEqual(['3', '4', '5', '6']);
+      expect(hostData.timeLimit).toBe(30);
+      expect(hostData.correctAnswerIndex).toBe(1);
+      expect(hostData.points).toBe(1000);
+    });
+
+    it('should include all fields that getPublicData has', () => {
+      const question = new Question({ ...validQuestionData, imageUrl: 'http://example.com/img.png' });
+      const publicData = question.getPublicData();
+      const hostData = question.getHostData();
+
+      // Host data should have all public fields
+      expect(hostData.id).toBe(publicData.id);
+      expect(hostData.text).toBe(publicData.text);
+      expect(hostData.type).toBe(publicData.type);
+      expect(hostData.options).toEqual(publicData.options);
+      expect(hostData.timeLimit).toBe(publicData.timeLimit);
+      expect(hostData.imageUrl).toBe(publicData.imageUrl);
+
+      // Plus additional host-only fields
+      expect(hostData.correctAnswerIndex).toBeDefined();
+      expect(hostData.points).toBeDefined();
+    });
+  });
 });
