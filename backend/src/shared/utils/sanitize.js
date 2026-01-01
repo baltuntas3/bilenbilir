@@ -1,5 +1,10 @@
 const validator = require('validator');
 
+// Nickname validation constants (must match Nickname value object)
+const NICKNAME_MIN_LENGTH = 2;
+const NICKNAME_MAX_LENGTH = 15;
+const NICKNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
 /**
  * Sanitize a string to prevent XSS attacks
  * @param {string} str - String to sanitize
@@ -51,14 +56,25 @@ const sanitizeEmail = (email) => {
 };
 
 /**
- * Validate nickname (alphanumeric, underscore, hyphen, 2-15 chars)
+ * Validate nickname (alphanumeric, underscore, hyphen)
+ * Uses same validation rules as Nickname value object
  * @param {string} nickname - Nickname to validate
  * @returns {string|null} - Sanitized nickname or null if invalid
  */
 const sanitizeNickname = (nickname) => {
   if (typeof nickname !== 'string') return null;
   const trimmed = nickname.trim();
-  if (!/^[a-zA-Z0-9_-]{2,15}$/.test(trimmed)) return null;
+
+  // Validate length
+  if (trimmed.length < NICKNAME_MIN_LENGTH || trimmed.length > NICKNAME_MAX_LENGTH) {
+    return null;
+  }
+
+  // Validate pattern
+  if (!NICKNAME_PATTERN.test(trimmed)) {
+    return null;
+  }
+
   return validator.escape(trimmed);
 };
 

@@ -1,32 +1,49 @@
 const { Room, RoomState, Player } = require('../../domain/entities');
-const { PIN } = require('../../domain/value-objects');
+const { PIN, Nickname } = require('../../domain/value-objects');
 const { generateId } = require('../../shared/utils/generateId');
 const { NotFoundError, ForbiddenError, ValidationError, ConflictError } = require('../../shared/errors');
 
 // Default grace period for player reconnection (2 minutes)
 const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
 
+// Default grace period for host reconnection (5 minutes - longer since host is more critical)
+const DEFAULT_HOST_GRACE_PERIOD = 300000;
+
+// Lock TTL in milliseconds (10 seconds - should be enough for a join operation)
+const JOIN_LOCK_TTL = 10000;
+
 class RoomUseCases {
   constructor(roomRepository, quizRepository, options = {}) {
     this.roomRepository = roomRepository;
     this.quizRepository = quizRepository;
     this.playerGracePeriod = options.playerGracePeriod || DEFAULT_PLAYER_GRACE_PERIOD;
+    this.hostGracePeriod = options.hostGracePeriod || DEFAULT_HOST_GRACE_PERIOD;
 
     // Lock map to prevent nickname collision race conditions
-    // Key: "pin:nickname_lowercase", Value: true (locked)
+    // Key: "pin:nickname_lowercase", Value: timestamp when lock was acquired
     this.joinLocks = new Map();
   }
 
   /**
    * Acquire lock for joining room with nickname
+   * Uses Nickname VO for consistent normalization
+   * Locks expire after TTL to prevent permanent lockout
    * @private
    */
   _acquireJoinLock(pin, nickname) {
-    const lockKey = `${pin}:${nickname.toLowerCase()}`;
-    if (this.joinLocks.has(lockKey)) {
+    // Use Nickname VO for consistent normalization across the system
+    const normalizedNickname = new Nickname(nickname).normalized();
+    const lockKey = `${pin}:${normalizedNickname}`;
+    const now = Date.now();
+
+    // Check if lock exists and is not expired
+    const existingLock = this.joinLocks.get(lockKey);
+    if (existingLock && (now - existingLock) < JOIN_LOCK_TTL) {
       throw new ConflictError('Join in progress. Please try again.');
     }
-    this.joinLocks.set(lockKey, true);
+
+    // Clean up expired lock if exists, then acquire new lock
+    this.joinLocks.set(lockKey, now);
     return lockKey;
   }
 
@@ -36,6 +53,24 @@ class RoomUseCases {
    */
   _releaseJoinLock(lockKey) {
     this.joinLocks.delete(lockKey);
+  }
+
+  /**
+   * Clean up expired join locks (called periodically if needed)
+   * @returns {number} Number of expired locks removed
+   */
+  cleanupExpiredJoinLocks() {
+    const now = Date.now();
+    let removedCount = 0;
+
+    for (const [key, timestamp] of this.joinLocks.entries()) {
+      if ((now - timestamp) >= JOIN_LOCK_TTL) {
+        this.joinLocks.delete(key);
+        removedCount++;
+      }
+    }
+
+    return removedCount;
   }
 
   /**
@@ -179,42 +214,45 @@ class RoomUseCases {
   /**
    * Handle socket disconnect - mark as disconnected instead of removing
    * Allows for reconnection during grace period
+   * Uses O(1) index lookup for performance
    */
   async handleDisconnect({ socketId }) {
-    const rooms = await this.roomRepository.getAll();
+    // Use O(1) index lookup instead of iterating all rooms
+    const result = await this.roomRepository.findBySocketId(socketId);
 
-    for (const room of rooms) {
-      // Check if disconnected user is host
-      if (room.isHost(socketId)) {
-        // Mark host as disconnected instead of deleting room immediately
-        room.setHostDisconnected();
-        await this.roomRepository.save(room);
-        return {
-          type: 'host_disconnected',
-          pin: room.pin,
-          gracePeriod: true // Host can reconnect
-        };
-      }
+    if (!result) {
+      return { type: 'not_in_room' };
+    }
 
-      // Check if disconnected user is a player
-      const player = room.getPlayer(socketId);
-      if (player) {
-        // During lobby, remove player completely
-        // During game, mark as disconnected for potential reconnection
-        if (room.state === RoomState.WAITING_PLAYERS) {
-          room.removePlayer(socketId);
-        } else {
-          room.setPlayerDisconnected(socketId);
-        }
-        await this.roomRepository.save(room);
-        return {
-          type: 'player_disconnected',
-          pin: room.pin,
-          player,
-          playerCount: room.getPlayerCount(),
-          canReconnect: room.state !== RoomState.WAITING_PLAYERS
-        };
+    const { room, role, player } = result;
+
+    if (role === 'host') {
+      // Mark host as disconnected instead of deleting room immediately
+      room.setHostDisconnected();
+      await this.roomRepository.save(room);
+      return {
+        type: 'host_disconnected',
+        pin: room.pin,
+        gracePeriod: true // Host can reconnect
+      };
+    }
+
+    if (role === 'player' && player) {
+      // During lobby, remove player completely
+      // During game, mark as disconnected for potential reconnection
+      if (room.state === RoomState.WAITING_PLAYERS) {
+        room.removePlayer(socketId);
+      } else {
+        room.setPlayerDisconnected(socketId);
       }
+      await this.roomRepository.save(room);
+      return {
+        type: 'player_disconnected',
+        pin: room.pin,
+        player,
+        playerCount: room.getPlayerCount(),
+        canReconnect: room.state !== RoomState.WAITING_PLAYERS
+      };
     }
 
     return { type: 'not_in_room' };
@@ -222,10 +260,11 @@ class RoomUseCases {
 
   /**
    * Reconnect host to room using hostToken
+   * Validates grace period to prevent reconnection after timeout
    */
   async reconnectHost({ pin, hostToken, newSocketId }) {
     const room = await this._getRoomOrThrow(pin);
-    room.reconnectHost(newSocketId, hostToken);
+    room.reconnectHost(newSocketId, hostToken, this.hostGracePeriod);
     await this.roomRepository.save(room);
     const quiz = await this.quizRepository.findById(room.quizId);
     return { room, quiz };
@@ -247,10 +286,10 @@ class RoomUseCases {
 
   /**
    * Find room by host token (for reconnection)
+   * Uses O(1) index lookup for performance
    */
   async findRoomByHostToken({ hostToken }) {
-    const rooms = await this.roomRepository.getAll();
-    const room = rooms.find(r => r.hostToken === hostToken);
+    const room = await this.roomRepository.findByHostToken(hostToken);
 
     if (!room) {
       return null;
@@ -261,41 +300,19 @@ class RoomUseCases {
 
   /**
    * Find room by player token (for reconnection)
+   * Uses O(1) index lookup for performance
    */
   async findRoomByPlayerToken({ playerToken }) {
-    const rooms = await this.roomRepository.getAll();
-
-    for (const room of rooms) {
-      const player = room.getPlayerByToken(playerToken);
-      if (player) {
-        return { room, player };
-      }
-    }
-
-    return null;
+    return await this.roomRepository.findByPlayerToken(playerToken);
   }
 
   /**
    * Find room where socket is participating (as host or player)
    * Used to prevent same socket from joining multiple rooms
+   * Uses O(1) index lookup for performance
    */
   async findRoomBySocketId({ socketId }) {
-    const rooms = await this.roomRepository.getAll();
-
-    for (const room of rooms) {
-      // Check if socket is host
-      if (room.isHost(socketId)) {
-        return { room, role: 'host' };
-      }
-
-      // Check if socket is a player
-      const player = room.getPlayer(socketId);
-      if (player) {
-        return { room, role: 'player', player };
-      }
-    }
-
-    return null;
+    return await this.roomRepository.findBySocketId(socketId);
   }
 }
 

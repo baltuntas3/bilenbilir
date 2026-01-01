@@ -15,6 +15,12 @@ class SocketRateLimiter {
       create_room: { maxRequests: 5, windowMs: 60000 },      // 5 per minute
       reconnect_player: { maxRequests: 5, windowMs: 60000 }, // 5 per minute
       reconnect_host: { maxRequests: 5, windowMs: 60000 },   // 5 per minute
+      // Host game control operations
+      start_game: { maxRequests: 3, windowMs: 60000 },       // 3 per minute
+      start_answering: { maxRequests: 10, windowMs: 60000 }, // 10 per minute (one per question)
+      end_answering: { maxRequests: 10, windowMs: 60000 },   // 10 per minute
+      show_leaderboard: { maxRequests: 10, windowMs: 60000 },// 10 per minute
+      next_question: { maxRequests: 10, windowMs: 60000 },   // 10 per minute
       default: { maxRequests: 30, windowMs: 60000 }          // 30 per minute for others
     };
 

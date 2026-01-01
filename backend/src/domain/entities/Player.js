@@ -27,6 +27,23 @@ class Player {
     return this._nickname.toString();
   }
 
+  /**
+   * Check if player has the given nickname (case-insensitive)
+   * @param {string|Nickname} other - Nickname to compare
+   * @returns {boolean}
+   */
+  hasNickname(other) {
+    return this._nickname.equalsIgnoreCase(other);
+  }
+
+  /**
+   * Get normalized (lowercase) nickname for lookups
+   * @returns {string}
+   */
+  getNormalizedNickname() {
+    return this._nickname.normalized();
+  }
+
   get score() {
     return this._score.toNumber();
   }
@@ -48,6 +65,19 @@ class Player {
   }
 
   submitAnswer(answerIndex, elapsedTimeMs) {
+    // Defensive validation - caller should validate, but double-check here
+    if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) || answerIndex < 0) {
+      throw new Error('Invalid answer index');
+    }
+    if (typeof elapsedTimeMs !== 'number' || !Number.isFinite(elapsedTimeMs) || elapsedTimeMs < 0) {
+      throw new Error('Invalid elapsed time');
+    }
+
+    // Prevent disconnected players from submitting (defensive check)
+    if (this.isDisconnected()) {
+      throw new Error('Cannot submit answer while disconnected');
+    }
+
     this.answerAttempt = {
       answerIndex,
       elapsedTimeMs,
@@ -78,11 +108,24 @@ class Player {
   }
 
   /**
+   * Check if the player has a valid token
+   * @returns {boolean} True if token exists and is valid
+   */
+  hasValidToken() {
+    return this.playerToken !== null &&
+           this.playerToken !== undefined &&
+           typeof this.playerToken === 'string' &&
+           this.playerToken.length > 0;
+  }
+
+  /**
    * Check if the player token has expired
-   * @returns {boolean} True if token is expired
+   * @returns {boolean} True if token is expired or invalid
    */
   isTokenExpired() {
-    if (!this.tokenCreatedAt) return false;
+    // No token or invalid token is considered expired
+    if (!this.hasValidToken()) return true;
+    if (!this.tokenCreatedAt) return true;
     return Date.now() - this.tokenCreatedAt.getTime() > TOKEN_EXPIRATION_MS;
   }
 

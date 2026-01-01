@@ -56,8 +56,16 @@ class Question {
       throw new Error('Question text is required');
     }
 
-    if (!this.options || this.options.length < 2) {
+    if (!this.options || !Array.isArray(this.options) || this.options.length < 2) {
       throw new Error('At least 2 options required');
+    }
+
+    // Validate each option is a non-empty string
+    for (let i = 0; i < this.options.length; i++) {
+      const option = this.options[i];
+      if (typeof option !== 'string' || option.trim() === '') {
+        throw new Error(`Option ${i + 1} cannot be empty`);
+      }
     }
 
     // TRUE_FALSE must have exactly 2 options
@@ -92,7 +100,12 @@ class Question {
       return 0;
     }
 
+    // Defensive check for zero time limit (should never happen due to validation)
     const totalTimeMs = this.timeLimit * 1000;
+    if (totalTimeMs <= 0) {
+      return this.points; // Return full points if time limit is invalid
+    }
+
     const timeFactor = 1 - (elapsedTimeMs / totalTimeMs / 2);
     const score = Math.round(timeFactor * this.points);
 
@@ -128,18 +141,31 @@ class Question {
 
   /**
    * Create a deep clone of this question (immutable snapshot)
+   *
+   * Deep freeze implementation:
+   * - Options array is cloned and frozen (array of primitive strings)
+   * - All other properties are primitives (immutable by nature)
+   * - The Question object itself is frozen
+   *
+   * This ensures the snapshot cannot be modified during gameplay
    */
   clone() {
-    return new Question({
+    // Create a frozen copy of options array (strings are immutable primitives)
+    const frozenOptions = Object.freeze([...this.options]);
+
+    const clonedQuestion = new Question({
       id: this.id,
       text: this.text,
       type: this.type,
-      options: [...this.options],
+      options: frozenOptions,
       correctAnswerIndex: this.correctAnswerIndex,
       timeLimit: this.timeLimit,
       points: this.points,
       imageUrl: this.imageUrl
     });
+
+    // Freeze the question object to prevent modifications
+    return Object.freeze(clonedQuestion);
   }
 }
 

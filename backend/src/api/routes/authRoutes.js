@@ -81,8 +81,8 @@ router.post('/login', authLimiter, async (req, res, next) => {
       throw new ValidationError('Email and password are required');
     }
 
-    // Find user
-    const user = await mongoUserRepository.findByEmail(email);
+    // Find user with password for authentication
+    const user = await mongoUserRepository.findByEmail(email, { includePassword: true });
 
     if (!user) {
       throw new UnauthorizedError('Invalid credentials');
@@ -262,7 +262,17 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => 
     await mongoUserRepository.save(user);
 
     // Send password reset email
-    await emailService.sendPasswordReset(user.email, resetToken);
+    const emailResult = await emailService.sendPasswordReset(user.email, resetToken);
+
+    // Log email failures for monitoring (but don't expose to user for security)
+    if (emailResult && (emailResult.failed || emailResult.skipped)) {
+      console.error('Password reset email failed:', {
+        reason: emailResult.reason || emailResult.error,
+        email: user.email
+      });
+      // Note: We still return success to prevent email enumeration
+      // In production, consider alerting admins about email delivery issues
+    }
 
     res.json({
       message: 'If an account with that email exists, a password reset link has been sent'

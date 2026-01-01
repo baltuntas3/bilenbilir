@@ -26,28 +26,50 @@ class MongoUserRepository {
   /**
    * Find user by email
    * @param {string} email - User email (will be lowercased)
+   * @param {object} options - Query options
+   * @param {boolean} options.includePassword - Include password field (default: false)
    */
-  async findByEmail(email) {
-    return await User.findOne({ email: email.toLowerCase() });
+  async findByEmail(email, { includePassword = false } = {}) {
+    const query = User.findOne({ email: email.toLowerCase() });
+    if (!includePassword) {
+      query.select('-password');
+    }
+    return await query;
   }
 
   /**
    * Find user by username
    * @param {string} username - Username
+   * @param {object} options - Query options
+   * @param {boolean} options.includePassword - Include password field (default: false)
    */
-  async findByUsername(username) {
-    return await User.findOne({ username });
+  async findByUsername(username, { includePassword = false } = {}) {
+    const query = User.findOne({ username });
+    if (!includePassword) {
+      query.select('-password');
+    }
+    return await query;
   }
 
   /**
    * Find user by email or username
    * @param {string} email - User email
    * @param {string} username - Username
+   * @param {object} options - Query options
+   * @param {boolean} options.includePassword - Include password field (default: false)
    */
-  async findByEmailOrUsername(email, username) {
-    return await User.findOne({
-      $or: [{ email: email.toLowerCase() }, { username }]
+  async findByEmailOrUsername(email, username, { includePassword = false } = {}) {
+    // Validate at least one parameter is provided
+    if (!email && !username) {
+      return null;
+    }
+    const query = User.findOne({
+      $or: [{ email: email?.toLowerCase() }, { username }]
     });
+    if (!includePassword) {
+      query.select('-password');
+    }
+    return await query;
   }
 
   /**
@@ -56,7 +78,7 @@ class MongoUserRepository {
    * @param {string} excludeId - User ID to exclude from search
    */
   async findByUsernameExcluding(username, excludeId) {
-    return await User.findOne({ username, _id: { $ne: excludeId } });
+    return await User.findOne({ username, _id: { $ne: excludeId } }).select('-password');
   }
 
   /**

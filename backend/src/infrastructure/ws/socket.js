@@ -6,6 +6,7 @@ const { roomRepository, gameSessionRepository } = require('../repositories');
 const { mongoQuizRepository } = require('../repositories/MongoQuizRepository');
 const { RoomCleanupService } = require('../services/RoomCleanupService');
 const { GameTimerService } = require('../services/GameTimerService');
+const { socketRateLimiter } = require('../../api/middlewares/socketRateLimiter');
 
 let io;
 let cleanupService;
@@ -72,6 +73,9 @@ const initializeSocket = (server) => {
     socket.on('disconnect', async () => {
       console.log('User disconnected:', socket.id);
 
+      // Clean up rate limiter entries for this socket
+      socketRateLimiter.removeSocket(socket.id);
+
       try {
         const result = await roomUseCases.handleDisconnect({ socketId: socket.id });
 
@@ -119,8 +123,12 @@ const stopTimerService = () => {
   }
 };
 
+const stopRateLimiter = () => {
+  socketRateLimiter.stop();
+};
+
 const getTimerService = () => {
   return timerService;
 };
 
-module.exports = { initializeSocket, getIO, stopCleanupService, stopTimerService, getTimerService };
+module.exports = { initializeSocket, getIO, stopCleanupService, stopTimerService, stopRateLimiter, getTimerService };

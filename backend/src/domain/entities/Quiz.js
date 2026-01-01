@@ -53,11 +53,31 @@ class Quiz {
     this.questions = this.questions.filter(q => q.id !== questionId);
   }
 
+  /**
+   * Get question by index (returns null if not found)
+   * @param {number} index - Question index
+   * @returns {Question|null}
+   */
   getQuestion(index) {
-    if (index < 0 || index >= this.questions.length) {
+    if (typeof index !== 'number' || index < 0 || index >= this.questions.length) {
       return null;
     }
     return this.questions[index];
+  }
+
+  /**
+   * Get question by index or throw error if not found
+   * Use this when question must exist (e.g., during game)
+   * @param {number} index - Question index
+   * @returns {Question}
+   * @throws {Error} If question not found
+   */
+  getQuestionOrThrow(index) {
+    const question = this.getQuestion(index);
+    if (!question) {
+      throw new Error(`Question at index ${index} not found`);
+    }
+    return question;
   }
 
   getTotalQuestions() {
@@ -75,17 +95,39 @@ class Quiz {
   /**
    * Create a deep clone of this quiz (immutable snapshot for game sessions)
    * This prevents mid-game modifications from affecting ongoing games
+   *
+   * Deep freeze implementation:
+   * - Each Question is frozen by Question.clone()
+   * - Each Question's options array is frozen by Question.clone()
+   * - The questions array is frozen here
+   * - Date objects are cloned to prevent shared reference mutation
+   * - The Quiz object itself is frozen
+   *
+   * Note: Object.freeze is shallow, but we freeze at each level explicitly
    */
   clone() {
-    return new Quiz({
+    // Clone and freeze all questions (Question.clone() returns frozen questions)
+    const frozenQuestions = Object.freeze(
+      this.questions.map(q => q.clone())
+    );
+
+    // Clone Date to prevent shared reference mutation
+    const clonedCreatedAt = this.createdAt instanceof Date
+      ? new Date(this.createdAt.getTime())
+      : this.createdAt;
+
+    const clonedQuiz = new Quiz({
       id: this.id,
       title: this.title,
       description: this.description,
       createdBy: this.createdBy,
-      questions: this.questions.map(q => q.clone()),
+      questions: frozenQuestions,
       isPublic: this.isPublic,
-      createdAt: this.createdAt
+      createdAt: clonedCreatedAt
     });
+
+    // Freeze the quiz object to prevent modifications
+    return Object.freeze(clonedQuiz);
   }
 }
 

@@ -7,21 +7,62 @@ const { Quiz, Question } = require('../../domain/entities');
  */
 class MongoQuizRepository {
   /**
+   * Sanitize imageUrl from database - handle legacy/corrupt data
+   * @private
+   */
+  _sanitizeImageUrl(url) {
+    if (!url || typeof url !== 'string' || url.trim() === '') {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(url.trim());
+      // Only allow http and https protocols
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return url.trim();
+      }
+      console.warn(`Invalid imageUrl protocol in database: ${parsed.protocol}`);
+      return null;
+    } catch {
+      console.warn(`Invalid imageUrl format in database: ${url}`);
+      return null;
+    }
+  }
+
+  /**
    * Convert Mongoose document to Domain entity
+   * Handles potential corrupt data gracefully
    */
   _toDomain(doc) {
     if (!doc) return null;
 
-    const questions = (doc.questions || []).map(q => new Question({
-      id: q._id.toString(),
-      text: q.text,
-      type: q.type,
-      options: q.options,
-      correctAnswerIndex: q.correctAnswerIndex,
-      timeLimit: q.timeLimit,
-      points: q.points,
-      imageUrl: q.imageUrl
-    }));
+    const questions = (doc.questions || []).map(q => {
+      try {
+        return new Question({
+          id: q._id.toString(),
+          text: q.text,
+          type: q.type,
+          options: q.options,
+          correctAnswerIndex: q.correctAnswerIndex,
+          timeLimit: q.timeLimit,
+          points: q.points,
+          imageUrl: this._sanitizeImageUrl(q.imageUrl)
+        });
+      } catch (error) {
+        // Log but don't fail - return question with sanitized defaults
+        console.error(`Error converting question ${q._id}: ${error.message}`);
+        return new Question({
+          id: q._id.toString(),
+          text: q.text || 'Question text missing',
+          type: q.type || 'MULTIPLE_CHOICE',
+          options: q.options && q.options.length >= 2 ? q.options : ['Option 1', 'Option 2'],
+          correctAnswerIndex: q.correctAnswerIndex >= 0 ? q.correctAnswerIndex : 0,
+          timeLimit: q.timeLimit >= 5 && q.timeLimit <= 120 ? q.timeLimit : 30,
+          points: q.points >= 100 && q.points <= 10000 ? q.points : 1000,
+          imageUrl: null
+        });
+      }
+    });
 
     return new Quiz({
       id: doc._id.toString(),

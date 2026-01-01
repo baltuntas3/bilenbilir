@@ -193,7 +193,16 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Host reconnects to room
   socket.on('reconnect_host', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('reconnect_host')) return;
+
       const { pin, hostToken } = data || {};
+
+      // Early token format validation
+      if (!hostToken || typeof hostToken !== 'string' || hostToken.trim().length === 0) {
+        socket.emit('error', { error: 'Host token is required' });
+        return;
+      }
 
       const result = await roomUseCases.reconnectHost({
         pin,
@@ -223,6 +232,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       if (!checkRateLimit('reconnect_player')) return;
 
       const { pin, playerToken } = data || {};
+
+      // Early token format validation
+      if (!playerToken || typeof playerToken !== 'string' || playerToken.trim().length === 0) {
+        socket.emit('error', { error: 'Player token is required' });
+        return;
+      }
 
       const result = await roomUseCases.reconnectPlayer({
         pin,

@@ -37,6 +37,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   // Host starts the game (requires authentication)
   socket.on('start_game', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('start_game')) return;
+
       requireAuth(); // JWT required for host
       const { pin } = data || {};
 
@@ -62,6 +65,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   // Host triggers answering phase (after intro countdown) - requires authentication
   socket.on('start_answering', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('start_answering')) return;
+
       requireAuth(); // JWT required for host
       const { pin } = data || {};
 
@@ -120,6 +126,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Use server-side elapsed time
       const elapsedTimeMs = timerService.getElapsedTime(pin);
 
+      // Validate elapsed time - if null, timer doesn't exist
+      if (elapsedTimeMs === null) {
+        socket.emit('error', { error: 'No active timer for this room' });
+        return;
+      }
+
       const result = await gameUseCases.submitAnswer({
         pin,
         socketId: socket.id,
@@ -151,6 +163,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   // Host ends answering phase (timer expired or manual) - requires authentication
   socket.on('end_answering', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('end_answering')) return;
+
       requireAuth(); // JWT required for host
       const { pin } = data || {};
 
@@ -179,6 +194,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   // Host shows leaderboard - requires authentication
   socket.on('show_leaderboard', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('show_leaderboard')) return;
+
       requireAuth(); // JWT required for host
       const { pin } = data || {};
 
@@ -202,6 +220,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   // Host moves to next question - requires authentication
   socket.on('next_question', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('next_question')) return;
+
       requireAuth(); // JWT required for host
       const { pin } = data || {};
 

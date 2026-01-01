@@ -20,6 +20,8 @@ class Nickname {
     }
 
     this.value = trimmed;
+    // Store normalized (lowercase) version for consistent comparisons
+    this._normalized = trimmed.toLowerCase();
     Object.freeze(this);
   }
 
@@ -32,8 +34,32 @@ class Nickname {
     }
   }
 
+  /**
+   * Get the display value (preserves original casing)
+   */
   toString() {
     return this.value;
+  }
+
+  /**
+   * Get normalized (lowercase) value for case-insensitive comparisons
+   * Use this for collision detection
+   */
+  normalized() {
+    return this._normalized;
+  }
+
+  /**
+   * Check if two nicknames are equal (case-insensitive)
+   */
+  equalsIgnoreCase(other) {
+    if (other instanceof Nickname) {
+      return this._normalized === other._normalized;
+    }
+    if (typeof other === 'string') {
+      return this._normalized === other.toLowerCase();
+    }
+    return false;
   }
 }
 

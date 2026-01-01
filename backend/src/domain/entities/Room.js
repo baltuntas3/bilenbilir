@@ -34,6 +34,10 @@ class Room {
     this.hostToken = hostToken;
     this.quizId = quizId;
     this.state = state;
+    // Validate currentQuestionIndex is a non-negative integer
+    if (typeof currentQuestionIndex !== 'number' || !Number.isInteger(currentQuestionIndex) || currentQuestionIndex < 0) {
+      throw new ValidationError('currentQuestionIndex must be a non-negative integer');
+    }
     this.currentQuestionIndex = currentQuestionIndex;
     this.createdAt = createdAt;
     this.players = [];
@@ -42,11 +46,14 @@ class Room {
     this.answerHistory = [];
     // Immutable quiz snapshot - set when game starts to prevent mid-game modifications
     this.quizSnapshot = null;
+    // Track when game actually started (for accurate archiving)
+    this.gameStartedAt = null;
   }
 
   /**
    * Set the quiz snapshot when game starts
    * This creates an immutable copy that won't be affected by quiz modifications
+   * Also records the game start time for accurate archiving
    * @param {Quiz} quiz - The quiz to snapshot (should be a cloned copy)
    */
   setQuizSnapshot(quiz) {
@@ -54,6 +61,15 @@ class Room {
       throw new ValidationError('Quiz snapshot already set');
     }
     this.quizSnapshot = quiz;
+    this.gameStartedAt = new Date();
+  }
+
+  /**
+   * Get when the game started (quiz snapshot was set)
+   * @returns {Date|null}
+   */
+  getGameStartedAt() {
+    return this.gameStartedAt;
   }
 
   /**
@@ -79,10 +95,43 @@ class Room {
     this.hostDisconnectedAt = new Date();
   }
 
-  reconnectHost(newSocketId, token) {
+  /**
+   * Reconnect host with token validation and optional grace period check
+   * @param {string} newSocketId - New socket ID for the host
+   * @param {string} token - Host token for authentication
+   * @param {number|null} gracePeriodMs - Optional grace period in ms (null to skip check)
+   * @throws {UnauthorizedError} If token is invalid or missing
+   * @throws {ForbiddenError} If grace period has expired
+   */
+  reconnectHost(newSocketId, token, gracePeriodMs = null) {
+    // Validate token is provided and non-empty
+    if (!token || typeof token !== 'string' || token.trim().length === 0) {
+      throw new UnauthorizedError('Host token is required');
+    }
+
+    // Validate stored host token exists
+    if (!this.hostToken) {
+      throw new UnauthorizedError('Room has no host token configured');
+    }
+
+    // Validate token matches
     if (token !== this.hostToken) {
       throw new UnauthorizedError('Invalid host token');
     }
+
+    // Validate newSocketId is provided
+    if (!newSocketId || typeof newSocketId !== 'string') {
+      throw new ValidationError('Valid socket ID is required for reconnection');
+    }
+
+    // Check grace period if specified and host was disconnected
+    if (gracePeriodMs !== null && this.isHostDisconnected()) {
+      const disconnectedDuration = this.getHostDisconnectedDuration();
+      if (disconnectedDuration > gracePeriodMs) {
+        throw new ForbiddenError('Host reconnection timeout expired');
+      }
+    }
+
     this.hostId = newSocketId;
     this.hostDisconnectedAt = null;
   }
@@ -101,7 +150,8 @@ class Room {
       throw new ValidationError('Players can only join during lobby phase');
     }
 
-    const nicknameExists = this.players.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
+    // Use Player's VO-backed case-insensitive comparison
+    const nicknameExists = this.players.some(p => p.hasNickname(player.nickname));
     if (nicknameExists) {
       throw new ConflictError('Nickname already taken');
     }
@@ -203,17 +253,20 @@ class Room {
   }
 
   /**
-   * Check if all players have answered
+   * Check if all connected players have answered
+   * Disconnected players are excluded from this check
    */
   haveAllPlayersAnswered() {
-    return this.players.every(p => p.hasAnswered());
+    const connectedPlayers = this.players.filter(p => !p.isDisconnected());
+    if (connectedPlayers.length === 0) return true;
+    return connectedPlayers.every(p => p.hasAnswered());
   }
 
   /**
-   * Get count of players who have answered
+   * Get count of connected players who have answered
    */
   getAnsweredCount() {
-    return this.players.filter(p => p.hasAnswered()).length;
+    return this.players.filter(p => !p.isDisconnected() && p.hasAnswered()).length;
   }
 
   isHost(socketId) {
@@ -256,25 +309,34 @@ class Room {
   /**
    * Get answer distribution for current question
    * @param {number} optionCount - Number of options in the question
-   * @returns {{ distribution: number[], correctCount: number }} Distribution array and correct answer count
+   * @param {Function} isCorrectFn - Function to check if answer index is correct
+   * @returns {{ distribution: number[], correctCount: number, skippedCount: number }} Distribution array, correct answer count, and count of invalid answers skipped
    */
   getAnswerDistribution(optionCount, isCorrectFn) {
     const distribution = new Array(optionCount).fill(0);
     let correctCount = 0;
+    let skippedCount = 0;
 
     this.players.forEach(player => {
       if (player.hasAnswered()) {
         const idx = player.answerAttempt.answerIndex;
-        if (idx >= 0 && idx < distribution.length) {
-          distribution[idx]++;
+
+        // Validate answer index is within valid range
+        if (typeof idx !== 'number' || idx < 0 || idx >= distribution.length) {
+          // Log corrupted/invalid answer data for debugging
+          console.warn(`[Room ${this.pin}] Invalid answer index ${idx} from player ${player.nickname} (expected 0-${distribution.length - 1})`);
+          skippedCount++;
+          return;
         }
+
+        distribution[idx]++;
         if (isCorrectFn(idx)) {
           correctCount++;
         }
       }
     });
 
-    return { distribution, correctCount };
+    return { distribution, correctCount, skippedCount };
   }
 
   getLeaderboard() {

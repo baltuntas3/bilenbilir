@@ -62,15 +62,16 @@ class EmailService {
   }
 
   /**
-   * Send an email
+   * Send an email with retry mechanism
    * @param {Object} options - Email options
    * @param {string} options.to - Recipient email
    * @param {string} options.subject - Email subject
    * @param {string} options.html - HTML content
    * @param {string} [options.text] - Plain text content (fallback)
+   * @param {number} [options.maxRetries=3] - Maximum retry attempts
    * @returns {Promise<Object>} - Nodemailer response
    */
-  async sendEmail({ to, subject, html, text }) {
+  async sendEmail({ to, subject, html, text, maxRetries = 3 }) {
     if (!this.isConfigured) {
       console.warn('Email service not configured. Email not sent to:', to);
       return { skipped: true, reason: 'Email service not configured' };
@@ -84,14 +85,64 @@ class EmailService {
       text: text || this._stripHtml(html)
     };
 
-    try {
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log('Email sent successfully to:', to);
-      return result;
-    } catch (error) {
-      console.error('Failed to send email to:', to, error.message);
-      throw error;
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await this.transporter.sendMail(mailOptions);
+        console.log('Email sent successfully to:', to);
+        return result;
+      } catch (error) {
+        lastError = error;
+        console.error(`Failed to send email to ${to} (attempt ${attempt}/${maxRetries}):`, error.message);
+
+        // Don't retry on permanent failures (invalid address, etc.)
+        if (this._isPermanentFailure(error)) {
+          break;
+        }
+
+        // Wait before retry with exponential backoff
+        if (attempt < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          await this._sleep(delay);
+        }
+      }
     }
+
+    // All retries failed - return error result instead of throwing
+    // This prevents email failures from breaking critical flows
+    console.error(`Email to ${to} failed after ${maxRetries} attempts`);
+    return {
+      failed: true,
+      error: lastError.message,
+      to,
+      subject
+    };
+  }
+
+  /**
+   * Check if error is a permanent failure that shouldn't be retried
+   * @private
+   */
+  _isPermanentFailure(error) {
+    const permanentCodes = [
+      'EENVELOPE', // Invalid envelope
+      'EAUTH',     // Authentication failed (config issue)
+      550,         // Mailbox not found
+      551,         // User not local
+      552,         // Message too large
+      553,         // Invalid mailbox name
+      554          // Transaction failed
+    ];
+    return permanentCodes.includes(error.code) ||
+           permanentCodes.includes(error.responseCode);
+  }
+
+  /**
+   * Sleep helper for retry delays
+   * @private
+   */
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**

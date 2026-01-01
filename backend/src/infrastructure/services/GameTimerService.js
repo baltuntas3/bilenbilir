@@ -31,35 +31,53 @@ class GameTimerService {
    * Start a timer for a room's answering phase
    */
   startTimer(pin, durationSeconds, onExpire) {
+    // Validate duration
+    if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      console.warn(`Invalid timer duration: ${durationSeconds}, using default 30s`);
+      durationSeconds = 30;
+    }
+
     this.stopTimer(pin);
 
     const durationMs = durationSeconds * 1000;
     const startTime = Date.now();
     const endTime = startTime + durationMs;
 
-    const timerId = setTimeout(async () => {
+    // Create timer entry first to track state
+    const timerEntry = {
+      timerId: null,
+      intervalId: null,
+      endTime,
+      startTime,
+      duration: durationMs,
+      stopped: false // Flag to prevent race conditions
+    };
+
+    timerEntry.timerId = setTimeout(async () => {
       this.stopTimer(pin);
       if (onExpire) {
         await onExpire();
       }
     }, durationMs);
 
-    const intervalId = setInterval(() => {
+    timerEntry.intervalId = setInterval(() => {
+      // Check if timer was stopped to prevent zombie intervals
+      const currentTimer = this.activeTimers.get(pin);
+      if (!currentTimer || currentTimer.stopped) {
+        clearInterval(timerEntry.intervalId);
+        return;
+      }
+
       const syncData = this._buildTimerSync(endTime);
       this.io.to(pin).emit('timer_tick', syncData);
 
+      // Clean up interval when timer expires
       if (syncData.remaining <= 0) {
-        clearInterval(intervalId);
+        clearInterval(timerEntry.intervalId);
       }
     }, 1000);
 
-    this.activeTimers.set(pin, {
-      timerId,
-      intervalId,
-      endTime,
-      startTime,
-      duration: durationMs
-    });
+    this.activeTimers.set(pin, timerEntry);
 
     this.io.to(pin).emit('timer_started', {
       duration: durationSeconds,
@@ -78,8 +96,10 @@ class GameTimerService {
   stopTimer(pin) {
     const timer = this.activeTimers.get(pin);
     if (timer) {
-      clearTimeout(timer.timerId);
-      clearInterval(timer.intervalId);
+      // Mark as stopped first to prevent race conditions with interval
+      timer.stopped = true;
+      if (timer.timerId) clearTimeout(timer.timerId);
+      if (timer.intervalId) clearInterval(timer.intervalId);
       this.activeTimers.delete(pin);
     }
   }

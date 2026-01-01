@@ -66,7 +66,14 @@ const gameSessionSchema = new mongoose.Schema({
   pin: {
     type: String,
     required: true,
-    length: 6
+    minlength: 6,
+    maxlength: 6,
+    validate: {
+      validator: function(v) {
+        return /^\d{6}$/.test(v);
+      },
+      message: 'PIN must be exactly 6 digits'
+    }
   },
   quiz: {
     type: mongoose.Schema.Types.ObjectId,
@@ -104,7 +111,13 @@ const gameSessionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['completed', 'cancelled'],
+    enum: [
+      'completed',   // Game finished normally
+      'cancelled',   // Host cancelled the game
+      'abandoned',   // All players left / host disconnected timeout
+      'error',       // Game ended due to an error
+      'interrupted'  // Server restart or unexpected termination
+    ],
     default: 'completed'
   }
 }, {

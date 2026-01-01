@@ -8,8 +8,34 @@ class GameUseCases {
     this.quizRepository = quizRepository;
     this.gameSessionRepository = gameSessionRepository;
 
-    // Map to track answer submissions in progress (race condition protection)
+    /**
+     * Map to track answer submissions in progress (race condition protection)
+     *
+     * TODO: Redis Integration for Distributed Systems
+     * ================================================
+     * Current limitation: This in-memory Map only works for single-server deployments.
+     * For horizontal scaling, replace with Redis-based distributed lock:
+     *
+     * - Use Redis SET with NX and EX options for atomic lock acquisition
+     * - Key format: `pending_answer:${pin}:${socketId}`
+     * - TTL: 10 seconds (auto-cleanup if process crashes)
+     * - Implementation: Use Redlock algorithm for distributed locking
+     *
+     * Example with ioredis:
+     * ```
+     * const lockKey = `pending_answer:${pin}:${socketId}`;
+     * const acquired = await redis.set(lockKey, '1', 'NX', 'EX', 10);
+     * if (!acquired) throw new ConflictError('Answer submission in progress');
+     * try { ... } finally { await redis.del(lockKey); }
+     * ```
+     */
     this.pendingAnswers = new Map();
+
+    /**
+     * Map to track game archival in progress (prevents duplicate archives)
+     * Key: pin, Value: true (locked)
+     */
+    this.pendingArchives = new Map();
   }
 
   /**
@@ -62,9 +88,15 @@ class GameUseCases {
     room.startGame(requesterId); // Entity validates host and state
 
     // Validate at least one connected player exists
+    const totalPlayers = room.getPlayerCount();
     const connectedPlayers = room.getConnectedPlayerCount();
+
+    if (totalPlayers === 0) {
+      throw new ValidationError('Cannot start game: no players have joined yet');
+    }
+
     if (connectedPlayers === 0) {
-      throw new ValidationError('Cannot start game with no connected players');
+      throw new ValidationError('Cannot start game: all players are disconnected');
     }
 
     // Create immutable quiz snapshot for the game session
@@ -176,16 +208,33 @@ class GameUseCases {
 
   /**
    * Submit an answer with race condition protection
+   * Validates all inputs upfront before any state modifications
    */
   async submitAnswer({ pin, socketId, answerIndex, elapsedTimeMs }) {
-    const submissionKey = `${pin}:${socketId}`;
+    // ===== PHASE 1: Early input validation (before any locks or state access) =====
+    // Validate answer index type upfront to fail fast
+    if (answerIndex === null || answerIndex === undefined ||
+        typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) ||
+        answerIndex < 0) {
+      throw new ValidationError('Invalid answer index');
+    }
 
+    // Validate elapsed time early
+    if (elapsedTimeMs !== null && elapsedTimeMs !== undefined &&
+        (typeof elapsedTimeMs !== 'number' || !Number.isFinite(elapsedTimeMs))) {
+      throw new ValidationError('Invalid elapsed time');
+    }
+    const validElapsedTime = Math.max(0, elapsedTimeMs || 0);
+
+    // ===== PHASE 2: Acquire lock =====
+    const submissionKey = `${pin}:${socketId}`;
     if (this.pendingAnswers.has(submissionKey)) {
       throw new ConflictError('Answer submission in progress');
     }
     this.pendingAnswers.set(submissionKey, true);
 
     try {
+      // ===== PHASE 3: Load and validate state =====
       const room = await this._getRoomOrThrow(pin);
 
       if (room.state !== RoomState.ANSWERING_PHASE) {
@@ -197,20 +246,20 @@ class GameUseCases {
         throw new NotFoundError('Player not found');
       }
 
+      // Prevent disconnected players from submitting answers
+      if (player.isDisconnected()) {
+        throw new ForbiddenError('Disconnected players cannot submit answers');
+      }
+
       if (player.hasAnswered()) {
         throw new ConflictError('Already answered');
       }
 
       const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
-      // Validate elapsed time is non-negative
-      const validElapsedTime = Math.max(0, elapsedTimeMs || 0);
-
-      // Validate answer index (type, range)
-      if (answerIndex === null || answerIndex === undefined ||
-          typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) ||
-          answerIndex < 0 || answerIndex >= currentQuestion.options.length) {
-        throw new ValidationError('Invalid answer index');
+      // ===== PHASE 4: Validate answer against question (bounds check) =====
+      if (answerIndex >= currentQuestion.options.length) {
+        throw new ValidationError('Answer index out of bounds');
       }
 
       // Create answer and calculate score
@@ -256,7 +305,7 @@ class GameUseCases {
         player,
         allAnswered,
         answeredCount: room.getAnsweredCount(),
-        totalPlayers: room.getPlayerCount()
+        totalPlayers: room.getConnectedPlayerCount()
       };
     } finally {
       // Always clean up the pending flag
@@ -294,7 +343,7 @@ class GameUseCases {
       correctAnswerIndex: currentQuestion.correctAnswerIndex,
       distribution,
       correctCount,
-      totalPlayers: room.getPlayerCount()
+      totalPlayers: room.getConnectedPlayerCount()
     };
   }
 
@@ -363,91 +412,122 @@ class GameUseCases {
 
   /**
    * Archive game session to database
+   * Uses lock to prevent concurrent archive requests for the same room
+   * Uses room.gameStartedAt for accurate timestamps (set when quiz snapshot is created)
+   *
+   * Note: If gameSessionRepository is null, returns early without lock.
+   * This is safe because no archival operations are performed - room will be
+   * cleaned up by RoomCleanupService based on idle timeout.
    */
-  async archiveGame({ pin, startedAt }) {
+  async archiveGame({ pin }) {
+    // No repository = no archival needed (e.g., development mode without database)
+    // Room will be cleaned up by RoomCleanupService
     if (!this.gameSessionRepository) {
       return null;
     }
 
-    const room = await this._getRoomOrThrow(pin);
-    const leaderboard = room.getLeaderboard();
-    const answerHistory = room.getAnswerHistory();
+    // Acquire archive lock to prevent duplicate archives
+    if (this.pendingArchives.has(pin)) {
+      throw new ConflictError('Game archival already in progress');
+    }
+    this.pendingArchives.set(pin, true);
 
-    // Calculate per-player statistics
-    const playerStats = new Map();
-    for (const answer of answerHistory) {
-      if (!playerStats.has(answer.playerNickname)) {
-        playerStats.set(answer.playerNickname, {
+    let session = null;
+    try {
+      const room = await this._getRoomOrThrow(pin);
+      const leaderboard = room.getLeaderboard();
+      const answerHistory = room.getAnswerHistory();
+
+      // Calculate per-player statistics
+      const playerStats = new Map();
+      for (const answer of answerHistory) {
+        // Skip answers with missing or invalid nickname
+        if (!answer || !answer.playerNickname || typeof answer.playerNickname !== 'string') {
+          continue;
+        }
+
+        if (!playerStats.has(answer.playerNickname)) {
+          playerStats.set(answer.playerNickname, {
+            correctCount: 0,
+            wrongCount: 0,
+            totalResponseTime: 0,
+            answerCount: 0
+          });
+        }
+        const stats = playerStats.get(answer.playerNickname);
+        stats.answerCount++;
+        stats.totalResponseTime += answer.elapsedTimeMs || 0;
+        if (answer.isCorrect) {
+          stats.correctCount++;
+        } else {
+          stats.wrongCount++;
+        }
+      }
+
+      // Build player results with calculated wrongAnswers and averageResponseTime
+      const playerResults = leaderboard.map((player, index) => {
+        const stats = playerStats.get(player.nickname) || {
           correctCount: 0,
           wrongCount: 0,
           totalResponseTime: 0,
           answerCount: 0
-        });
+        };
+        return {
+          nickname: player.nickname,
+          rank: index + 1,
+          score: player.score,
+          correctAnswers: player.correctAnswers,
+          wrongAnswers: stats.wrongCount,
+          averageResponseTime: stats.answerCount > 0
+            ? Math.round(stats.totalResponseTime / stats.answerCount)
+            : 0,
+          longestStreak: player.longestStreak
+        };
+      });
+
+      // Get all recorded answers from the game
+      // Map to GameSession schema field names for consistency
+      const answers = answerHistory.map(answer => ({
+        nickname: answer.playerNickname,
+        questionIndex: answer.questionIndex,
+        answerIndex: answer.answerIndex,
+        isCorrect: answer.isCorrect,
+        responseTimeMs: answer.elapsedTimeMs,
+        score: answer.score,
+        streak: answer.streak || 0
+      }));
+
+      const sessionData = {
+        pin: room.pin,
+        quiz: room.quizId,
+        host: room.hostId,
+        playerCount: room.getPlayerCount(),
+        playerResults,
+        answers,
+        startedAt: room.getGameStartedAt() || room.createdAt,
+        endedAt: new Date(),
+        status: 'completed'
+      };
+
+      session = await this.gameSessionRepository.save(sessionData);
+
+      // Clean up pending answers for this room
+      this._clearPendingAnswersForRoom(pin);
+
+      // Delete room after archiving
+      try {
+        await this.roomRepository.delete(pin);
+      } catch (deleteError) {
+        // Log error but don't fail - session is already saved
+        // The room will be cleaned up by cleanup service
+        console.error(`Failed to delete room ${pin} after archiving:`, deleteError.message);
       }
-      const stats = playerStats.get(answer.playerNickname);
-      stats.answerCount++;
-      stats.totalResponseTime += answer.elapsedTimeMs || 0;
-      if (answer.isCorrect) {
-        stats.correctCount++;
-      } else {
-        stats.wrongCount++;
-      }
+
+      return { session };
+    } finally {
+      // Always release the archive lock
+      this.pendingArchives.delete(pin);
     }
-
-    // Build player results with calculated wrongAnswers and averageResponseTime
-    const playerResults = leaderboard.map((player, index) => {
-      const stats = playerStats.get(player.nickname) || {
-        correctCount: 0,
-        wrongCount: 0,
-        totalResponseTime: 0,
-        answerCount: 0
-      };
-      return {
-        nickname: player.nickname,
-        rank: index + 1,
-        score: player.score,
-        correctAnswers: player.correctAnswers,
-        wrongAnswers: stats.wrongCount,
-        averageResponseTime: stats.answerCount > 0
-          ? Math.round(stats.totalResponseTime / stats.answerCount)
-          : 0,
-        longestStreak: player.longestStreak
-      };
-    });
-
-    // Get all recorded answers from the game
-    // Map to GameSession schema field names for consistency
-    const answers = answerHistory.map(answer => ({
-      nickname: answer.playerNickname,
-      questionIndex: answer.questionIndex,
-      answerIndex: answer.answerIndex,
-      isCorrect: answer.isCorrect,
-      responseTimeMs: answer.elapsedTimeMs,
-      score: answer.score,
-      streak: answer.streak || 0
-    }));
-
-    const sessionData = {
-      pin: room.pin,
-      quiz: room.quizId,
-      host: room.hostId,
-      playerCount: room.getPlayerCount(),
-      playerResults,
-      answers,
-      startedAt: startedAt || room.createdAt,
-      endedAt: new Date(),
-      status: 'completed'
-    };
-
-    const session = await this.gameSessionRepository.save(sessionData);
-
-    // Clean up pending answers for this room
-    this._clearPendingAnswersForRoom(pin);
-
-    // Delete room after archiving
-    await this.roomRepository.delete(pin);
-
-    return { session };
   }
 }
 
