@@ -2,8 +2,10 @@ require('dotenv').config();
 
 const express = require('express');
 const http = require('http');
+const cors = require('cors');
 const connectDB = require('./src/infrastructure/db/connection');
 const { initializeSocket } = require('./src/infrastructure/ws/socket');
+const { quizRoutes } = require('./src/api/routes');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,12 +17,15 @@ connectDB();
 const io = initializeSocket(server);
 
 // Middleware
+app.use(cors());
 app.use(express.json());
 
 // Routes
 app.get('/', (req, res) => {
   res.json({ message: 'Bilen Bilir API' });
 });
+
+app.use('/api/quizzes', quizRoutes);
 
 const PORT = process.env.PORT || 3000;
 

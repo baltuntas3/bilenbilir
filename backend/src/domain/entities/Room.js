@@ -4,6 +4,8 @@
  * External code should not modify Players directly.
  */
 
+const { PIN } = require('../value-objects/PIN');
+
 const RoomState = {
   IDLE: 'IDLE',
   WAITING_PLAYERS: 'WAITING_PLAYERS',
@@ -18,15 +20,42 @@ const RoomState = {
 };
 
 class Room {
-  constructor({ id, pin, hostId, quizId, state = RoomState.IDLE, currentQuestionIndex = 0, createdAt = new Date() }) {
+  constructor({ id, pin, hostId, hostToken, quizId, state = RoomState.IDLE, currentQuestionIndex = 0, createdAt = new Date() }) {
     this.id = id;
-    this.pin = pin;
+    this._pin = pin instanceof PIN ? pin : new PIN(pin);
     this.hostId = hostId;
+    this.hostToken = hostToken;
     this.quizId = quizId;
     this.state = state;
     this.currentQuestionIndex = currentQuestionIndex;
     this.createdAt = createdAt;
     this.players = [];
+    this.hostDisconnectedAt = null;
+  }
+
+  get pin() {
+    return this._pin.toString();
+  }
+
+  setHostDisconnected() {
+    this.hostDisconnectedAt = new Date();
+  }
+
+  reconnectHost(newSocketId, token) {
+    if (token !== this.hostToken) {
+      throw new Error('Invalid host token');
+    }
+    this.hostId = newSocketId;
+    this.hostDisconnectedAt = null;
+  }
+
+  isHostDisconnected() {
+    return this.hostDisconnectedAt !== null;
+  }
+
+  getHostDisconnectedDuration() {
+    if (!this.hostDisconnectedAt) return 0;
+    return Date.now() - this.hostDisconnectedAt.getTime();
   }
 
   addPlayer(player) {
@@ -46,8 +75,29 @@ class Room {
     this.players = this.players.filter(p => p.socketId !== socketId);
   }
 
+  setPlayerDisconnected(socketId) {
+    const player = this.getPlayer(socketId);
+    if (player) {
+      player.setDisconnected();
+    }
+    return player;
+  }
+
   getPlayer(socketId) {
     return this.players.find(p => p.socketId === socketId) || null;
+  }
+
+  getPlayerByToken(playerToken) {
+    return this.players.find(p => p.playerToken === playerToken) || null;
+  }
+
+  reconnectPlayer(playerToken, newSocketId) {
+    const player = this.getPlayerByToken(playerToken);
+    if (!player) {
+      throw new Error('Invalid player token');
+    }
+    player.reconnect(newSocketId);
+    return player;
   }
 
   getPlayerCount() {
@@ -56,6 +106,30 @@ class Room {
 
   getAllPlayers() {
     return [...this.players];
+  }
+
+  /**
+   * Clear all player answer attempts for new question
+   * Maintains Aggregate Root encapsulation
+   */
+  clearAllAnswerAttempts() {
+    this.players.forEach(player => {
+      player.clearAnswerAttempt();
+    });
+  }
+
+  /**
+   * Check if all players have answered
+   */
+  haveAllPlayersAnswered() {
+    return this.players.every(p => p.hasAnswered());
+  }
+
+  /**
+   * Get count of players who have answered
+   */
+  getAnsweredCount() {
+    return this.players.filter(p => p.hasAnswered()).length;
   }
 
   isHost(socketId) {
@@ -90,6 +164,30 @@ class Room {
 
   setState(newState) {
     this.state = newState;
+  }
+
+  /**
+   * Get answer distribution for current question
+   * @param {number} optionCount - Number of options in the question
+   * @returns {{ distribution: number[], correctCount: number }} Distribution array and correct answer count
+   */
+  getAnswerDistribution(optionCount, isCorrectFn) {
+    const distribution = new Array(optionCount).fill(0);
+    let correctCount = 0;
+
+    this.players.forEach(player => {
+      if (player.hasAnswered()) {
+        const idx = player.answerAttempt.answerIndex;
+        if (idx >= 0 && idx < distribution.length) {
+          distribution[idx]++;
+        }
+        if (isCorrectFn(idx)) {
+          correctCount++;
+        }
+      }
+    });
+
+    return { distribution, correctCount };
   }
 
   getLeaderboard() {

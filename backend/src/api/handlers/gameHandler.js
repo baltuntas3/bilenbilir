@@ -1,0 +1,240 @@
+/**
+ * Game WebSocket Handler
+ * Handles game flow: start, questions, answers, results
+ */
+const createGameHandler = (io, socket, gameUseCases, timerService) => {
+  // Host starts the game
+  socket.on('start_game', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await gameUseCases.startGame({
+        pin,
+        requesterId: socket.id
+      });
+
+      socket.emit('game_started', {
+        totalQuestions: result.totalQuestions,
+        currentQuestion: result.currentQuestion
+      });
+
+      socket.to(pin).emit('game_started', {
+        totalQuestions: result.totalQuestions,
+        questionIndex: 0
+      });
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Host triggers answering phase (after intro countdown)
+  socket.on('start_answering', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await gameUseCases.startAnsweringPhase({
+        pin,
+        requesterId: socket.id
+      });
+
+      // Start server-side timer with race condition protection
+      timerService.startTimer(pin, result.timeLimit, async () => {
+        try {
+          const endResult = await gameUseCases.endAnsweringPhase({
+            pin,
+            requesterId: 'server'
+          });
+
+          if (endResult) {
+            io.to(pin).emit('time_expired');
+            io.to(pin).emit('show_results', {
+              correctAnswerIndex: endResult.correctAnswerIndex,
+              distribution: endResult.distribution,
+              correctCount: endResult.correctCount,
+              totalPlayers: endResult.totalPlayers
+            });
+          }
+        } catch (err) {
+          if (err.message !== 'Not in answering phase') {
+            console.error('Auto-end error:', err.message);
+          }
+        }
+      });
+
+      io.to(pin).emit('answering_started', {
+        timeLimit: result.timeLimit,
+        optionCount: result.optionCount
+      });
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Player submits answer
+  socket.on('submit_answer', async (data) => {
+    try {
+      const { pin, answerIndex } = data || {};
+
+      // Check if timer has expired (server-side validation)
+      if (timerService.isTimeExpired(pin)) {
+        socket.emit('error', { message: 'Time expired' });
+        return;
+      }
+
+      // Basic answerIndex validation (no Value Object for this)
+      if (answerIndex === null || answerIndex === undefined) {
+        socket.emit('error', { message: 'Answer index is required' });
+        return;
+      }
+      if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex)) {
+        socket.emit('error', { message: 'Answer index must be an integer' });
+        return;
+      }
+
+      // Use server-side elapsed time
+      const elapsedTimeMs = timerService.getElapsedTime(pin);
+
+      const result = await gameUseCases.submitAnswer({
+        pin,
+        socketId: socket.id,
+        answerIndex,
+        elapsedTimeMs
+      });
+
+      socket.emit('answer_received', {
+        isCorrect: result.answer.isCorrect,
+        score: result.answer.getTotalScore(),
+        totalScore: result.player.score,
+        streak: result.player.streak
+      });
+
+      socket.to(pin).emit('answer_count_updated', {
+        answeredCount: result.answeredCount,
+        totalPlayers: result.totalPlayers
+      });
+
+      if (result.allAnswered) {
+        timerService.stopTimer(pin);
+        socket.to(pin).emit('all_players_answered');
+      }
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Host ends answering phase (timer expired or manual)
+  socket.on('end_answering', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      timerService.stopTimer(pin);
+
+      const result = await gameUseCases.endAnsweringPhase({
+        pin,
+        requesterId: socket.id
+      });
+
+      socket.emit('show_results', {
+        correctAnswerIndex: result.correctAnswerIndex,
+        distribution: result.distribution,
+        correctCount: result.correctCount,
+        totalPlayers: result.totalPlayers
+      });
+
+      socket.to(pin).emit('round_ended', {
+        correctAnswerIndex: result.correctAnswerIndex
+      });
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Host shows leaderboard
+  socket.on('show_leaderboard', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await gameUseCases.showLeaderboard({
+        pin,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('leaderboard', {
+        leaderboard: result.leaderboard.map(p => ({
+          id: p.id,
+          nickname: p.nickname,
+          score: p.score
+        }))
+      });
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Host moves to next question
+  socket.on('next_question', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await gameUseCases.nextQuestion({
+        pin,
+        requesterId: socket.id
+      });
+
+      if (result.isGameOver) {
+        io.to(pin).emit('game_over', {
+          podium: result.podium.map(p => ({
+            id: p.id,
+            nickname: p.nickname,
+            score: p.score
+          }))
+        });
+
+        try {
+          await gameUseCases.archiveGame({ pin });
+        } catch (archiveError) {
+          console.error('Failed to archive game:', archiveError.message);
+        }
+      } else {
+        socket.emit('question_intro', {
+          questionIndex: result.questionIndex,
+          totalQuestions: result.totalQuestions,
+          currentQuestion: result.currentQuestion
+        });
+
+        socket.to(pin).emit('question_intro', {
+          questionIndex: result.questionIndex,
+          totalQuestions: result.totalQuestions
+        });
+      }
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  // Get final results
+  socket.on('get_results', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await gameUseCases.getResults({ pin });
+
+      socket.emit('final_results', {
+        leaderboard: result.leaderboard.map(p => ({
+          id: p.id,
+          nickname: p.nickname,
+          score: p.score
+        })),
+        podium: result.podium.map(p => ({
+          id: p.id,
+          nickname: p.nickname,
+          score: p.score
+        }))
+      });
+    } catch (error) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+};
+
+module.exports = { createGameHandler };

@@ -1,12 +1,37 @@
 class Quiz {
   constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, createdAt = new Date() }) {
+    if (!id) {
+      throw new Error('Quiz id is required');
+    }
+    if (!title || !title.trim()) {
+      throw new Error('Quiz title is required');
+    }
+    if (!createdBy) {
+      throw new Error('Quiz createdBy is required');
+    }
+
     this.id = id;
-    this.title = title;
-    this.description = description;
+    this.title = title.trim();
+    this.description = description || '';
     this.createdBy = createdBy;
-    this.questions = questions;
-    this.isPublic = isPublic;
+    this.questions = Array.isArray(questions) ? questions : [];
+    this.isPublic = Boolean(isPublic);
     this.createdAt = createdAt;
+  }
+
+  updateTitle(newTitle) {
+    if (!newTitle || !newTitle.trim()) {
+      throw new Error('Quiz title is required');
+    }
+    this.title = newTitle.trim();
+  }
+
+  updateDescription(newDescription) {
+    this.description = newDescription || '';
+  }
+
+  setPublic(isPublic) {
+    this.isPublic = Boolean(isPublic);
   }
 
   addQuestion(question) {

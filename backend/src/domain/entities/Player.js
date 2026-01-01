@@ -1,17 +1,30 @@
+const { Nickname } = require('../value-objects/Nickname');
+const { Score } = require('../value-objects/Score');
+
 class Player {
-  constructor({ id, socketId, nickname, roomPin, score = 0, streak = 0, joinedAt = new Date() }) {
+  constructor({ id, socketId, nickname, roomPin, playerToken = null, score = 0, streak = 0, joinedAt = new Date() }) {
     this.id = id;
     this.socketId = socketId;
-    this.nickname = nickname;
+    this._nickname = nickname instanceof Nickname ? nickname : new Nickname(nickname);
     this.roomPin = roomPin;
-    this.score = score;
+    this.playerToken = playerToken;
+    this._score = score instanceof Score ? score : new Score(score);
     this.streak = streak;
     this.joinedAt = joinedAt;
-    this.currentAnswer = null;
+    this.answerAttempt = null; // Current question's answer attempt
+    this.disconnectedAt = null;
+  }
+
+  get nickname() {
+    return this._nickname.toString();
+  }
+
+  get score() {
+    return this._score.toNumber();
   }
 
   addScore(points) {
-    this.score += points;
+    this._score = this._score.add(points);
   }
 
   incrementStreak() {
@@ -22,25 +35,42 @@ class Player {
     this.streak = 0;
   }
 
-  getStreakBonus() {
-    if (this.streak <= 1) return 0;
-    return (this.streak - 1) * 100;
-  }
-
-  submitAnswer(answerIndex, timestamp) {
-    this.currentAnswer = {
+  submitAnswer(answerIndex, elapsedTimeMs) {
+    this.answerAttempt = {
       answerIndex,
-      timestamp,
+      elapsedTimeMs,
       submittedAt: new Date()
     };
   }
 
-  clearCurrentAnswer() {
-    this.currentAnswer = null;
+  clearAnswerAttempt() {
+    this.answerAttempt = null;
+  }
+
+  hasAnswered() {
+    return this.answerAttempt !== null;
   }
 
   updateSocketId(newSocketId) {
     this.socketId = newSocketId;
+  }
+
+  setDisconnected() {
+    this.disconnectedAt = new Date();
+  }
+
+  reconnect(newSocketId) {
+    this.socketId = newSocketId;
+    this.disconnectedAt = null;
+  }
+
+  isDisconnected() {
+    return this.disconnectedAt !== null;
+  }
+
+  getDisconnectedDuration() {
+    if (!this.disconnectedAt) return 0;
+    return Date.now() - this.disconnectedAt.getTime();
   }
 }
 
