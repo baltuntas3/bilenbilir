@@ -1,6 +1,27 @@
 /**
  * In-memory Room Repository
- * Stores rooms in memory - can be swapped with Redis later
+ * Stores rooms in memory for real-time game sessions
+ *
+ * TODO: Redis Integration & Recovery Mechanism
+ * =============================================
+ * Current limitations:
+ * 1. Data is lost on server restart - all active games are terminated
+ * 2. Single-server only - cannot scale horizontally
+ * 3. No recovery mechanism for interrupted games
+ *
+ * Future implementation with Redis:
+ * - Replace Map with Redis client (ioredis recommended)
+ * - Serialize Room entities to JSON for storage
+ * - Implement pub/sub for multi-server synchronization
+ * - Add session recovery: on startup, restore active rooms from Redis
+ * - Implement TTL-based auto-cleanup for abandoned rooms
+ * - Consider Redis Cluster for high availability
+ *
+ * Recovery mechanism requirements:
+ * - Store room state with timestamp on each save
+ * - On server restart, emit 'room_recovered' event to reconnecting clients
+ * - Handle timer state restoration (pause/resume logic)
+ * - Notify players of recovery with sync data
  */
 class RoomRepository {
   constructor() {

@@ -81,6 +81,22 @@ class Question {
       imageUrl: this.imageUrl
     };
   }
+
+  /**
+   * Create a deep clone of this question (immutable snapshot)
+   */
+  clone() {
+    return new Question({
+      id: this.id,
+      text: this.text,
+      type: this.type,
+      options: [...this.options],
+      correctAnswerIndex: this.correctAnswerIndex,
+      timeLimit: this.timeLimit,
+      points: this.points,
+      imageUrl: this.imageUrl
+    });
+  }
 }
 
 module.exports = { Question, QuestionType };

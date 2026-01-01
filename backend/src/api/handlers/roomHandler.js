@@ -65,7 +65,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       // Validate and sanitize nickname
       const sanitizedNickname = sanitizeNickname(nickname);
       if (!sanitizedNickname) {
-        socket.emit('error', { message: 'Invalid nickname format' });
+        socket.emit('error', { error: 'Invalid nickname format' });
         return;
       }
 
@@ -216,7 +216,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         score: result.player.score,
         state: result.room.state,
         currentQuestionIndex: result.room.currentQuestionIndex,
-        timerSync // null if not in answering phase or no timer
+        timerSync, // null if not in answering phase or no timer
+        playerToken: result.newPlayerToken // New rotated token for security
       });
 
       socket.to(pin).emit('player_returned', {

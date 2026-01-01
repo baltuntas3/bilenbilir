@@ -61,9 +61,13 @@ class Player {
     this.disconnectedAt = new Date();
   }
 
-  reconnect(newSocketId) {
+  reconnect(newSocketId, newToken = null) {
     this.socketId = newSocketId;
     this.disconnectedAt = null;
+    // Rotate token on reconnect for security
+    if (newToken) {
+      this.playerToken = newToken;
+    }
   }
 
   isDisconnected() {

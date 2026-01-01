@@ -131,9 +131,22 @@ class MongoQuizRepository {
     }
   }
 
-  async getAll() {
-    const docs = await QuizModel.find().sort({ createdAt: -1 });
-    return docs.map(doc => this._toDomain(doc));
+  async getAll({ page = 1, limit = 100 } = {}) {
+    const skip = (page - 1) * limit;
+    const [docs, total] = await Promise.all([
+      QuizModel.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      QuizModel.countDocuments()
+    ]);
+    return {
+      quizzes: docs.map(doc => this._toDomain(doc)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
   }
 
   async incrementPlayCount(id) {

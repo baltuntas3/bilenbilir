@@ -1,12 +1,12 @@
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const { User } = require('../../infrastructure/db/models');
 const { generateToken, authenticate } = require('../middlewares/authMiddleware');
 const { authLimiter, passwordResetLimiter } = require('../middlewares/rateLimiter');
 const { ValidationError, UnauthorizedError, ForbiddenError, NotFoundError, ConflictError } = require('../../shared/errors');
 const { sanitizeEmail } = require('../../shared/utils/sanitize');
 const { emailService } = require('../../infrastructure/services');
+const { mongoUserRepository } = require('../../infrastructure/repositories');
 
 const router = express.Router();
 
@@ -27,9 +27,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [{ email: email.toLowerCase() }, { username }]
-    });
+    const existingUser = await mongoUserRepository.findByEmailOrUsername(email, username);
 
     if (existingUser) {
       if (existingUser.email === email.toLowerCase()) {
@@ -43,13 +41,11 @@ router.post('/register', authLimiter, async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user
-    const user = new User({
-      email: email.toLowerCase(),
+    const user = await mongoUserRepository.create({
+      email,
       password: hashedPassword,
       username
     });
-
-    await user.save();
 
     // Generate token
     const token = generateToken(user);
@@ -86,7 +82,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
     }
 
     // Find user
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await mongoUserRepository.findByEmail(email);
 
     if (!user) {
       throw new UnauthorizedError('Invalid credentials');
@@ -126,7 +122,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
  */
 router.get('/me', authenticate, async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await mongoUserRepository.findById(req.user.id);
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -161,16 +157,12 @@ router.put('/profile', authenticate, async (req, res, next) => {
     }
 
     // Check if username is already taken by another user
-    const existingUser = await User.findOne({ username, _id: { $ne: userId } });
+    const existingUser = await mongoUserRepository.findByUsernameExcluding(username, userId);
     if (existingUser) {
       throw new ConflictError('Username already taken');
     }
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { username },
-      { new: true }
-    ).select('-password');
+    const user = await mongoUserRepository.updateById(userId, { username });
 
     if (!user) {
       throw new NotFoundError('User not found');
@@ -206,7 +198,7 @@ router.put('/change-password', authenticate, async (req, res, next) => {
       throw new ValidationError('New password must be at least 6 characters');
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await mongoUserRepository.findById(req.user.id, { includePassword: true });
     if (!user) {
       throw new NotFoundError('User not found');
     }
@@ -222,7 +214,7 @@ router.put('/change-password', authenticate, async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     user.password = hashedPassword;
-    await user.save();
+    await mongoUserRepository.save(user);
 
     // Send password changed notification (non-blocking)
     emailService.sendPasswordChanged(user.email).catch(err => {
@@ -252,7 +244,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => 
       throw new ValidationError('Invalid email format');
     }
 
-    const user = await User.findOne({ email: sanitizedEmail });
+    const user = await mongoUserRepository.findByEmail(sanitizedEmail);
 
     // Always return success to prevent email enumeration
     if (!user) {
@@ -267,7 +259,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => 
     // Set token and expiration (1 hour)
     user.passwordResetToken = hashedToken;
     user.passwordResetExpires = Date.now() + 60 * 60 * 1000;
-    await user.save();
+    await mongoUserRepository.save(user);
 
     // Send password reset email
     await emailService.sendPasswordReset(user.email, resetToken);
@@ -299,10 +291,7 @@ router.post('/reset-password', async (req, res, next) => {
     // Hash the provided token to compare with stored hash
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    const user = await User.findOne({
-      passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() }
-    });
+    const user = await mongoUserRepository.findByResetToken(hashedToken);
 
     if (!user) {
       throw new UnauthorizedError('Invalid or expired reset token');
@@ -316,7 +305,7 @@ router.post('/reset-password', async (req, res, next) => {
     user.password = hashedPassword;
     user.passwordResetToken = null;
     user.passwordResetExpires = null;
-    await user.save();
+    await mongoUserRepository.save(user);
 
     res.json({ message: 'Password reset successfully' });
   } catch (error) {

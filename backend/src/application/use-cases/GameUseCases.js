@@ -48,6 +48,7 @@ class GameUseCases {
 
   /**
    * Start the game (host only)
+   * Creates an immutable quiz snapshot to prevent mid-game modifications
    */
   async startGame({ pin, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
@@ -60,18 +61,42 @@ class GameUseCases {
 
     room.startGame(requesterId); // Entity validates host and state
 
+    // Create immutable quiz snapshot for the game session
+    // This prevents mid-game modifications from affecting the ongoing game
+    const quizSnapshot = quiz.clone();
+    room.setQuizSnapshot(quizSnapshot);
+
     // Move to first question intro
     room.setState(RoomState.QUESTION_INTRO);
 
     await this.roomRepository.save(room);
 
-    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
+    // Increment play count for analytics
+    await this.quizRepository.incrementPlayCount(room.quizId);
+
+    const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
     return {
       room,
-      totalQuestions: quiz.getTotalQuestions(),
+      totalQuestions: quizSnapshot.getTotalQuestions(),
       currentQuestion: currentQuestion.getHostData()
     };
+  }
+
+  /**
+   * Get question from room's quiz snapshot
+   * @private
+   */
+  _getQuestionFromSnapshot(room, index) {
+    const snapshot = room.getQuizSnapshot();
+    if (!snapshot) {
+      throw new ValidationError('Game has not started - no quiz snapshot available');
+    }
+    const question = snapshot.getQuestion(index);
+    if (!question) {
+      throw new NotFoundError(`Question at index ${index} not found`);
+    }
+    return question;
   }
 
   /**
@@ -101,21 +126,28 @@ class GameUseCases {
 
   /**
    * Get current question (called after intro timer)
+   * Uses the frozen quiz snapshot to ensure consistency
    */
   async getCurrentQuestion({ pin }) {
     const room = await this._getRoomOrThrow(pin);
-    const quiz = await this._getQuizOrThrow(room.quizId);
-    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
+    const snapshot = room.getQuizSnapshot();
+
+    if (!snapshot) {
+      throw new ValidationError('Game has not started');
+    }
+
+    const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
     return {
       questionIndex: room.currentQuestionIndex,
-      totalQuestions: quiz.getTotalQuestions(),
+      totalQuestions: snapshot.getTotalQuestions(),
       question: currentQuestion.getPublicData()
     };
   }
 
   /**
    * Start answering phase (called after intro countdown)
+   * Uses the frozen quiz snapshot to ensure consistency
    */
   async startAnsweringPhase({ pin, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
@@ -127,8 +159,7 @@ class GameUseCases {
 
     await this.roomRepository.save(room);
 
-    const quiz = await this._getQuizOrThrow(room.quizId);
-    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
     return {
       room,
@@ -164,8 +195,7 @@ class GameUseCases {
         throw new ConflictError('Already answered');
       }
 
-      const quiz = await this._getQuizOrThrow(room.quizId);
-      const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
+      const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
       // Validate elapsed time is non-negative
       const validElapsedTime = Math.max(0, elapsedTimeMs || 0);
@@ -246,8 +276,7 @@ class GameUseCases {
     room.setState(RoomState.SHOW_RESULTS);
     await this.roomRepository.save(room);
 
-    const quiz = await this._getQuizOrThrow(room.quizId);
-    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
     const { distribution, correctCount } = room.getAnswerDistribution(
       currentQuestion.options.length,
@@ -281,11 +310,17 @@ class GameUseCases {
 
   /**
    * Move to next question (host only)
+   * Uses the frozen quiz snapshot to ensure consistency
    */
   async nextQuestion({ pin, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
-    const quiz = await this._getQuizOrThrow(room.quizId);
-    const totalQuestions = quiz.getTotalQuestions();
+    const snapshot = room.getQuizSnapshot();
+
+    if (!snapshot) {
+      throw new ValidationError('Game has not started');
+    }
+
+    const totalQuestions = snapshot.getTotalQuestions();
 
     const hasMore = room.nextQuestion(requesterId, totalQuestions);
     await this.roomRepository.save(room);
@@ -298,7 +333,7 @@ class GameUseCases {
       };
     }
 
-    const currentQuestion = this._getQuestionOrThrow(quiz, room.currentQuestionIndex);
+    const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
     return {
       room,
@@ -341,15 +376,15 @@ class GameUseCases {
     }));
 
     // Get all recorded answers from the game
+    // Map to GameSession schema field names for consistency
     const answers = room.getAnswerHistory().map(answer => ({
+      nickname: answer.playerNickname,
       questionIndex: answer.questionIndex,
-      questionId: answer.questionId,
-      playerNickname: answer.playerNickname,
       answerIndex: answer.answerIndex,
       isCorrect: answer.isCorrect,
-      elapsedTimeMs: answer.elapsedTimeMs,
+      responseTimeMs: answer.elapsedTimeMs,
       score: answer.score,
-      timestamp: answer.timestamp
+      streak: answer.streak || 0
     }));
 
     const sessionData = {

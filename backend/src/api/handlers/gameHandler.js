@@ -94,7 +94,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       // Check if timer has expired (server-side validation)
       if (timerService.isTimeExpired(pin)) {
-        socket.emit('error', { message: 'Time expired' });
+        socket.emit('error', { error: 'Time expired' });
         return;
       }
 

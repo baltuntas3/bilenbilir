@@ -1,7 +1,7 @@
 const { Room, RoomState, Player } = require('../../domain/entities');
 const { PIN } = require('../../domain/value-objects');
 const { generateId } = require('../../shared/utils/generateId');
-const { NotFoundError, ForbiddenError, ValidationError } = require('../../shared/errors');
+const { NotFoundError, ForbiddenError, ValidationError, ConflictError } = require('../../shared/errors');
 
 // Default grace period for player reconnection (2 minutes)
 const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
@@ -11,6 +11,31 @@ class RoomUseCases {
     this.roomRepository = roomRepository;
     this.quizRepository = quizRepository;
     this.playerGracePeriod = options.playerGracePeriod || DEFAULT_PLAYER_GRACE_PERIOD;
+
+    // Lock map to prevent nickname collision race conditions
+    // Key: "pin:nickname_lowercase", Value: true (locked)
+    this.joinLocks = new Map();
+  }
+
+  /**
+   * Acquire lock for joining room with nickname
+   * @private
+   */
+  _acquireJoinLock(pin, nickname) {
+    const lockKey = `${pin}:${nickname.toLowerCase()}`;
+    if (this.joinLocks.has(lockKey)) {
+      throw new ConflictError('Join in progress. Please try again.');
+    }
+    this.joinLocks.set(lockKey, true);
+    return lockKey;
+  }
+
+  /**
+   * Release join lock
+   * @private
+   */
+  _releaseJoinLock(lockKey) {
+    this.joinLocks.delete(lockKey);
   }
 
   /**
@@ -84,24 +109,33 @@ class RoomUseCases {
 
   /**
    * Join an existing room
+   * Uses lock to prevent race condition when two clients try to join with same nickname
    */
   async joinRoom({ pin, nickname, socketId }) {
-    const room = await this._getRoomOrThrow(pin);
-    const playerToken = generateId(); // Token for player reconnection
+    // Acquire lock to prevent race condition
+    const lockKey = this._acquireJoinLock(pin, nickname);
 
-    const player = new Player({
-      id: generateId(),
-      socketId,
-      nickname,
-      roomPin: pin,
-      playerToken
-    });
+    try {
+      const room = await this._getRoomOrThrow(pin);
+      const playerToken = generateId(); // Token for player reconnection
 
-    room.addPlayer(player); // Entity validates state and nickname uniqueness
+      const player = new Player({
+        id: generateId(),
+        socketId,
+        nickname,
+        roomPin: pin,
+        playerToken
+      });
 
-    await this.roomRepository.save(room);
+      room.addPlayer(player); // Entity validates state and nickname uniqueness
 
-    return { room, player, playerToken };
+      await this.roomRepository.save(room);
+
+      return { room, player, playerToken };
+    } finally {
+      // Always release lock
+      this._releaseJoinLock(lockKey);
+    }
   }
 
   /**
@@ -199,12 +233,16 @@ class RoomUseCases {
 
   /**
    * Reconnect player to room using playerToken
+   * Rotates token on successful reconnect for security
    */
   async reconnectPlayer({ pin, playerToken, newSocketId }) {
     const room = await this._getRoomOrThrow(pin);
-    const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod);
+    // Generate new token for security (token rotation)
+    const newPlayerToken = generateId();
+    const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod, newPlayerToken);
     await this.roomRepository.save(room);
-    return { room, player };
+    // Return new token so client can update stored token
+    return { room, player, newPlayerToken };
   }
 
   /**

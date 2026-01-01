@@ -60,6 +60,22 @@ class Quiz {
     }
     this.questions = reordered;
   }
+
+  /**
+   * Create a deep clone of this quiz (immutable snapshot for game sessions)
+   * This prevents mid-game modifications from affecting ongoing games
+   */
+  clone() {
+    return new Quiz({
+      id: this.id,
+      title: this.title,
+      description: this.description,
+      createdBy: this.createdBy,
+      questions: this.questions.map(q => q.clone()),
+      isPublic: this.isPublic,
+      createdAt: this.createdAt
+    });
+  }
 }
 
 module.exports = { Quiz };

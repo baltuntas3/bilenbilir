@@ -62,22 +62,23 @@ const errorHandler = (err, req, res, next) => {
 /**
  * Socket.io error handler
  * For use in WebSocket handlers
+ * Uses same { error: ... } format as REST API for consistency
  */
 const handleSocketError = (socket, error) => {
   if (error instanceof AppError && error.isOperational) {
-    socket.emit('error', { message: error.message });
+    socket.emit('error', { error: error.message });
     return;
   }
 
   // JWT errors
   if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-    socket.emit('error', { message: 'Authentication error' });
+    socket.emit('error', { error: 'Authentication error' });
     return;
   }
 
   // Unknown errors
   console.error('Socket error:', error);
-  socket.emit('error', { message: 'An unexpected error occurred' });
+  socket.emit('error', { error: 'An unexpected error occurred' });
 };
 
 module.exports = { errorHandler, handleSocketError };

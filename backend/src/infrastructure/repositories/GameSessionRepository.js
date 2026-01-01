@@ -52,14 +52,6 @@ class GameSessionRepository {
       }
     };
   }
-
-  async getRecent(limit = 10) {
-    return await GameSession.find()
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .populate('quiz')
-      .populate('host');
-  }
 }
 
 const gameSessionRepository = new GameSessionRepository();

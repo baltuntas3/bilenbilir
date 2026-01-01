@@ -55,6 +55,10 @@ const answerRecordSchema = new mongoose.Schema({
   score: {
     type: Number,
     default: 0
+  },
+  streak: {
+    type: Number,
+    default: 0
   }
 }, { _id: false });
 

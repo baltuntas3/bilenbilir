@@ -40,6 +40,35 @@ class Room {
     this.hostDisconnectedAt = null;
     // Track all answers for archiving
     this.answerHistory = [];
+    // Immutable quiz snapshot - set when game starts to prevent mid-game modifications
+    this.quizSnapshot = null;
+  }
+
+  /**
+   * Set the quiz snapshot when game starts
+   * This creates an immutable copy that won't be affected by quiz modifications
+   * @param {Quiz} quiz - The quiz to snapshot (should be a cloned copy)
+   */
+  setQuizSnapshot(quiz) {
+    if (this.quizSnapshot !== null) {
+      throw new ValidationError('Quiz snapshot already set');
+    }
+    this.quizSnapshot = quiz;
+  }
+
+  /**
+   * Get the quiz snapshot for game operations
+   * @returns {Quiz|null} The frozen quiz or null if game hasn't started
+   */
+  getQuizSnapshot() {
+    return this.quizSnapshot;
+  }
+
+  /**
+   * Check if game has a quiz snapshot
+   */
+  hasQuizSnapshot() {
+    return this.quizSnapshot !== null;
   }
 
   get pin() {
@@ -100,7 +129,7 @@ class Room {
     return this.players.find(p => p.playerToken === playerToken) || null;
   }
 
-  reconnectPlayer(playerToken, newSocketId, gracePeriodMs = null) {
+  reconnectPlayer(playerToken, newSocketId, gracePeriodMs = null, newToken = null) {
     const player = this.getPlayerByToken(playerToken);
     if (!player) {
       throw new UnauthorizedError('Invalid player token');
@@ -114,7 +143,8 @@ class Room {
       }
     }
 
-    player.reconnect(newSocketId);
+    // Rotate token on reconnect for security
+    player.reconnect(newSocketId, newToken);
     return player;
   }
 

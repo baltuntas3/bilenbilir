@@ -64,6 +64,16 @@ class RoomCleanupService {
         // Check if host has been disconnected too long
         if (room.isHostDisconnected()) {
           const disconnectedDuration = room.getHostDisconnectedDuration();
+
+          // Warn players when host is disconnected (every check interval)
+          if (this.io && disconnectedDuration <= this.hostGracePeriod) {
+            const remainingTime = Math.max(0, this.hostGracePeriod - disconnectedDuration);
+            this.io.to(room.pin).emit('host_disconnected_warning', {
+              remainingSeconds: Math.ceil(remainingTime / 1000),
+              message: 'Host disconnected. Room will close if host does not reconnect.'
+            });
+          }
+
           if (disconnectedDuration > this.hostGracePeriod) {
             shouldDelete = true;
             reason = 'Host reconnection timeout';

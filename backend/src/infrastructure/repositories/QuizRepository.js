@@ -17,24 +17,52 @@ class QuizRepository {
     return this.quizzes.get(id) || null;
   }
 
-  async findByCreator(createdBy) {
-    const result = [];
+  async findByCreator(createdBy, { page = 1, limit = 20 } = {}) {
+    const allQuizzes = [];
     for (const quiz of this.quizzes.values()) {
       if (quiz.createdBy === createdBy) {
-        result.push(quiz);
+        allQuizzes.push(quiz);
       }
     }
-    return result;
+    // Apply pagination
+    const total = allQuizzes.length;
+    const skip = (page - 1) * limit;
+    const quizzes = allQuizzes.slice(skip, skip + limit);
+
+    return {
+      quizzes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
   }
 
-  async findPublic() {
-    const result = [];
+  async findPublic({ page = 1, limit = 20 } = {}) {
+    const allQuizzes = [];
     for (const quiz of this.quizzes.values()) {
       if (quiz.isPublic) {
-        result.push(quiz);
+        allQuizzes.push(quiz);
       }
     }
-    return result;
+    // Apply pagination
+    const total = allQuizzes.length;
+    const skip = (page - 1) * limit;
+    const quizzes = allQuizzes.slice(skip, skip + limit);
+
+    return {
+      quizzes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
   }
 
   async delete(id) {
@@ -45,12 +73,35 @@ class QuizRepository {
     return this.quizzes.has(id);
   }
 
-  async getAll() {
-    return Array.from(this.quizzes.values());
+  async getAll({ page = 1, limit = 100 } = {}) {
+    const allQuizzes = Array.from(this.quizzes.values());
+    const total = allQuizzes.length;
+    const skip = (page - 1) * limit;
+    const quizzes = allQuizzes.slice(skip, skip + limit);
+
+    return {
+      quizzes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
   }
 
   async clear() {
     this.quizzes.clear();
+  }
+
+  /**
+   * Increment play count for a quiz (no-op for in-memory repository)
+   * This is implemented for interface compatibility with MongoQuizRepository
+   */
+  async incrementPlayCount(id) {
+    // In-memory repository doesn't track play counts
+    // This is a no-op for testing purposes
   }
 }
 
