@@ -9,6 +9,7 @@ class RoomCleanupService {
     this.roomRepository = roomRepository;
     this.io = io;
     this.roomUseCases = options.roomUseCases || null; // Optional: for join lock cleanup
+    this.gameUseCases = options.gameUseCases || null; // Optional: for interrupted game archival
     this.intervalId = null;
     this.isCleanupRunning = false; // Lock to prevent concurrent cleanup
 
@@ -51,6 +52,19 @@ class RoomCleanupService {
    */
   _isActiveGame(room) {
     return this.activeGameStates.includes(room.state);
+  }
+
+  /**
+   * Map cleanup reason to interruption code for archival
+   * @private
+   */
+  _mapReasonToInterruptionCode(reason) {
+    if (reason.includes('Orphan')) return 'orphan_room';
+    if (reason.includes('Host')) return 'host_timeout';
+    if (reason.includes('Empty')) return 'empty_room';
+    if (reason.includes('Active game timeout')) return 'game_timeout';
+    if (reason.includes('Idle')) return 'idle_timeout';
+    return 'cleanup';
   }
 
   async cleanup() {
@@ -111,6 +125,18 @@ class RoomCleanupService {
             }
           }
 
+          // Check for orphan room: host disconnected AND no connected players
+          // This handles the case where everyone abandons an active game
+          if (!shouldDelete && room.isHostDisconnected() && room.getConnectedPlayerCount() === 0) {
+            const hostDisconnectedDuration = room.getHostDisconnectedDuration();
+            // Use shorter timeout for orphan rooms since no one can interact
+            const orphanTimeout = Math.min(this.hostGracePeriod, this.playerGracePeriod);
+            if (hostDisconnectedDuration > orphanTimeout) {
+              shouldDelete = true;
+              reason = 'Orphan room (host and all players disconnected)';
+            }
+          }
+
           // Check if room is empty for too long (skip if game is active with no players - edge case)
           if (!shouldDelete && room.getPlayerCount() === 0 && !isActiveGame) {
             const roomAge = now - room.createdAt.getTime();
@@ -134,13 +160,31 @@ class RoomCleanupService {
           if (shouldDelete) {
             console.log(`Cleaning up room ${room.pin}: ${reason}`);
 
+            // Archive as interrupted game if game had started
+            if (this.gameUseCases && room.hasQuizSnapshot()) {
+              try {
+                await this.gameUseCases.saveInterruptedGame({
+                  pin: room.pin,
+                  reason: this._mapReasonToInterruptionCode(reason)
+                });
+                console.log(`Archived interrupted game for room ${room.pin}`);
+              } catch (archiveError) {
+                // Log but don't fail cleanup - room will still be deleted
+                console.error(`Failed to archive interrupted game ${room.pin}:`, archiveError.message);
+              }
+            }
+
             // Notify all clients in room
             if (this.io) {
               this.io.to(room.pin).emit('room_closed', { reason });
               this.io.in(room.pin).socketsLeave(room.pin);
             }
 
-            await this.roomRepository.delete(room.pin);
+            // Only delete if not already deleted by archival
+            const roomStillExists = await this.roomRepository.findByPin(room.pin);
+            if (roomStillExists) {
+              await this.roomRepository.delete(room.pin);
+            }
           }
         } catch (roomError) {
           // Log error for this room but continue processing others

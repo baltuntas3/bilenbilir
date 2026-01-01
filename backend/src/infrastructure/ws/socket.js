@@ -97,8 +97,11 @@ const initializeSocket = (server) => {
     });
   });
 
-  // Start room cleanup service
-  cleanupService = new RoomCleanupService(roomRepository, io);
+  // Start room cleanup service with use cases for proper cleanup
+  cleanupService = new RoomCleanupService(roomRepository, io, {
+    roomUseCases,
+    gameUseCases
+  });
   cleanupService.start();
 
   return io;
