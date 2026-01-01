@@ -7,14 +7,18 @@ const router = express.Router();
 
 /**
  * GET /api/games/history
- * Get current user's game history (as host)
+ * Get current user's game history with pagination (as host)
+ * Query params: page (default 1), limit (default 20, max 100)
  */
 router.get('/history', authenticate, async (req, res, next) => {
   try {
-    const sessions = await gameSessionRepository.findByHost(req.user.id);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+    const result = await gameSessionRepository.findByHost(req.user.id, { page, limit });
 
     res.json({
-      games: sessions.map(session => ({
+      games: result.sessions.map(session => ({
         id: session._id,
         pin: session.pin,
         quiz: session.quiz ? {
@@ -26,7 +30,44 @@ router.get('/history', authenticate, async (req, res, next) => {
         startedAt: session.startedAt,
         endedAt: session.endedAt,
         status: session.status
-      }))
+      })),
+      pagination: result.pagination
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/games/quiz/:quizId/history
+ * Get game history for a specific quiz with pagination (owner only)
+ * Query params: page (default 1), limit (default 20, max 100)
+ * NOTE: This route MUST come before /:id to avoid "quiz" being matched as an id
+ */
+router.get('/quiz/:quizId/history', authenticate, async (req, res, next) => {
+  try {
+    const { quizId } = req.params;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+    const result = await gameSessionRepository.findByQuiz(quizId, { page, limit });
+
+    // Filter to only show sessions where user was the host
+    const userSessions = result.sessions.filter(s =>
+      s.host && s.host.toString() === req.user.id
+    );
+
+    res.json({
+      games: userSessions.map(session => ({
+        id: session._id,
+        pin: session.pin,
+        playerCount: session.playerCount,
+        playerResults: session.playerResults,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        status: session.status
+      })),
+      pagination: result.pagination
     });
   } catch (error) {
     next(error);
@@ -69,36 +110,6 @@ router.get('/:id', authenticate, async (req, res, next) => {
       startedAt: session.startedAt,
       endedAt: session.endedAt,
       status: session.status
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * GET /api/games/quiz/:quizId/history
- * Get game history for a specific quiz (owner only)
- */
-router.get('/quiz/:quizId/history', authenticate, async (req, res, next) => {
-  try {
-    const { quizId } = req.params;
-    const sessions = await gameSessionRepository.findByQuiz(quizId);
-
-    // Filter to only show sessions where user was the host
-    const userSessions = sessions.filter(s =>
-      s.host && s.host.toString() === req.user.id
-    );
-
-    res.json({
-      games: userSessions.map(session => ({
-        id: session._id,
-        pin: session.pin,
-        playerCount: session.playerCount,
-        playerResults: session.playerResults,
-        startedAt: session.startedAt,
-        endedAt: session.endedAt,
-        status: session.status
-      }))
     });
   } catch (error) {
     next(error);

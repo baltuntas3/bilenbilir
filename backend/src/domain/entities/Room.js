@@ -38,6 +38,8 @@ class Room {
     this.createdAt = createdAt;
     this.players = [];
     this.hostDisconnectedAt = null;
+    // Track all answers for archiving
+    this.answerHistory = [];
   }
 
   get pin() {
@@ -239,6 +241,25 @@ class Room {
 
   getPodium() {
     return this.getLeaderboard().slice(0, 3);
+  }
+
+  /**
+   * Record an answer for archiving
+   * @param {object} answerData - Answer data to record
+   */
+  recordAnswer(answerData) {
+    this.answerHistory.push({
+      ...answerData,
+      questionIndex: this.currentQuestionIndex,
+      timestamp: new Date()
+    });
+  }
+
+  /**
+   * Get all recorded answers for archiving
+   */
+  getAnswerHistory() {
+    return [...this.answerHistory];
   }
 }
 

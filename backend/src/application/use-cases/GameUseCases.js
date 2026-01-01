@@ -198,6 +198,18 @@ class GameUseCases {
         player.resetStreak();
       }
 
+      // Record answer for archiving
+      room.recordAnswer({
+        playerId: player.id,
+        playerNickname: player.nickname,
+        questionId: currentQuestion.id,
+        answerIndex,
+        isCorrect: answer.isCorrect,
+        elapsedTimeMs: validElapsedTime,
+        score: answer.getTotalScore(),
+        streak: player.streak
+      });
+
       await this.roomRepository.save(room);
 
       // Check if all players answered (via Aggregate Root)
@@ -328,13 +340,25 @@ class GameUseCases {
       longestStreak: player.longestStreak
     }));
 
+    // Get all recorded answers from the game
+    const answers = room.getAnswerHistory().map(answer => ({
+      questionIndex: answer.questionIndex,
+      questionId: answer.questionId,
+      playerNickname: answer.playerNickname,
+      answerIndex: answer.answerIndex,
+      isCorrect: answer.isCorrect,
+      elapsedTimeMs: answer.elapsedTimeMs,
+      score: answer.score,
+      timestamp: answer.timestamp
+    }));
+
     const sessionData = {
       pin: room.pin,
       quiz: room.quizId,
       host: room.hostId,
       playerCount: room.getPlayerCount(),
       playerResults,
-      answers: [], // Could be populated if we track answers
+      answers,
       startedAt: startedAt || room.createdAt,
       endedAt: new Date(),
       status: 'completed'

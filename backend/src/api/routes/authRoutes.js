@@ -3,8 +3,10 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { User } = require('../../infrastructure/db/models');
 const { generateToken, authenticate } = require('../middlewares/authMiddleware');
+const { authLimiter, passwordResetLimiter } = require('../middlewares/rateLimiter');
 const { ValidationError, UnauthorizedError, ForbiddenError, NotFoundError, ConflictError } = require('../../shared/errors');
 const { sanitizeEmail } = require('../../shared/utils/sanitize');
+const { emailService } = require('../../infrastructure/services');
 
 const router = express.Router();
 
@@ -12,7 +14,7 @@ const router = express.Router();
  * POST /api/auth/register
  * Register a new user
  */
-router.post('/register', async (req, res, next) => {
+router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const { email, password, username } = req.body;
 
@@ -52,6 +54,11 @@ router.post('/register', async (req, res, next) => {
     // Generate token
     const token = generateToken(user);
 
+    // Send welcome email (non-blocking)
+    emailService.sendWelcome(user.email, user.username).catch(err => {
+      console.error('Failed to send welcome email:', err.message);
+    });
+
     res.status(201).json({
       message: 'User registered successfully',
       user: {
@@ -70,7 +77,7 @@ router.post('/register', async (req, res, next) => {
  * POST /api/auth/login
  * Login user
  */
-router.post('/login', async (req, res, next) => {
+router.post('/login', authLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -217,6 +224,11 @@ router.put('/change-password', authenticate, async (req, res, next) => {
     user.password = hashedPassword;
     await user.save();
 
+    // Send password changed notification (non-blocking)
+    emailService.sendPasswordChanged(user.email).catch(err => {
+      console.error('Failed to send password changed email:', err.message);
+    });
+
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     next(error);
@@ -227,7 +239,7 @@ router.put('/change-password', authenticate, async (req, res, next) => {
  * POST /api/auth/forgot-password
  * Request password reset (generates token)
  */
-router.post('/forgot-password', async (req, res, next) => {
+router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => {
   try {
     const { email } = req.body;
 
@@ -257,12 +269,11 @@ router.post('/forgot-password', async (req, res, next) => {
     user.passwordResetExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
 
-    // In production, send email with reset link
-    // For now, return token in response (development only)
+    // Send password reset email
+    await emailService.sendPasswordReset(user.email, resetToken);
+
     res.json({
-      message: 'If an account with that email exists, a password reset link has been sent',
-      // Remove this in production - only for development/testing
-      resetToken: process.env.NODE_ENV === 'development' ? resetToken : undefined
+      message: 'If an account with that email exists, a password reset link has been sent'
     });
   } catch (error) {
     next(error);

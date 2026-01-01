@@ -83,19 +83,19 @@ class QuizUseCases {
   }
 
   /**
-   * Get all quizzes by creator
+   * Get all quizzes by creator with pagination
    */
-  async getQuizzesByCreator({ createdBy }) {
-    const quizzes = await this.quizRepository.findByCreator(createdBy);
-    return { quizzes };
+  async getQuizzesByCreator({ createdBy, page = 1, limit = 20 }) {
+    const result = await this.quizRepository.findByCreator(createdBy, { page, limit });
+    return result;
   }
 
   /**
-   * Get all public quizzes
+   * Get all public quizzes with pagination
    */
-  async getPublicQuizzes() {
-    const quizzes = await this.quizRepository.findPublic();
-    return { quizzes };
+  async getPublicQuizzes({ page = 1, limit = 20 } = {}) {
+    const result = await this.quizRepository.findPublic({ page, limit });
+    return result;
   }
 
   /**

@@ -1,13 +1,27 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
+const { UnauthorizedError } = require('../../shared/errors');
 
 /**
  * Game WebSocket Handler
  * Handles game flow: start, questions, answers, results
  */
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
-  // Host starts the game
+  /**
+   * Ensure socket is authenticated (has valid JWT)
+   * Required for host operations
+   * @private
+   */
+  const requireAuth = () => {
+    if (!socket.isAuthenticated || !socket.user) {
+      throw new UnauthorizedError('Authentication required for this action');
+    }
+    return socket.user;
+  };
+
+  // Host starts the game (requires authentication)
   socket.on('start_game', async (data) => {
     try {
+      requireAuth(); // JWT required for host
       const { pin } = data || {};
 
       const result = await gameUseCases.startGame({
@@ -29,9 +43,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
     }
   });
 
-  // Host triggers answering phase (after intro countdown)
+  // Host triggers answering phase (after intro countdown) - requires authentication
   socket.on('start_answering', async (data) => {
     try {
+      requireAuth(); // JWT required for host
       const { pin } = data || {};
 
       const result = await gameUseCases.startAnsweringPhase({
@@ -114,9 +129,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
     }
   });
 
-  // Host ends answering phase (timer expired or manual)
+  // Host ends answering phase (timer expired or manual) - requires authentication
   socket.on('end_answering', async (data) => {
     try {
+      requireAuth(); // JWT required for host
       const { pin } = data || {};
 
       timerService.stopTimer(pin);
@@ -141,9 +157,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
     }
   });
 
-  // Host shows leaderboard
+  // Host shows leaderboard - requires authentication
   socket.on('show_leaderboard', async (data) => {
     try {
+      requireAuth(); // JWT required for host
       const { pin } = data || {};
 
       const result = await gameUseCases.showLeaderboard({
@@ -163,9 +180,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
     }
   });
 
-  // Host moves to next question
+  // Host moves to next question - requires authentication
   socket.on('next_question', async (data) => {
     try {
+      requireAuth(); // JWT required for host
       const { pin } = data || {};
 
       const result = await gameUseCases.nextQuestion({

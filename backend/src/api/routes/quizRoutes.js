@@ -2,6 +2,7 @@ const express = require('express');
 const { QuizUseCases } = require('../../application/use-cases');
 const { mongoQuizRepository } = require('../../infrastructure/repositories/MongoQuizRepository');
 const { authenticate } = require('../middlewares/authMiddleware');
+const { quizCreationLimiter } = require('../middlewares/rateLimiter');
 const { ValidationError } = require('../../shared/errors');
 
 const router = express.Router();
@@ -11,7 +12,7 @@ const quizUseCases = new QuizUseCases(mongoQuizRepository);
  * POST /api/quizzes
  * Create a new quiz (requires auth)
  */
-router.post('/', authenticate, async (req, res, next) => {
+router.post('/', authenticate, quizCreationLimiter, async (req, res, next) => {
   try {
     const { title, description, isPublic } = req.body;
 
@@ -34,12 +35,16 @@ router.post('/', authenticate, async (req, res, next) => {
 
 /**
  * GET /api/quizzes
- * Get all public quizzes
+ * Get all public quizzes with pagination
+ * Query params: page (default 1), limit (default 20, max 100)
  */
 router.get('/', async (req, res, next) => {
   try {
-    const result = await quizUseCases.getPublicQuizzes();
-    res.json(result.quizzes);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+    const result = await quizUseCases.getPublicQuizzes({ page, limit });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -47,12 +52,20 @@ router.get('/', async (req, res, next) => {
 
 /**
  * GET /api/quizzes/my
- * Get current user's quizzes (requires auth)
+ * Get current user's quizzes with pagination (requires auth)
+ * Query params: page (default 1), limit (default 20, max 100)
  */
 router.get('/my', authenticate, async (req, res, next) => {
   try {
-    const result = await quizUseCases.getQuizzesByCreator({ createdBy: req.user.id });
-    res.json(result.quizzes);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+    const result = await quizUseCases.getQuizzesByCreator({
+      createdBy: req.user.id,
+      page,
+      limit
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -152,6 +165,32 @@ router.post('/:id/questions', authenticate, async (req, res, next) => {
 });
 
 /**
+ * PUT /api/quizzes/:id/questions/reorder
+ * Reorder questions in quiz (requires auth + ownership)
+ * NOTE: This route MUST come before /:id/questions/:questionId to avoid "reorder" being matched as questionId
+ */
+router.put('/:id/questions/reorder', authenticate, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { questionOrder } = req.body;
+
+    if (!Array.isArray(questionOrder)) {
+      throw new ValidationError('questionOrder must be an array');
+    }
+
+    const result = await quizUseCases.reorderQuestions({
+      quizId: id,
+      questionOrder,
+      requesterId: req.user.id
+    });
+
+    res.json(result.quiz);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * PUT /api/quizzes/:id/questions/:questionId
  * Update a specific question (requires auth + ownership)
  */
@@ -188,31 +227,6 @@ router.delete('/:id/questions/:questionId', authenticate, async (req, res, next)
     });
 
     res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * PUT /api/quizzes/:id/questions/reorder
- * Reorder questions in quiz (requires auth + ownership)
- */
-router.put('/:id/questions/reorder', authenticate, async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { questionOrder } = req.body;
-
-    if (!Array.isArray(questionOrder)) {
-      throw new ValidationError('questionOrder must be an array');
-    }
-
-    const result = await quizUseCases.reorderQuestions({
-      quizId: id,
-      questionOrder,
-      requesterId: req.user.id
-    });
-
-    res.json(result.quiz);
   } catch (error) {
     next(error);
   }

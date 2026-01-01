@@ -81,14 +81,40 @@ class MongoQuizRepository {
     }
   }
 
-  async findByCreator(createdBy) {
-    const docs = await QuizModel.find({ createdBy }).sort({ createdAt: -1 });
-    return docs.map(doc => this._toDomain(doc));
+  async findByCreator(createdBy, { page = 1, limit = 20 } = {}) {
+    const skip = (page - 1) * limit;
+    const [docs, total] = await Promise.all([
+      QuizModel.find({ createdBy }).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      QuizModel.countDocuments({ createdBy })
+    ]);
+    return {
+      quizzes: docs.map(doc => this._toDomain(doc)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
   }
 
-  async findPublic() {
-    const docs = await QuizModel.find({ isPublic: true }).sort({ createdAt: -1 });
-    return docs.map(doc => this._toDomain(doc));
+  async findPublic({ page = 1, limit = 20 } = {}) {
+    const skip = (page - 1) * limit;
+    const [docs, total] = await Promise.all([
+      QuizModel.find({ isPublic: true }).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      QuizModel.countDocuments({ isPublic: true })
+    ]);
+    return {
+      quizzes: docs.map(doc => this._toDomain(doc)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
   }
 
   async delete(id) {

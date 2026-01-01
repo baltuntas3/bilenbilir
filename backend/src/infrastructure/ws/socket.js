@@ -1,4 +1,5 @@
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 const { createRoomHandler, createGameHandler } = require('../../api/handlers');
 const { RoomUseCases, GameUseCases } = require('../../application/use-cases');
 const { roomRepository, gameSessionRepository } = require('../repositories');
@@ -14,19 +15,55 @@ let timerService;
 const roomUseCases = new RoomUseCases(roomRepository, mongoQuizRepository);
 const gameUseCases = new GameUseCases(roomRepository, mongoQuizRepository, gameSessionRepository);
 
+/**
+ * Verify JWT token for socket authentication
+ * @param {string} token - JWT token
+ * @returns {object|null} - Decoded user or null
+ */
+const verifySocketToken = (token) => {
+  if (!token) return null;
+
+  try {
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) return null;
+
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+};
+
 const initializeSocket = (server) => {
+  const allowedOrigins = process.env.CLIENT_URL
+    ? process.env.CLIENT_URL.split(',').map(url => url.trim())
+    : ['http://localhost:5173'];
+
   io = new Server(server, {
     cors: {
-      origin: 'http://localhost:5173',
+      origin: allowedOrigins,
       methods: ['GET', 'POST']
     }
+  });
+
+  // Socket.io authentication middleware
+  io.use((socket, next) => {
+    const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+
+    // Verify token if provided (optional for players, required for hosts)
+    const user = verifySocketToken(token);
+
+    // Attach user info to socket for later use
+    socket.user = user;
+    socket.isAuthenticated = !!user;
+
+    next();
   });
 
   // Initialize timer service
   timerService = new GameTimerService(io);
 
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log('User connected:', socket.id, socket.isAuthenticated ? `(authenticated: ${socket.user.userId})` : '(guest)');
 
     // Register handlers
     createRoomHandler(io, socket, roomUseCases, timerService);

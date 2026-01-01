@@ -1,5 +1,5 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { ConflictError } = require('../../shared/errors');
+const { ConflictError, UnauthorizedError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
 
 /**
@@ -7,6 +7,18 @@ const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitiz
  * Handles room creation, joining, and leaving
  */
 const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
+  /**
+   * Ensure socket is authenticated (has valid JWT)
+   * Required for host operations
+   * @private
+   */
+  const requireAuth = () => {
+    if (!socket.isAuthenticated || !socket.user) {
+      throw new UnauthorizedError('Authentication required for this action');
+    }
+    return socket.user;
+  };
+
   /**
    * Ensure socket is not already in a room
    * @private
@@ -18,14 +30,16 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
     }
   };
 
-  // Host creates a room
+  // Host creates a room (requires authentication)
   socket.on('create_room', async (data) => {
     try {
+      const user = requireAuth(); // JWT required for host
       const { quizId } = data || {};
       await ensureNotInRoom();
 
       const result = await roomUseCases.createRoom({
         hostId: socket.id,
+        hostUserId: user.userId, // Track authenticated user
         quizId
       });
 

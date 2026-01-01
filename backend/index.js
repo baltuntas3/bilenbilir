@@ -8,12 +8,16 @@ const { initializeSocket } = require('./src/infrastructure/ws/socket');
 const { quizRoutes, authRoutes, gameRoutes } = require('./src/api/routes');
 const { errorHandler } = require('./src/api/middlewares/errorHandler');
 const { sanitize } = require('./src/api/middlewares/sanitizeMiddleware');
+const { emailService } = require('./src/infrastructure/services');
 
 const app = express();
 const server = http.createServer(app);
 
 // MongoDB connection
 connectDB();
+
+// Email service initialization
+emailService.initialize();
 
 // WebSocket initialization
 const io = initializeSocket(server);
