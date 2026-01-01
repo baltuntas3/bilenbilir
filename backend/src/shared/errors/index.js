@@ -1,14 +1,36 @@
 /**
  * Custom Application Errors
  * Centralized error handling with proper HTTP status codes
+ *
+ * isOperational: true = expected errors (user input, business logic)
+ * isOperational: false = programming errors, bugs, unexpected failures
  */
 
 class AppError extends Error {
-  constructor(message, statusCode = 500) {
+  constructor(message, statusCode = 500, isOperational = true) {
     super(message);
     this.statusCode = statusCode;
-    this.isOperational = true; // Known/expected errors
+    this.isOperational = isOperational;
     Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+/**
+ * 500 Internal Server Error - Unexpected/programming errors
+ * isOperational = false by default (unexpected error)
+ */
+class InternalError extends AppError {
+  constructor(message = 'Internal server error', isOperational = false) {
+    super(message, 500, isOperational);
+  }
+}
+
+/**
+ * 503 Service Unavailable - Database/external service errors
+ */
+class DatabaseError extends AppError {
+  constructor(message = 'Database error') {
+    super(message, 503, true);
   }
 }
 
@@ -68,6 +90,8 @@ class RateLimitError extends AppError {
 
 module.exports = {
   AppError,
+  InternalError,
+  DatabaseError,
   ValidationError,
   UnauthorizedError,
   ForbiddenError,

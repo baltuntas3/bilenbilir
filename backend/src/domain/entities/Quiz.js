@@ -28,6 +28,13 @@ class Quiz {
     if (this.questions.length > MAX_QUESTIONS) {
       throw new ValidationError(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
     }
+
+    // Validate questions array contents - no null/undefined elements
+    for (let i = 0; i < this.questions.length; i++) {
+      if (this.questions[i] == null) {
+        throw new ValidationError(`Question at index ${i} is null or undefined`);
+      }
+    }
   }
 
   updateTitle(newTitle) {
@@ -88,10 +95,24 @@ class Quiz {
   }
 
   reorderQuestions(newOrder) {
-    const reordered = newOrder.map(id => this.questions.find(q => q.id === id));
-    if (reordered.some(q => !q)) {
-      throw new ValidationError('Invalid question order');
+    // Validate newOrder is an array
+    if (!Array.isArray(newOrder)) {
+      throw new ValidationError('newOrder must be an array');
     }
+    // Validate newOrder length matches questions
+    if (newOrder.length !== this.questions.length) {
+      throw new ValidationError(`newOrder length (${newOrder.length}) must match questions length (${this.questions.length})`);
+    }
+
+    const questionMap = new Map(this.questions.map(q => [q.id, q]));
+    const reordered = newOrder.map(id => questionMap.get(id));
+
+    // Check for missing or invalid question IDs
+    const missingIds = newOrder.filter((id, idx) => !reordered[idx]);
+    if (missingIds.length > 0) {
+      throw new ValidationError(`Invalid question IDs in order: ${missingIds.join(', ')}`);
+    }
+
     this.questions = reordered;
   }
 

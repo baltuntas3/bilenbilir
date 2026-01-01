@@ -46,7 +46,9 @@ class MongoUserRepository {
       }
       const doc = await query;
       return this._toDomain(doc, includePassword);
-    } catch {
+    } catch (error) {
+      // Log database errors for debugging, but don't expose to caller
+      console.error(`[MongoUserRepository.findById] Error finding user ${id}:`, error.message);
       return null;
     }
   }
@@ -184,7 +186,8 @@ class MongoUserRepository {
   async findDocumentById(id) {
     try {
       return await UserModel.findById(id);
-    } catch {
+    } catch (error) {
+      console.error(`[MongoUserRepository.findDocumentById] Error finding user document ${id}:`, error.message);
       return null;
     }
   }

@@ -29,12 +29,27 @@ class Answer {
   }
 
   static create({ playerId, questionId, roomPin, answerIndex, question, elapsedTimeMs, currentStreak }) {
+    // Validate question is provided
+    if (!question || typeof question.isCorrect !== 'function') {
+      throw new Error('Valid question is required to create Answer');
+    }
+
+    // Validate elapsedTimeMs
+    if (typeof elapsedTimeMs !== 'number' || !Number.isFinite(elapsedTimeMs) || elapsedTimeMs < 0) {
+      throw new Error('elapsedTimeMs must be a non-negative number');
+    }
+
+    // Validate and sanitize currentStreak
+    const safeStreak = (typeof currentStreak === 'number' && Number.isFinite(currentStreak) && currentStreak >= 0)
+      ? Math.floor(currentStreak)
+      : 0;
+
     const isCorrect = question.isCorrect(answerIndex);
     const baseScore = question.calculateScore(answerIndex, elapsedTimeMs);
 
     let streakBonus = 0;
-    if (isCorrect && currentStreak > 0) {
-      streakBonus = Math.min(currentStreak * 100, MAX_STREAK_BONUS);
+    if (isCorrect && safeStreak > 0) {
+      streakBonus = Math.min(safeStreak * 100, MAX_STREAK_BONUS);
     }
 
     return new Answer({

@@ -322,6 +322,14 @@ class Room {
    * @returns {{ distribution: number[], correctCount: number, skippedCount: number }} Distribution array, correct answer count, and count of invalid answers skipped
    */
   getAnswerDistribution(optionCount, isCorrectFn) {
+    // Validate optionCount
+    if (typeof optionCount !== 'number' || !Number.isInteger(optionCount) || optionCount < 1) {
+      throw new ValidationError('optionCount must be a positive integer');
+    }
+    if (optionCount > 100) {
+      throw new ValidationError('optionCount exceeds maximum allowed value');
+    }
+
     const distribution = new Array(optionCount).fill(0);
     let correctCount = 0;
     let skippedCount = 0;

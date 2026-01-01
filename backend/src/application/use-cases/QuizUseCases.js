@@ -177,16 +177,17 @@ class QuizUseCases {
     }
 
     // Get existing question data and merge with updates
+    // Use 'in' operator to allow falsy values (0, '', false) to be set explicitly
     const existingQuestion = quiz.questions[questionIndex];
     const updatedQuestion = new Question({
       id: questionId,
-      text: questionData.text ?? existingQuestion.text,
-      type: questionData.type ?? existingQuestion.type,
-      options: questionData.options ?? existingQuestion.options,
-      correctAnswerIndex: questionData.correctAnswerIndex ?? existingQuestion.correctAnswerIndex,
-      timeLimit: questionData.timeLimit ?? existingQuestion.timeLimit,
-      points: questionData.points ?? existingQuestion.points,
-      imageUrl: questionData.imageUrl ?? existingQuestion.imageUrl
+      text: 'text' in questionData ? questionData.text : existingQuestion.text,
+      type: 'type' in questionData ? questionData.type : existingQuestion.type,
+      options: 'options' in questionData ? questionData.options : existingQuestion.options,
+      correctAnswerIndex: 'correctAnswerIndex' in questionData ? questionData.correctAnswerIndex : existingQuestion.correctAnswerIndex,
+      timeLimit: 'timeLimit' in questionData ? questionData.timeLimit : existingQuestion.timeLimit,
+      points: 'points' in questionData ? questionData.points : existingQuestion.points,
+      imageUrl: 'imageUrl' in questionData ? questionData.imageUrl : existingQuestion.imageUrl
     });
 
     quiz.questions[questionIndex] = updatedQuestion;

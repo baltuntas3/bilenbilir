@@ -1,3 +1,5 @@
+const { ValidationError } = require('../../shared/errors');
+
 class Nickname {
   static MIN_LENGTH = 2;
   static MAX_LENGTH = 15;
@@ -7,16 +9,16 @@ class Nickname {
     const trimmed = value?.trim();
 
     if (!trimmed) {
-      throw new Error('Nickname is required');
+      throw new ValidationError('Nickname is required');
     }
     if (trimmed.length < Nickname.MIN_LENGTH) {
-      throw new Error(`Nickname must be at least ${Nickname.MIN_LENGTH} characters`);
+      throw new ValidationError(`Nickname must be at least ${Nickname.MIN_LENGTH} characters`);
     }
     if (trimmed.length > Nickname.MAX_LENGTH) {
-      throw new Error(`Nickname must be at most ${Nickname.MAX_LENGTH} characters`);
+      throw new ValidationError(`Nickname must be at most ${Nickname.MAX_LENGTH} characters`);
     }
     if (!Nickname.ALLOWED_PATTERN.test(trimmed)) {
-      throw new Error('Nickname can only contain letters, numbers, underscores and hyphens');
+      throw new ValidationError('Nickname can only contain letters, numbers, underscores and hyphens');
     }
 
     this.value = trimmed;

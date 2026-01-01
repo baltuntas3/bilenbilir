@@ -1,8 +1,11 @@
 const { Nickname } = require('../value-objects/Nickname');
 const { Score } = require('../value-objects/Score');
+const { ValidationError, ForbiddenError } = require('../../shared/errors');
 
 // Token expires after 24 hours
 const TOKEN_EXPIRATION_MS = 24 * 60 * 60 * 1000;
+// Maximum streak to prevent overflow
+const MAX_STREAK = 1000;
 
 class Player {
   static TOKEN_EXPIRATION_MS = TOKEN_EXPIRATION_MS;
@@ -49,11 +52,17 @@ class Player {
   }
 
   addScore(points) {
+    if (typeof points !== 'number' || !Number.isFinite(points)) {
+      throw new ValidationError('Points must be a valid number');
+    }
     this._score = this._score.add(points);
   }
 
   incrementStreak() {
-    this.streak++;
+    // Cap streak at MAX_STREAK to prevent overflow
+    if (this.streak < MAX_STREAK) {
+      this.streak++;
+    }
     this.correctAnswers++;
     if (this.streak > this.longestStreak) {
       this.longestStreak = this.streak;
@@ -67,15 +76,15 @@ class Player {
   submitAnswer(answerIndex, elapsedTimeMs) {
     // Defensive validation - caller should validate, but double-check here
     if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) || answerIndex < 0) {
-      throw new Error('Invalid answer index');
+      throw new ValidationError('Invalid answer index');
     }
     if (typeof elapsedTimeMs !== 'number' || !Number.isFinite(elapsedTimeMs) || elapsedTimeMs < 0) {
-      throw new Error('Invalid elapsed time');
+      throw new ValidationError('Invalid elapsed time');
     }
 
     // Prevent disconnected players from submitting (defensive check)
     if (this.isDisconnected()) {
-      throw new Error('Cannot submit answer while disconnected');
+      throw new ForbiddenError('Cannot submit answer while disconnected');
     }
 
     this.answerAttempt = {

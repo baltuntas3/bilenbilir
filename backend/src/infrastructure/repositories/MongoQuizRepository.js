@@ -97,8 +97,18 @@ class MongoQuizRepository {
     };
   }
 
+  /**
+   * Check if ID is a valid MongoDB ObjectId format
+   * @private
+   */
+  _isValidObjectId(id) {
+    if (!id || typeof id !== 'string') return false;
+    // MongoDB ObjectId is a 24-character hex string
+    return /^[0-9a-fA-F]{24}$/.test(id);
+  }
+
   async save(quiz) {
-    if (quiz.id && quiz.id.length === 24) {
+    if (quiz.id && this._isValidObjectId(quiz.id)) {
       // Update existing
       const doc = await QuizModel.findByIdAndUpdate(
         quiz.id,
@@ -118,7 +128,8 @@ class MongoQuizRepository {
     try {
       const doc = await QuizModel.findById(id);
       return this._toDomain(doc);
-    } catch {
+    } catch (error) {
+      console.error(`[MongoQuizRepository.findById] Error finding quiz ${id}:`, error.message);
       return null;
     }
   }
@@ -168,7 +179,8 @@ class MongoQuizRepository {
     try {
       const count = await QuizModel.countDocuments({ _id: id });
       return count > 0;
-    } catch {
+    } catch (error) {
+      console.error(`[MongoQuizRepository.exists] Error checking quiz ${id}:`, error.message);
       return false;
     }
   }

@@ -1,10 +1,12 @@
+const { ValidationError } = require('../../shared/errors');
+
 class PIN {
   static LENGTH = 6;
   static ALLOWED_CHARS = '0123456789';
 
   constructor(value) {
     if (!PIN.isValid(value)) {
-      throw new Error(`PIN must be ${PIN.LENGTH} digits`);
+      throw new ValidationError(`PIN must be ${PIN.LENGTH} digits`);
     }
     this.value = value;
     Object.freeze(this);

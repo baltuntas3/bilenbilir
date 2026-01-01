@@ -31,8 +31,15 @@ class RoomUseCases {
    * @private
    */
   _acquireJoinLock(pin, nickname) {
-    // Use Nickname VO for consistent normalization across the system
-    const normalizedNickname = new Nickname(nickname).normalized();
+    // Validate nickname before acquiring lock to prevent lock leaks on validation errors
+    let normalizedNickname;
+    try {
+      normalizedNickname = new Nickname(nickname).normalized();
+    } catch (error) {
+      // Re-throw validation errors without acquiring lock
+      throw error;
+    }
+
     const lockKey = `${pin}:${normalizedNickname}`;
     const now = Date.now();
 

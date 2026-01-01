@@ -163,6 +163,79 @@ class GameUseCases {
   }
 
   /**
+   * Calculate per-player statistics from answer history
+   * @private
+   */
+  _calculatePlayerStats(answerHistory) {
+    const playerStats = new Map();
+    for (const answer of answerHistory) {
+      if (!answer || !answer.playerNickname || typeof answer.playerNickname !== 'string') {
+        continue;
+      }
+
+      if (!playerStats.has(answer.playerNickname)) {
+        playerStats.set(answer.playerNickname, {
+          correctCount: 0,
+          wrongCount: 0,
+          totalResponseTime: 0,
+          answerCount: 0
+        });
+      }
+      const stats = playerStats.get(answer.playerNickname);
+      stats.answerCount++;
+      stats.totalResponseTime += answer.elapsedTimeMs || 0;
+      if (answer.isCorrect) {
+        stats.correctCount++;
+      } else {
+        stats.wrongCount++;
+      }
+    }
+    return playerStats;
+  }
+
+  /**
+   * Build player results from leaderboard and stats
+   * @private
+   */
+  _buildPlayerResults(leaderboard, playerStats) {
+    return leaderboard.map((player, index) => {
+      const stats = playerStats.get(player.nickname) || {
+        correctCount: 0,
+        wrongCount: 0,
+        totalResponseTime: 0,
+        answerCount: 0
+      };
+      return {
+        nickname: player.nickname,
+        rank: index + 1,
+        score: player.score,
+        correctAnswers: player.correctAnswers,
+        wrongAnswers: stats.wrongCount,
+        averageResponseTime: stats.answerCount > 0
+          ? Math.round(stats.totalResponseTime / stats.answerCount)
+          : 0,
+        longestStreak: player.longestStreak
+      };
+    });
+  }
+
+  /**
+   * Map answer history to session schema format
+   * @private
+   */
+  _mapAnswersToSessionFormat(answerHistory) {
+    return answerHistory.map(answer => ({
+      nickname: answer.playerNickname,
+      questionIndex: answer.questionIndex,
+      answerIndex: answer.answerIndex,
+      isCorrect: answer.isCorrect,
+      responseTimeMs: answer.elapsedTimeMs,
+      score: answer.score,
+      streak: answer.streak || 0
+    }));
+  }
+
+  /**
    * Get current question (called after intro timer)
    * Uses the frozen quiz snapshot to ensure consistency
    */
@@ -438,69 +511,15 @@ class GameUseCases {
       const leaderboard = room.getLeaderboard();
       const answerHistory = room.getAnswerHistory();
 
-      // Calculate per-player statistics
-      const playerStats = new Map();
-      for (const answer of answerHistory) {
-        // Skip answers with missing or invalid nickname
-        if (!answer || !answer.playerNickname || typeof answer.playerNickname !== 'string') {
-          continue;
-        }
-
-        if (!playerStats.has(answer.playerNickname)) {
-          playerStats.set(answer.playerNickname, {
-            correctCount: 0,
-            wrongCount: 0,
-            totalResponseTime: 0,
-            answerCount: 0
-          });
-        }
-        const stats = playerStats.get(answer.playerNickname);
-        stats.answerCount++;
-        stats.totalResponseTime += answer.elapsedTimeMs || 0;
-        if (answer.isCorrect) {
-          stats.correctCount++;
-        } else {
-          stats.wrongCount++;
-        }
-      }
-
-      // Build player results with calculated wrongAnswers and averageResponseTime
-      const playerResults = leaderboard.map((player, index) => {
-        const stats = playerStats.get(player.nickname) || {
-          correctCount: 0,
-          wrongCount: 0,
-          totalResponseTime: 0,
-          answerCount: 0
-        };
-        return {
-          nickname: player.nickname,
-          rank: index + 1,
-          score: player.score,
-          correctAnswers: player.correctAnswers,
-          wrongAnswers: stats.wrongCount,
-          averageResponseTime: stats.answerCount > 0
-            ? Math.round(stats.totalResponseTime / stats.answerCount)
-            : 0,
-          longestStreak: player.longestStreak
-        };
-      });
-
-      // Get all recorded answers from the game
-      // Map to GameSession schema field names for consistency
-      const answers = answerHistory.map(answer => ({
-        nickname: answer.playerNickname,
-        questionIndex: answer.questionIndex,
-        answerIndex: answer.answerIndex,
-        isCorrect: answer.isCorrect,
-        responseTimeMs: answer.elapsedTimeMs,
-        score: answer.score,
-        streak: answer.streak || 0
-      }));
+      // Use helper methods to calculate stats and build results
+      const playerStats = this._calculatePlayerStats(answerHistory);
+      const playerResults = this._buildPlayerResults(leaderboard, playerStats);
+      const answers = this._mapAnswersToSessionFormat(answerHistory);
 
       const sessionData = {
         pin: room.pin,
         quiz: room.quizId,
-        host: room.hostUserId, // Use persistent User ID, not socket ID
+        host: room.hostUserId,
         playerCount: room.getPlayerCount(),
         playerResults,
         answers,
@@ -561,58 +580,10 @@ class GameUseCases {
       const leaderboard = room.getLeaderboard();
       const answerHistory = room.getAnswerHistory();
 
-      // Calculate per-player statistics
-      const playerStats = new Map();
-      for (const answer of answerHistory) {
-        if (!answer || !answer.playerNickname) continue;
-
-        if (!playerStats.has(answer.playerNickname)) {
-          playerStats.set(answer.playerNickname, {
-            correctCount: 0,
-            wrongCount: 0,
-            totalResponseTime: 0,
-            answerCount: 0
-          });
-        }
-        const stats = playerStats.get(answer.playerNickname);
-        stats.answerCount++;
-        stats.totalResponseTime += answer.elapsedTimeMs || 0;
-        if (answer.isCorrect) {
-          stats.correctCount++;
-        } else {
-          stats.wrongCount++;
-        }
-      }
-
-      const playerResults = leaderboard.map((player, index) => {
-        const stats = playerStats.get(player.nickname) || {
-          correctCount: 0,
-          wrongCount: 0,
-          totalResponseTime: 0,
-          answerCount: 0
-        };
-        return {
-          nickname: player.nickname,
-          rank: index + 1,
-          score: player.score,
-          correctAnswers: player.correctAnswers,
-          wrongAnswers: stats.wrongCount,
-          averageResponseTime: stats.answerCount > 0
-            ? Math.round(stats.totalResponseTime / stats.answerCount)
-            : 0,
-          longestStreak: player.longestStreak
-        };
-      });
-
-      const answers = answerHistory.map(answer => ({
-        nickname: answer.playerNickname,
-        questionIndex: answer.questionIndex,
-        answerIndex: answer.answerIndex,
-        isCorrect: answer.isCorrect,
-        responseTimeMs: answer.elapsedTimeMs,
-        score: answer.score,
-        streak: answer.streak || 0
-      }));
+      // Use helper methods to calculate stats and build results
+      const playerStats = this._calculatePlayerStats(answerHistory);
+      const playerResults = this._buildPlayerResults(leaderboard, playerStats);
+      const answers = this._mapAnswersToSessionFormat(answerHistory);
 
       const sessionData = {
         pin: room.pin,
