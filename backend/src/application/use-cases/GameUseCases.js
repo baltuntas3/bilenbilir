@@ -314,10 +314,8 @@ class GameUseCases {
       nickname: player.nickname,
       rank: index + 1,
       score: player.score,
-      correctAnswers: player.streak, // Approximation
-      wrongAnswers: 0,
-      averageResponseTime: 0,
-      longestStreak: player.streak
+      correctAnswers: player.correctAnswers,
+      longestStreak: player.longestStreak
     }));
 
     const sessionData = {

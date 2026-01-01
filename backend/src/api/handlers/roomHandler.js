@@ -63,6 +63,21 @@ const createRoomHandler = (io, socket, roomUseCases) => {
     try {
       const { pin } = data || {};
 
+      const { room } = await roomUseCases.getRoom({ pin });
+
+      // If host is leaving, close the room
+      if (room.isHost(socket.id)) {
+        await roomUseCases.closeRoom({
+          pin,
+          requesterId: socket.id
+        });
+
+        io.to(pin).emit('room_closed', { reason: 'host_left' });
+        io.in(pin).socketsLeave(pin);
+        return;
+      }
+
+      // Player leaving
       const result = await roomUseCases.leaveRoom({
         pin,
         socketId: socket.id

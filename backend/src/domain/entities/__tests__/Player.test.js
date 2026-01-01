@@ -20,6 +20,8 @@ describe('Player', () => {
       expect(player.roomPin).toBe('123456');
       expect(player.score).toBe(0);
       expect(player.streak).toBe(0);
+      expect(player.correctAnswers).toBe(0);
+      expect(player.longestStreak).toBe(0);
       expect(player.answerAttempt).toBeNull();
     });
   });
@@ -35,20 +37,43 @@ describe('Player', () => {
   });
 
   describe('streak management', () => {
-    it('should increment streak', () => {
+    it('should increment streak and track correctAnswers', () => {
       player.incrementStreak();
       expect(player.streak).toBe(1);
+      expect(player.correctAnswers).toBe(1);
+      expect(player.longestStreak).toBe(1);
 
       player.incrementStreak();
       expect(player.streak).toBe(2);
+      expect(player.correctAnswers).toBe(2);
+      expect(player.longestStreak).toBe(2);
     });
 
-    it('should reset streak', () => {
+    it('should reset streak but keep correctAnswers and longestStreak', () => {
       player.incrementStreak();
       player.incrementStreak();
       player.resetStreak();
 
       expect(player.streak).toBe(0);
+      expect(player.correctAnswers).toBe(2);
+      expect(player.longestStreak).toBe(2);
+    });
+
+    it('should track longestStreak across multiple streaks', () => {
+      // First streak of 3
+      player.incrementStreak();
+      player.incrementStreak();
+      player.incrementStreak();
+      expect(player.longestStreak).toBe(3);
+
+      // Reset and new streak of 2
+      player.resetStreak();
+      player.incrementStreak();
+      player.incrementStreak();
+
+      expect(player.streak).toBe(2);
+      expect(player.correctAnswers).toBe(5);
+      expect(player.longestStreak).toBe(3); // Still 3, not 2
     });
   });
 
@@ -81,14 +106,6 @@ describe('Player', () => {
 
       expect(player.answerAttempt).toBeNull();
       expect(player.hasAnswered()).toBe(false);
-    });
-  });
-
-  describe('updateSocketId', () => {
-    it('should update socket id', () => {
-      player.updateSocketId('new-socket-id');
-
-      expect(player.socketId).toBe('new-socket-id');
     });
   });
 

@@ -2,7 +2,7 @@ const { Nickname } = require('../value-objects/Nickname');
 const { Score } = require('../value-objects/Score');
 
 class Player {
-  constructor({ id, socketId, nickname, roomPin, playerToken = null, score = 0, streak = 0, joinedAt = new Date() }) {
+  constructor({ id, socketId, nickname, roomPin, playerToken = null, score = 0, streak = 0, correctAnswers = 0, longestStreak = 0, joinedAt = new Date() }) {
     this.id = id;
     this.socketId = socketId;
     this._nickname = nickname instanceof Nickname ? nickname : new Nickname(nickname);
@@ -10,6 +10,8 @@ class Player {
     this.playerToken = playerToken;
     this._score = score instanceof Score ? score : new Score(score);
     this.streak = streak;
+    this.correctAnswers = correctAnswers;
+    this.longestStreak = longestStreak;
     this.joinedAt = joinedAt;
     this.answerAttempt = null; // Current question's answer attempt
     this.disconnectedAt = null;
@@ -29,6 +31,10 @@ class Player {
 
   incrementStreak() {
     this.streak++;
+    this.correctAnswers++;
+    if (this.streak > this.longestStreak) {
+      this.longestStreak = this.streak;
+    }
   }
 
   resetStreak() {
@@ -49,10 +55,6 @@ class Player {
 
   hasAnswered() {
     return this.answerAttempt !== null;
-  }
-
-  updateSocketId(newSocketId) {
-    this.socketId = newSocketId;
   }
 
   setDisconnected() {

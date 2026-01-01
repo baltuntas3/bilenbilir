@@ -7,20 +7,26 @@
 const { PIN } = require('../value-objects/PIN');
 
 const RoomState = {
-  IDLE: 'IDLE',
   WAITING_PLAYERS: 'WAITING_PLAYERS',
-  GAME_STARTING: 'GAME_STARTING',
   QUESTION_INTRO: 'QUESTION_INTRO',
   ANSWERING_PHASE: 'ANSWERING_PHASE',
-  CALCULATING: 'CALCULATING',
   SHOW_RESULTS: 'SHOW_RESULTS',
   LEADERBOARD: 'LEADERBOARD',
-  PODIUM: 'PODIUM',
-  ARCHIVED: 'ARCHIVED'
+  PODIUM: 'PODIUM'
+};
+
+// Valid state transitions map
+const validTransitions = {
+  [RoomState.WAITING_PLAYERS]: [RoomState.QUESTION_INTRO],
+  [RoomState.QUESTION_INTRO]: [RoomState.ANSWERING_PHASE],
+  [RoomState.ANSWERING_PHASE]: [RoomState.SHOW_RESULTS],
+  [RoomState.SHOW_RESULTS]: [RoomState.LEADERBOARD],
+  [RoomState.LEADERBOARD]: [RoomState.QUESTION_INTRO, RoomState.PODIUM],
+  [RoomState.PODIUM]: [] // Terminal state
 };
 
 class Room {
-  constructor({ id, pin, hostId, hostToken, quizId, state = RoomState.IDLE, currentQuestionIndex = 0, createdAt = new Date() }) {
+  constructor({ id, pin, hostId, hostToken, quizId, state = RoomState.WAITING_PLAYERS, currentQuestionIndex = 0, createdAt = new Date() }) {
     this.id = id;
     this._pin = pin instanceof PIN ? pin : new PIN(pin);
     this.hostId = hostId;
@@ -146,7 +152,6 @@ class Room {
     if (this.players.length === 0) {
       throw new Error('At least one player required');
     }
-    this.state = RoomState.GAME_STARTING;
   }
 
   nextQuestion(requesterId, totalQuestions) {
@@ -163,6 +168,10 @@ class Room {
   }
 
   setState(newState) {
+    const allowedTransitions = validTransitions[this.state];
+    if (!allowedTransitions || !allowedTransitions.includes(newState)) {
+      throw new Error(`Invalid state transition: ${this.state} → ${newState}`);
+    }
     this.state = newState;
   }
 
