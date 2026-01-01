@@ -59,6 +59,19 @@ class GameUseCases {
   }
 
   /**
+   * Clear all pending answers for a room
+   * @private
+   */
+  _clearPendingAnswersForRoom(pin) {
+    const prefix = `${pin}:`;
+    for (const key of this.pendingAnswers.keys()) {
+      if (key.startsWith(prefix)) {
+        this.pendingAnswers.delete(key);
+      }
+    }
+  }
+
+  /**
    * Get current question (called after intro timer)
    */
   async getCurrentQuestion({ pin }) {
@@ -96,7 +109,7 @@ class GameUseCases {
     room.clearAllAnswerAttempts();
 
     // Clear pending answers for this room
-    this.pendingAnswers.delete(pin);
+    this._clearPendingAnswersForRoom(pin);
 
     await this.roomRepository.save(room);
 
@@ -343,6 +356,9 @@ class GameUseCases {
     };
 
     const session = await this.gameSessionRepository.save(sessionData);
+
+    // Clean up pending answers for this room
+    this._clearPendingAnswersForRoom(pin);
 
     // Delete room after archiving
     await this.roomRepository.delete(pin);

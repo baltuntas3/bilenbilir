@@ -115,7 +115,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       if (result.allAnswered) {
         timerService.stopTimer(pin);
-        socket.to(pin).emit('all_players_answered');
+        io.to(pin).emit('all_players_answered');
       }
     } catch (error) {
       socket.emit('error', { message: error.message });
