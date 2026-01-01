@@ -52,13 +52,6 @@ class RoomRepository {
     return this.rooms.has(pin);
   }
 
-  async findByHostId(hostId) {
-    for (const room of this.rooms.values()) {
-      if (room.hostId === hostId) return room;
-    }
-    return null;
-  }
-
   async getAll() {
     return Array.from(this.rooms.values());
   }

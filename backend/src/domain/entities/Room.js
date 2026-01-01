@@ -135,6 +135,11 @@ class Room {
       throw new UnauthorizedError('Invalid player token');
     }
 
+    // Check if token has expired
+    if (player.isTokenExpired()) {
+      throw new UnauthorizedError('Player token has expired');
+    }
+
     // Check if player exceeded grace period
     if (gracePeriodMs !== null && player.isDisconnected()) {
       const disconnectedDuration = player.getDisconnectedDuration();
@@ -174,6 +179,13 @@ class Room {
 
   getPlayerCount() {
     return this.players.length;
+  }
+
+  /**
+   * Get count of connected (non-disconnected) players
+   */
+  getConnectedPlayerCount() {
+    return this.players.filter(p => !p.isDisconnected()).length;
   }
 
   getAllPlayers() {

@@ -1,10 +1,11 @@
 const { Quiz, Question } = require('../../domain/entities');
 const { generateId } = require('../../shared/utils/generateId');
-const { NotFoundError, ForbiddenError } = require('../../shared/errors');
+const { NotFoundError, ForbiddenError, ConflictError } = require('../../shared/errors');
 
 class QuizUseCases {
-  constructor(quizRepository) {
+  constructor(quizRepository, roomRepository = null) {
     this.quizRepository = quizRepository;
+    this.roomRepository = roomRepository;
   }
 
   /**
@@ -115,10 +116,20 @@ class QuizUseCases {
 
   /**
    * Delete quiz
+   * Checks for active games using this quiz before deletion
    */
   async deleteQuiz({ quizId, requesterId }) {
     const quiz = await this._getQuizOrThrow(quizId);
     this._validateQuizOwnership(quiz, requesterId);
+
+    // Check for active games using this quiz
+    if (this.roomRepository) {
+      const rooms = await this.roomRepository.getAll();
+      const activeGame = rooms.find(room => room.quizId === quizId);
+      if (activeGame) {
+        throw new ConflictError('Cannot delete quiz while it is being used in an active game');
+      }
+    }
 
     await this.quizRepository.delete(quizId);
     return { success: true };

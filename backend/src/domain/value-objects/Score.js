@@ -14,11 +14,6 @@ class Score {
     return new Score(this.value + points);
   }
 
-  subtract(points) {
-    const newValue = this.value - points;
-    return new Score(Math.max(0, newValue));
-  }
-
   isGreaterThan(other) {
     if (!(other instanceof Score)) {
       throw new Error('Can only compare with another Score');

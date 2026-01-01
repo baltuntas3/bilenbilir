@@ -1,4 +1,8 @@
+const MAX_QUESTIONS = 50;
+
 class Quiz {
+  static MAX_QUESTIONS = MAX_QUESTIONS;
+
   constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, createdAt = new Date() }) {
     if (!id) {
       throw new Error('Quiz id is required');
@@ -17,6 +21,10 @@ class Quiz {
     this.questions = Array.isArray(questions) ? questions : [];
     this.isPublic = Boolean(isPublic);
     this.createdAt = createdAt;
+
+    if (this.questions.length > MAX_QUESTIONS) {
+      throw new Error(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
+    }
   }
 
   updateTitle(newTitle) {
@@ -35,6 +43,9 @@ class Quiz {
   }
 
   addQuestion(question) {
+    if (this.questions.length >= MAX_QUESTIONS) {
+      throw new Error(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
+    }
     this.questions.push(question);
   }
 

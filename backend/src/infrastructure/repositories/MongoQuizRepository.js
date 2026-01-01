@@ -150,7 +150,12 @@ class MongoQuizRepository {
   }
 
   async incrementPlayCount(id) {
-    await QuizModel.findByIdAndUpdate(id, { $inc: { playCount: 1 } });
+    try {
+      await QuizModel.findByIdAndUpdate(id, { $inc: { playCount: 1 } });
+    } catch (error) {
+      // Log error but don't throw - play count is non-critical
+      console.error('Failed to increment play count:', error.message);
+    }
   }
 }
 

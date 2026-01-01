@@ -32,11 +32,6 @@ class Nickname {
     }
   }
 
-  equals(other) {
-    if (!(other instanceof Nickname)) return false;
-    return this.value.toLowerCase() === other.value.toLowerCase();
-  }
-
   toString() {
     return this.value;
   }

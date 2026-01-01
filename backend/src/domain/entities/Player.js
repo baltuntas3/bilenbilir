@@ -1,13 +1,19 @@
 const { Nickname } = require('../value-objects/Nickname');
 const { Score } = require('../value-objects/Score');
 
+// Token expires after 24 hours
+const TOKEN_EXPIRATION_MS = 24 * 60 * 60 * 1000;
+
 class Player {
-  constructor({ id, socketId, nickname, roomPin, playerToken = null, score = 0, streak = 0, correctAnswers = 0, longestStreak = 0, joinedAt = new Date() }) {
+  static TOKEN_EXPIRATION_MS = TOKEN_EXPIRATION_MS;
+
+  constructor({ id, socketId, nickname, roomPin, playerToken = null, tokenCreatedAt = null, score = 0, streak = 0, correctAnswers = 0, longestStreak = 0, joinedAt = new Date() }) {
     this.id = id;
     this.socketId = socketId;
     this._nickname = nickname instanceof Nickname ? nickname : new Nickname(nickname);
     this.roomPin = roomPin;
     this.playerToken = playerToken;
+    this.tokenCreatedAt = tokenCreatedAt || (playerToken ? new Date() : null);
     this._score = score instanceof Score ? score : new Score(score);
     this.streak = streak;
     this.correctAnswers = correctAnswers;
@@ -67,7 +73,17 @@ class Player {
     // Rotate token on reconnect for security
     if (newToken) {
       this.playerToken = newToken;
+      this.tokenCreatedAt = new Date();
     }
+  }
+
+  /**
+   * Check if the player token has expired
+   * @returns {boolean} True if token is expired
+   */
+  isTokenExpired() {
+    if (!this.tokenCreatedAt) return false;
+    return Date.now() - this.tokenCreatedAt.getTime() > TOKEN_EXPIRATION_MS;
   }
 
   isDisconnected() {

@@ -61,15 +61,17 @@ const quizSchema = new mongoose.Schema({
   },
   questions: {
     type: [questionSchema],
-    default: []
+    default: [],
+    validate: {
+      validator: function(v) {
+        return v.length <= 50;
+      },
+      message: 'Quiz cannot have more than 50 questions'
+    }
   },
   isPublic: {
     type: Boolean,
     default: false
-  },
-  category: {
-    type: String,
-    default: 'General'
   },
   playCount: {
     type: Number,
@@ -82,7 +84,6 @@ const quizSchema = new mongoose.Schema({
 // Indexes
 quizSchema.index({ createdBy: 1 });
 quizSchema.index({ isPublic: 1 });
-quizSchema.index({ category: 1 });
 quizSchema.index({ createdAt: -1 });
 
 // Virtual for question count

@@ -66,28 +66,6 @@ describe('Nickname', () => {
     });
   });
 
-  describe('equals', () => {
-    it('should return true for same nickname (case insensitive)', () => {
-      const nickname1 = new Nickname('Player1');
-      const nickname2 = new Nickname('player1');
-
-      expect(nickname1.equals(nickname2)).toBe(true);
-    });
-
-    it('should return false for different nicknames', () => {
-      const nickname1 = new Nickname('Player1');
-      const nickname2 = new Nickname('Player2');
-
-      expect(nickname1.equals(nickname2)).toBe(false);
-    });
-
-    it('should return false for non-Nickname object', () => {
-      const nickname = new Nickname('Player1');
-
-      expect(nickname.equals('Player1')).toBe(false);
-    });
-  });
-
   describe('toString', () => {
     it('should return nickname value', () => {
       const nickname = new Nickname('Player1');

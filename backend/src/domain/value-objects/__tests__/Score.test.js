@@ -54,23 +54,6 @@ describe('Score', () => {
     });
   });
 
-  describe('subtract', () => {
-    it('should return new Score with subtracted points', () => {
-      const score = new Score(500);
-      const newScore = score.subtract(200);
-
-      expect(newScore.value).toBe(300);
-      expect(score.value).toBe(500); // Original unchanged
-    });
-
-    it('should not go below 0', () => {
-      const score = new Score(100);
-      const newScore = score.subtract(500);
-
-      expect(newScore.value).toBe(0);
-    });
-  });
-
   describe('isGreaterThan', () => {
     it('should return true when greater', () => {
       const score1 = new Score(500);

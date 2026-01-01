@@ -1,11 +1,27 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { UnauthorizedError } = require('../../shared/errors');
+const { socketRateLimiter } = require('../middlewares/socketRateLimiter');
 
 /**
  * Game WebSocket Handler
  * Handles game flow: start, questions, answers, results
  */
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
+  /**
+   * Rate limit check helper
+   * @private
+   */
+  const checkRateLimit = (eventName) => {
+    const result = socketRateLimiter.checkLimit(socket.id, eventName);
+    if (!result.allowed) {
+      socket.emit('error', {
+        error: 'Too many requests',
+        retryAfter: result.retryAfter
+      });
+      return false;
+    }
+    return true;
+  };
   /**
    * Ensure socket is authenticated (has valid JWT)
    * Required for host operations
@@ -90,6 +106,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   // Player submits answer
   socket.on('submit_answer', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('submit_answer')) return;
+
       const { pin, answerIndex } = data || {};
 
       // Check if timer has expired (server-side validation)

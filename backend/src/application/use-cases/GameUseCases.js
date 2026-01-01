@@ -61,6 +61,12 @@ class GameUseCases {
 
     room.startGame(requesterId); // Entity validates host and state
 
+    // Validate at least one connected player exists
+    const connectedPlayers = room.getConnectedPlayerCount();
+    if (connectedPlayers === 0) {
+      throw new ValidationError('Cannot start game with no connected players');
+    }
+
     // Create immutable quiz snapshot for the game session
     // This prevents mid-game modifications from affecting the ongoing game
     const quizSnapshot = quiz.clone();
@@ -365,19 +371,53 @@ class GameUseCases {
 
     const room = await this._getRoomOrThrow(pin);
     const leaderboard = room.getLeaderboard();
+    const answerHistory = room.getAnswerHistory();
 
-    // Build player results
-    const playerResults = leaderboard.map((player, index) => ({
-      nickname: player.nickname,
-      rank: index + 1,
-      score: player.score,
-      correctAnswers: player.correctAnswers,
-      longestStreak: player.longestStreak
-    }));
+    // Calculate per-player statistics
+    const playerStats = new Map();
+    for (const answer of answerHistory) {
+      if (!playerStats.has(answer.playerNickname)) {
+        playerStats.set(answer.playerNickname, {
+          correctCount: 0,
+          wrongCount: 0,
+          totalResponseTime: 0,
+          answerCount: 0
+        });
+      }
+      const stats = playerStats.get(answer.playerNickname);
+      stats.answerCount++;
+      stats.totalResponseTime += answer.elapsedTimeMs || 0;
+      if (answer.isCorrect) {
+        stats.correctCount++;
+      } else {
+        stats.wrongCount++;
+      }
+    }
+
+    // Build player results with calculated wrongAnswers and averageResponseTime
+    const playerResults = leaderboard.map((player, index) => {
+      const stats = playerStats.get(player.nickname) || {
+        correctCount: 0,
+        wrongCount: 0,
+        totalResponseTime: 0,
+        answerCount: 0
+      };
+      return {
+        nickname: player.nickname,
+        rank: index + 1,
+        score: player.score,
+        correctAnswers: player.correctAnswers,
+        wrongAnswers: stats.wrongCount,
+        averageResponseTime: stats.answerCount > 0
+          ? Math.round(stats.totalResponseTime / stats.answerCount)
+          : 0,
+        longestStreak: player.longestStreak
+      };
+    });
 
     // Get all recorded answers from the game
     // Map to GameSession schema field names for consistency
-    const answers = room.getAnswerHistory().map(answer => ({
+    const answers = answerHistory.map(answer => ({
       nickname: answer.playerNickname,
       questionIndex: answer.questionIndex,
       answerIndex: answer.answerIndex,

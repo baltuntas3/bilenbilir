@@ -1,12 +1,29 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { ConflictError, UnauthorizedError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
+const { socketRateLimiter } = require('../middlewares/socketRateLimiter');
 
 /**
  * Room WebSocket Handler
  * Handles room creation, joining, and leaving
  */
 const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
+  /**
+   * Rate limit check helper
+   * @private
+   */
+  const checkRateLimit = (eventName) => {
+    const result = socketRateLimiter.checkLimit(socket.id, eventName);
+    if (!result.allowed) {
+      socket.emit('error', {
+        error: 'Too many requests',
+        retryAfter: result.retryAfter
+      });
+      return false;
+    }
+    return true;
+  };
+
   /**
    * Ensure socket is authenticated (has valid JWT)
    * Required for host operations
@@ -33,6 +50,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Host creates a room (requires authentication)
   socket.on('create_room', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('create_room')) return;
+
       const user = requireAuth(); // JWT required for host
       const { quizId } = data || {};
       await ensureNotInRoom();
@@ -59,6 +79,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Player joins a room
   socket.on('join_room', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('join_room')) return;
+
       const { pin, nickname } = sanitizeObject(data || {});
       await ensureNotInRoom();
 
@@ -196,6 +219,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Player reconnects to room
   socket.on('reconnect_player', async (data) => {
     try {
+      // Rate limit check
+      if (!checkRateLimit('reconnect_player')) return;
+
       const { pin, playerToken } = data || {};
 
       const result = await roomUseCases.reconnectPlayer({
