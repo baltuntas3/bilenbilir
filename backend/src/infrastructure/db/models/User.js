@@ -41,9 +41,7 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for faster queries
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
+// Note: email and username indexes are automatically created by unique: true
 
 const User = mongoose.model('User', userSchema);
 
