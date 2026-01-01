@@ -131,4 +131,4 @@ const getTimerService = () => {
   return timerService;
 };
 
-module.exports = { initializeSocket, getIO, stopCleanupService, stopTimerService, stopRateLimiter, getTimerService };
+module.exports = { initializeSocket, getIO, stopCleanupService, stopTimerService, stopRateLimiter, getTimerService, gameUseCases };

@@ -5,7 +5,7 @@ const http = require('http');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const connectDB = require('./src/infrastructure/db/connection');
-const { initializeSocket, stopCleanupService, stopTimerService, stopRateLimiter } = require('./src/infrastructure/ws/socket');
+const { initializeSocket, stopCleanupService, stopTimerService, stopRateLimiter, gameUseCases } = require('./src/infrastructure/ws/socket');
 const { quizRoutes, authRoutes, gameRoutes } = require('./src/api/routes');
 const { errorHandler } = require('./src/api/middlewares/errorHandler');
 const { sanitize } = require('./src/api/middlewares/sanitizeMiddleware');
@@ -65,19 +65,28 @@ const gracefulShutdown = async (signal) => {
       console.log('HTTP server closed');
     });
 
-    // 2. Stop all background services
+    // 2. Save all active games as interrupted before shutdown
+    console.log('Saving interrupted games...');
+    try {
+      const { saved, failed } = await gameUseCases.saveAllInterruptedGames('server_shutdown');
+      console.log(`Interrupted games saved: ${saved}, failed: ${failed}`);
+    } catch (err) {
+      console.error('Error saving interrupted games:', err.message);
+    }
+
+    // 3. Stop all background services
     console.log('Stopping background services...');
     stopCleanupService();
     stopTimerService();
     stopRateLimiter();
 
-    // 3. Close Socket.IO connections
+    // 4. Close Socket.IO connections
     if (io) {
       io.disconnectSockets(true);
       console.log('Socket.IO connections closed');
     }
 
-    // 4. Close MongoDB connection
+    // 5. Close MongoDB connection
     await mongoose.connection.close();
     console.log('MongoDB connection closed');
 

@@ -109,8 +109,11 @@ class RoomUseCases {
 
   /**
    * Create a new room for a quiz
+   * @param {string} hostId - Socket ID of the host
+   * @param {string} hostUserId - MongoDB User ID of the authenticated host (for archiving)
+   * @param {string} quizId - Quiz ID to use for the game
    */
-  async createRoom({ hostId, quizId }) {
+  async createRoom({ hostId, hostUserId, quizId }) {
     const quiz = await this._getQuizOrThrow(quizId);
 
     // Generate unique PIN with exponential backoff info
@@ -132,6 +135,7 @@ class RoomUseCases {
       id: generateId(),
       pin, // Pass PIN Value Object directly
       hostId,
+      hostUserId, // Persistent user ID for game history
       hostToken,
       quizId,
       state: RoomState.WAITING_PLAYERS

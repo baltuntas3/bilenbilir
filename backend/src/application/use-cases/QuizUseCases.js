@@ -3,9 +3,10 @@ const { generateId } = require('../../shared/utils/generateId');
 const { NotFoundError, ForbiddenError, ConflictError } = require('../../shared/errors');
 
 class QuizUseCases {
-  constructor(quizRepository, roomRepository = null) {
+  constructor(quizRepository, roomRepository = null, gameSessionRepository = null) {
     this.quizRepository = quizRepository;
     this.roomRepository = roomRepository;
+    this.gameSessionRepository = gameSessionRepository;
   }
 
   /**
@@ -117,6 +118,7 @@ class QuizUseCases {
   /**
    * Delete quiz
    * Checks for active games using this quiz before deletion
+   * Also deletes related game sessions (cascade delete)
    */
   async deleteQuiz({ quizId, requesterId }) {
     const quiz = await this._getQuizOrThrow(quizId);
@@ -131,8 +133,14 @@ class QuizUseCases {
       }
     }
 
+    // Cascade delete: remove all game sessions for this quiz
+    let deletedSessionsCount = 0;
+    if (this.gameSessionRepository) {
+      deletedSessionsCount = await this.gameSessionRepository.deleteByQuiz(quizId);
+    }
+
     await this.quizRepository.delete(quizId);
-    return { success: true };
+    return { success: true, deletedSessionsCount };
   }
 
   /**

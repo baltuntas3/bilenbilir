@@ -71,6 +71,7 @@ class MongoQuizRepository {
       createdBy: doc.createdBy.toString(),
       questions,
       isPublic: doc.isPublic,
+      playCount: doc.playCount || 0,
       createdAt: doc.createdAt
     });
   }

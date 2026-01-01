@@ -1,17 +1,19 @@
+const { ValidationError, NotFoundError } = require('../../shared/errors');
+
 const MAX_QUESTIONS = 50;
 
 class Quiz {
   static MAX_QUESTIONS = MAX_QUESTIONS;
 
-  constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, createdAt = new Date() }) {
+  constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, playCount = 0, createdAt = new Date() }) {
     if (!id) {
-      throw new Error('Quiz id is required');
+      throw new ValidationError('Quiz id is required');
     }
     if (!title || !title.trim()) {
-      throw new Error('Quiz title is required');
+      throw new ValidationError('Quiz title is required');
     }
     if (!createdBy) {
-      throw new Error('Quiz createdBy is required');
+      throw new ValidationError('Quiz createdBy is required');
     }
 
     this.id = id;
@@ -20,16 +22,17 @@ class Quiz {
     this.createdBy = createdBy;
     this.questions = Array.isArray(questions) ? questions : [];
     this.isPublic = Boolean(isPublic);
+    this.playCount = Math.max(0, playCount || 0);
     this.createdAt = createdAt;
 
     if (this.questions.length > MAX_QUESTIONS) {
-      throw new Error(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
+      throw new ValidationError(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
     }
   }
 
   updateTitle(newTitle) {
     if (!newTitle || !newTitle.trim()) {
-      throw new Error('Quiz title is required');
+      throw new ValidationError('Quiz title is required');
     }
     this.title = newTitle.trim();
   }
@@ -44,7 +47,7 @@ class Quiz {
 
   addQuestion(question) {
     if (this.questions.length >= MAX_QUESTIONS) {
-      throw new Error(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
+      throw new ValidationError(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
     }
     this.questions.push(question);
   }
@@ -75,7 +78,7 @@ class Quiz {
   getQuestionOrThrow(index) {
     const question = this.getQuestion(index);
     if (!question) {
-      throw new Error(`Question at index ${index} not found`);
+      throw new NotFoundError(`Question at index ${index} not found`);
     }
     return question;
   }
@@ -87,7 +90,7 @@ class Quiz {
   reorderQuestions(newOrder) {
     const reordered = newOrder.map(id => this.questions.find(q => q.id === id));
     if (reordered.some(q => !q)) {
-      throw new Error('Invalid question order');
+      throw new ValidationError('Invalid question order');
     }
     this.questions = reordered;
   }
@@ -123,6 +126,7 @@ class Quiz {
       createdBy: this.createdBy,
       questions: frozenQuestions,
       isPublic: this.isPublic,
+      playCount: this.playCount,
       createdAt: clonedCreatedAt
     });
 

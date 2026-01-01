@@ -7,6 +7,8 @@
 const { PIN } = require('../value-objects/PIN');
 const { ValidationError, ForbiddenError, UnauthorizedError, ConflictError } = require('../../shared/errors');
 
+const MAX_PLAYERS = 50;
+
 const RoomState = {
   WAITING_PLAYERS: 'WAITING_PLAYERS',
   QUESTION_INTRO: 'QUESTION_INTRO',
@@ -27,10 +29,13 @@ const validTransitions = {
 };
 
 class Room {
-  constructor({ id, pin, hostId, hostToken, quizId, state = RoomState.WAITING_PLAYERS, currentQuestionIndex = 0, createdAt = new Date() }) {
+  static MAX_PLAYERS = MAX_PLAYERS;
+
+  constructor({ id, pin, hostId, hostUserId, hostToken, quizId, state = RoomState.WAITING_PLAYERS, currentQuestionIndex = 0, createdAt = new Date() }) {
     this.id = id;
     this._pin = pin instanceof PIN ? pin : new PIN(pin);
-    this.hostId = hostId;
+    this.hostId = hostId; // Socket ID (changes on reconnect)
+    this.hostUserId = hostUserId; // MongoDB User ID (persistent, for archiving)
     this.hostToken = hostToken;
     this.quizId = quizId;
     this.state = state;
@@ -148,6 +153,10 @@ class Room {
   addPlayer(player) {
     if (this.state !== RoomState.WAITING_PLAYERS) {
       throw new ValidationError('Players can only join during lobby phase');
+    }
+
+    if (this.players.length >= MAX_PLAYERS) {
+      throw new ValidationError(`Room is full (maximum ${MAX_PLAYERS} players)`);
     }
 
     // Use Player's VO-backed case-insensitive comparison
@@ -349,11 +358,41 @@ class Room {
 
   /**
    * Record an answer for archiving
+   * Validates required fields to ensure data integrity
    * @param {object} answerData - Answer data to record
+   * @param {string} answerData.playerId - Player ID
+   * @param {string} answerData.playerNickname - Player nickname
+   * @param {string} answerData.questionId - Question ID
+   * @param {number} answerData.answerIndex - Selected answer index
+   * @param {boolean} answerData.isCorrect - Whether answer was correct
+   * @param {number} answerData.elapsedTimeMs - Response time in milliseconds
+   * @param {number} answerData.score - Points earned
+   * @param {number} [answerData.streak] - Current streak (optional)
    */
   recordAnswer(answerData) {
+    // Validate required fields
+    if (!answerData || typeof answerData !== 'object') {
+      throw new ValidationError('Answer data is required');
+    }
+    if (!answerData.playerNickname || typeof answerData.playerNickname !== 'string') {
+      throw new ValidationError('Player nickname is required for answer record');
+    }
+    if (typeof answerData.answerIndex !== 'number' || answerData.answerIndex < 0) {
+      throw new ValidationError('Valid answer index is required');
+    }
+    if (typeof answerData.isCorrect !== 'boolean') {
+      throw new ValidationError('isCorrect must be a boolean');
+    }
+
     this.answerHistory.push({
-      ...answerData,
+      playerId: answerData.playerId,
+      playerNickname: answerData.playerNickname,
+      questionId: answerData.questionId,
+      answerIndex: answerData.answerIndex,
+      isCorrect: answerData.isCorrect,
+      elapsedTimeMs: Math.max(0, answerData.elapsedTimeMs || 0),
+      score: Math.max(0, answerData.score || 0),
+      streak: Math.max(0, answerData.streak || 0),
       questionIndex: this.currentQuestionIndex,
       timestamp: new Date()
     });

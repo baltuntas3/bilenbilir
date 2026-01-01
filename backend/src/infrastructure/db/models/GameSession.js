@@ -119,6 +119,19 @@ const gameSessionSchema = new mongoose.Schema({
       'interrupted'  // Server restart or unexpected termination
     ],
     default: 'completed'
+  },
+  // Fields for interrupted game recovery
+  interruptionReason: {
+    type: String,
+    default: null
+  },
+  lastQuestionIndex: {
+    type: Number,
+    default: null
+  },
+  lastState: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

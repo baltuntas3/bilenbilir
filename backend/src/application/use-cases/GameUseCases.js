@@ -500,7 +500,7 @@ class GameUseCases {
       const sessionData = {
         pin: room.pin,
         quiz: room.quizId,
-        host: room.hostId,
+        host: room.hostUserId, // Use persistent User ID, not socket ID
         playerCount: room.getPlayerCount(),
         playerResults,
         answers,
@@ -528,6 +528,171 @@ class GameUseCases {
       // Always release the archive lock
       this.pendingArchives.delete(pin);
     }
+  }
+
+  /**
+   * Save an interrupted game session
+   * Used when server shuts down or game is interrupted unexpectedly
+   * @param {string} pin - Room PIN
+   * @param {string} reason - Reason for interruption ('server_shutdown', 'host_timeout', 'error', etc.)
+   */
+  async saveInterruptedGame({ pin, reason = 'unknown' }) {
+    if (!this.gameSessionRepository) {
+      return null;
+    }
+
+    // Check if already being archived
+    if (this.pendingArchives.has(pin)) {
+      return null;
+    }
+    this.pendingArchives.set(pin, true);
+
+    try {
+      const room = await this.roomRepository.findByPin(pin);
+      if (!room) {
+        return null;
+      }
+
+      // Only save if game has actually started
+      if (!room.hasQuizSnapshot()) {
+        return null;
+      }
+
+      const leaderboard = room.getLeaderboard();
+      const answerHistory = room.getAnswerHistory();
+
+      // Calculate per-player statistics
+      const playerStats = new Map();
+      for (const answer of answerHistory) {
+        if (!answer || !answer.playerNickname) continue;
+
+        if (!playerStats.has(answer.playerNickname)) {
+          playerStats.set(answer.playerNickname, {
+            correctCount: 0,
+            wrongCount: 0,
+            totalResponseTime: 0,
+            answerCount: 0
+          });
+        }
+        const stats = playerStats.get(answer.playerNickname);
+        stats.answerCount++;
+        stats.totalResponseTime += answer.elapsedTimeMs || 0;
+        if (answer.isCorrect) {
+          stats.correctCount++;
+        } else {
+          stats.wrongCount++;
+        }
+      }
+
+      const playerResults = leaderboard.map((player, index) => {
+        const stats = playerStats.get(player.nickname) || {
+          correctCount: 0,
+          wrongCount: 0,
+          totalResponseTime: 0,
+          answerCount: 0
+        };
+        return {
+          nickname: player.nickname,
+          rank: index + 1,
+          score: player.score,
+          correctAnswers: player.correctAnswers,
+          wrongAnswers: stats.wrongCount,
+          averageResponseTime: stats.answerCount > 0
+            ? Math.round(stats.totalResponseTime / stats.answerCount)
+            : 0,
+          longestStreak: player.longestStreak
+        };
+      });
+
+      const answers = answerHistory.map(answer => ({
+        nickname: answer.playerNickname,
+        questionIndex: answer.questionIndex,
+        answerIndex: answer.answerIndex,
+        isCorrect: answer.isCorrect,
+        responseTimeMs: answer.elapsedTimeMs,
+        score: answer.score,
+        streak: answer.streak || 0
+      }));
+
+      const sessionData = {
+        pin: room.pin,
+        quiz: room.quizId,
+        host: room.hostUserId,
+        playerCount: room.getPlayerCount(),
+        playerResults,
+        answers,
+        startedAt: room.getGameStartedAt() || room.createdAt,
+        endedAt: new Date(),
+        status: 'interrupted',
+        interruptionReason: reason,
+        lastQuestionIndex: room.currentQuestionIndex,
+        lastState: room.state
+      };
+
+      const session = await this.gameSessionRepository.save(sessionData);
+
+      // Clean up
+      this._clearPendingAnswersForRoom(pin);
+
+      try {
+        await this.roomRepository.delete(pin);
+      } catch (err) {
+        console.error(`Failed to delete interrupted room ${pin}:`, err.message);
+      }
+
+      return { session };
+    } finally {
+      this.pendingArchives.delete(pin);
+    }
+  }
+
+  /**
+   * Save all active games as interrupted (for graceful shutdown)
+   * @param {string} reason - Reason for interruption
+   * @returns {Promise<{saved: number, failed: number}>}
+   */
+  async saveAllInterruptedGames(reason = 'server_shutdown') {
+    const rooms = await this.roomRepository.getAll();
+    let saved = 0;
+    let failed = 0;
+
+    for (const room of rooms) {
+      // Only save games that have started
+      if (room.hasQuizSnapshot()) {
+        try {
+          const result = await this.saveInterruptedGame({ pin: room.pin, reason });
+          if (result) saved++;
+        } catch (err) {
+          console.error(`Failed to save interrupted game ${room.pin}:`, err.message);
+          failed++;
+        }
+      }
+    }
+
+    return { saved, failed };
+  }
+
+  /**
+   * Get interrupted games for a host (for potential recovery/review)
+   * @param {string} hostId - Host user ID
+   * @param {Object} options - Pagination options
+   */
+  async getInterruptedGames({ hostId, page = 1, limit = 20 }) {
+    if (!this.gameSessionRepository) {
+      return { sessions: [], pagination: { page, limit, total: 0, totalPages: 0, hasMore: false } };
+    }
+
+    const result = await this.gameSessionRepository.findByHost(hostId, { page, limit });
+
+    // Filter to only interrupted games
+    const interruptedSessions = result.sessions.filter(
+      session => session.status === 'interrupted'
+    );
+
+    return {
+      sessions: interruptedSessions,
+      pagination: result.pagination
+    };
   }
 }
 
