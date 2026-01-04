@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TextInput, Button, Stack, Title, Text, Paper, Container, Center, PinInput, Group } from '@mantine/core';
+import { TextInput, Button, Stack, Title, Text, Paper, Container, Center, PinInput, Group, Divider } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconUsers } from '@tabler/icons-react';
+import { IconUsers, IconEye } from '@tabler/icons-react';
 import { useGame } from '../context/GameContext';
 import { showToast } from '../utils/toast';
 
 export default function JoinGame() {
   const navigate = useNavigate();
-  const { joinRoom } = useGame();
+  const { joinRoom, joinAsSpectator } = useGame();
   const [loading, setLoading] = useState(false);
+  const [spectatorLoading, setSpectatorLoading] = useState(false);
   const [step, setStep] = useState('pin'); // 'pin' or 'nickname'
   const [pin, setPin] = useState('');
 
@@ -49,6 +50,23 @@ export default function JoinGame() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleJoinAsSpectator = async (values) => {
+    setSpectatorLoading(true);
+    try {
+      await joinAsSpectator(pin, values.nickname.trim());
+      showToast.success('Joined as spectator!');
+      navigate('/spectate');
+    } catch (error) {
+      showToast.error(error.message || 'Failed to join as spectator');
+      if (error.message?.includes('Room not found') || error.message?.includes('Invalid PIN')) {
+        setStep('pin');
+        setPin('');
+      }
+    } finally {
+      setSpectatorLoading(false);
     }
   };
 
@@ -116,6 +134,19 @@ export default function JoinGame() {
                     loading={loading}
                   >
                     Join Game
+                  </Button>
+
+                  <Divider label="or" labelPosition="center" />
+
+                  <Button
+                    variant="light"
+                    fullWidth
+                    size="md"
+                    loading={spectatorLoading}
+                    leftSection={<IconEye size={18} />}
+                    onClick={() => form.onSubmit(handleJoinAsSpectator)()}
+                  >
+                    Watch as Spectator
                   </Button>
                 </Stack>
               </form>

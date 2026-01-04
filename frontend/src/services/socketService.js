@@ -8,6 +8,18 @@ class SocketService {
     this.listeners = new Map();
     this.connectionPromise = null;
     this.currentSocketId = null;
+    this.reconnectCallback = null;
+    this.disconnectCallback = null;
+  }
+
+  // Set callback for auto-reconnection
+  setReconnectCallback(callback) {
+    this.reconnectCallback = callback;
+  }
+
+  // Set callback for disconnect notification
+  setDisconnectCallback(callback) {
+    this.disconnectCallback = callback;
   }
 
   connect(token = null) {
@@ -41,12 +53,10 @@ class SocketService {
 
       this.socket.on('connect', () => {
         clearTimeout(timeout);
-        console.log('Socket connected:', this.socket.id);
         this.currentSocketId = this.socket.id;
 
         // Re-attach stored listeners if this is a new socket
         if (hadPreviousSocket && this.listeners.size > 0) {
-          console.log('Re-attaching listeners to new socket...');
           this.listeners.forEach((callbacks, event) => {
             callbacks.forEach(callback => {
               this.socket.on(event, callback);
@@ -59,14 +69,21 @@ class SocketService {
 
       this.socket.on('connect_error', (error) => {
         clearTimeout(timeout);
-        console.error('Socket connection error:', error.message);
         reject(error);
       });
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
       this.connectionPromise = null;
+      if (this.disconnectCallback) {
+        this.disconnectCallback(reason);
+      }
+    });
+
+    this.socket.on('reconnect', () => {
+      if (this.reconnectCallback) {
+        this.reconnectCallback();
+      }
     });
 
     return this.connectionPromise;

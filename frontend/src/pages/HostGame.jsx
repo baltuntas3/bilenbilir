@@ -19,6 +19,7 @@ import {
   IconChartBar,
   IconTrophy,
   IconUsers,
+  IconPlayerPause,
 } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
@@ -49,6 +50,8 @@ export default function HostGame() {
     showLeaderboard,
     nextQuestion,
     closeRoom,
+    pauseGame,
+    resumeGame,
   } = useGame();
 
   // Redirect if not host
@@ -94,6 +97,22 @@ export default function HostGame() {
     try {
       await closeRoom();
       navigate('/my-quizzes');
+    } catch (error) {
+      showToast.error(error.message);
+    }
+  };
+
+  const handlePauseGame = async () => {
+    try {
+      await pauseGame();
+    } catch (error) {
+      showToast.error(error.message);
+    }
+  };
+
+  const handleResumeGame = async () => {
+    try {
+      await resumeGame();
     } catch (error) {
       showToast.error(error.message);
     }
@@ -258,7 +277,15 @@ export default function HostGame() {
 
             <Leaderboard players={leaderboard.length > 0 ? leaderboard : players} />
 
-            <Center>
+            <Group justify="center" gap="md">
+              <Button
+                variant="light"
+                color="yellow"
+                leftSection={<IconPlayerPause size={20} />}
+                onClick={handlePauseGame}
+              >
+                Pause Game
+              </Button>
               <Button
                 size="lg"
                 leftSection={
@@ -269,6 +296,34 @@ export default function HostGame() {
                 onClick={handleNextQuestion}
               >
                 {currentQuestionIndex + 1 >= totalQuestions ? 'Show Final Results' : 'Next Question'}
+              </Button>
+            </Group>
+          </Stack>
+        );
+
+      case GAME_STATES.PAUSED:
+        return (
+          <Stack gap="xl">
+            <Center>
+              <Paper p="xl" radius="md" withBorder bg="yellow.0">
+                <Stack align="center" gap="md">
+                  <IconPlayerPause size={48} color="var(--mantine-color-yellow-6)" />
+                  <Title order={2}>Game Paused</Title>
+                  <Text c="dimmed">The game is currently paused. Players are waiting.</Text>
+                </Stack>
+              </Paper>
+            </Center>
+
+            <Leaderboard players={leaderboard.length > 0 ? leaderboard : players} />
+
+            <Center>
+              <Button
+                size="lg"
+                color="green"
+                leftSection={<IconPlayerPlay size={20} />}
+                onClick={handleResumeGame}
+              >
+                Resume Game
               </Button>
             </Center>
           </Stack>

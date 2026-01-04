@@ -24,6 +24,7 @@ import JoinGame from '../pages/JoinGame';
 import HostLobby from '../pages/HostLobby';
 import HostGame from '../pages/HostGame';
 import PlayerGame from '../pages/PlayerGame';
+import SpectatorGame from '../pages/SpectatorGame';
 
 export default function AppRoutes() {
   return (
@@ -48,6 +49,7 @@ export default function AppRoutes() {
       {/* Game Routes */}
       <Route path="/join" element={<JoinGame />} />
       <Route path="/play" element={<PlayerGame />} />
+      <Route path="/spectate" element={<SpectatorGame />} />
       <Route path="/host/:quizId" element={<ProtectedRoute><HostLobby /></ProtectedRoute>} />
       <Route path="/host" element={<ProtectedRoute><HostGame /></ProtectedRoute>} />
     </Routes>
