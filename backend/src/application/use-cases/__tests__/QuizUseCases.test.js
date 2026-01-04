@@ -408,4 +408,494 @@ describe('QuizUseCases', () => {
       })).rejects.toThrow('Not authorized to modify this quiz');
     });
   });
+
+  describe('getQuestions', () => {
+    let quizId;
+
+    beforeEach(async () => {
+      const quizResult = await quizUseCases.createQuiz({
+        title: 'Quiz',
+        createdBy: userId
+      });
+      quizId = quizResult.quiz.id;
+
+      await quizUseCases.addQuestion({
+        quizId,
+        questionData: {
+          text: 'Q1',
+          options: ['A', 'B'],
+          correctAnswerIndex: 0
+        },
+        requesterId: userId
+      });
+
+      await quizUseCases.addQuestion({
+        quizId,
+        questionData: {
+          text: 'Q2',
+          options: ['A', 'B', 'C'],
+          correctAnswerIndex: 1
+        },
+        requesterId: userId
+      });
+    });
+
+    it('should return all questions for a quiz', async () => {
+      const result = await quizUseCases.getQuestions({ quizId });
+
+      expect(result.questions).toHaveLength(2);
+      expect(result.questions[0].text).toBe('Q1');
+      expect(result.questions[1].text).toBe('Q2');
+    });
+
+    it('should throw error for non-existent quiz', async () => {
+      await expect(quizUseCases.getQuestions({ quizId: 'non-existent' }))
+        .rejects.toThrow('Quiz not found');
+    });
+  });
+
+  describe('updateQuestion', () => {
+    let quizId;
+    let questionId;
+
+    beforeEach(async () => {
+      const quizResult = await quizUseCases.createQuiz({
+        title: 'Quiz',
+        createdBy: userId
+      });
+      quizId = quizResult.quiz.id;
+
+      const questionResult = await quizUseCases.addQuestion({
+        quizId,
+        questionData: {
+          text: 'Original Question',
+          options: ['A', 'B'],
+          correctAnswerIndex: 0,
+          timeLimit: 30,
+          points: 1000
+        },
+        requesterId: userId
+      });
+      questionId = questionResult.question.id;
+    });
+
+    it('should update question text', async () => {
+      const result = await quizUseCases.updateQuestion({
+        quizId,
+        questionId,
+        questionData: { text: 'Updated Question' },
+        requesterId: userId
+      });
+
+      expect(result.question.text).toBe('Updated Question');
+      expect(result.question.options).toEqual(['A', 'B']);
+    });
+
+    it('should update question options', async () => {
+      const result = await quizUseCases.updateQuestion({
+        quizId,
+        questionId,
+        questionData: { options: ['X', 'Y', 'Z'] },
+        requesterId: userId
+      });
+
+      expect(result.question.options).toEqual(['X', 'Y', 'Z']);
+    });
+
+    it('should update correctAnswerIndex to 0', async () => {
+      // First set to different value
+      await quizUseCases.updateQuestion({
+        quizId,
+        questionId,
+        questionData: { correctAnswerIndex: 1 },
+        requesterId: userId
+      });
+
+      // Then update back to 0 (testing falsy value handling)
+      const result = await quizUseCases.updateQuestion({
+        quizId,
+        questionId,
+        questionData: { correctAnswerIndex: 0 },
+        requesterId: userId
+      });
+
+      expect(result.question.correctAnswerIndex).toBe(0);
+    });
+
+    it('should throw error for non-existent quiz', async () => {
+      await expect(quizUseCases.updateQuestion({
+        quizId: 'non-existent',
+        questionId,
+        questionData: { text: 'Updated' },
+        requesterId: userId
+      })).rejects.toThrow('Quiz not found');
+    });
+
+    it('should throw error for non-existent question', async () => {
+      await expect(quizUseCases.updateQuestion({
+        quizId,
+        questionId: 'non-existent',
+        questionData: { text: 'Updated' },
+        requesterId: userId
+      })).rejects.toThrow('Question not found');
+    });
+
+    it('should throw error for unauthorized user', async () => {
+      await expect(quizUseCases.updateQuestion({
+        quizId,
+        questionId,
+        questionData: { text: 'Updated' },
+        requesterId: 'another-user'
+      })).rejects.toThrow('Not authorized to modify this quiz');
+    });
+  });
+
+  describe('exportQuiz', () => {
+    let quizId;
+
+    beforeEach(async () => {
+      const quizResult = await quizUseCases.createQuiz({
+        title: 'Export Test Quiz',
+        description: 'A quiz for export testing',
+        createdBy: userId
+      });
+      quizId = quizResult.quiz.id;
+
+      await quizUseCases.addQuestion({
+        quizId,
+        questionData: {
+          text: 'What is 2+2?',
+          type: QuestionType.MULTIPLE_CHOICE,
+          options: ['3', '4', '5', '6'],
+          correctAnswerIndex: 1,
+          timeLimit: 30,
+          points: 1000
+        },
+        requesterId: userId
+      });
+    });
+
+    it('should export quiz with questions', async () => {
+      const result = await quizUseCases.exportQuiz({
+        quizId,
+        requesterId: userId
+      });
+
+      expect(result.exportData).toBeDefined();
+      expect(result.exportData.version).toBe('1.0');
+      expect(result.exportData.quiz.title).toBe('Export Test Quiz');
+      expect(result.exportData.quiz.description).toBe('A quiz for export testing');
+      expect(result.exportData.quiz.questions).toHaveLength(1);
+      expect(result.exportData.quiz.questions[0].text).toBe('What is 2+2?');
+      expect(result.exportData.exportedAt).toBeDefined();
+    });
+
+    it('should allow export of public quiz by non-owner', async () => {
+      await quizUseCases.updateQuiz({
+        quizId,
+        isPublic: true,
+        requesterId: userId
+      });
+
+      const result = await quizUseCases.exportQuiz({
+        quizId,
+        requesterId: 'another-user'
+      });
+
+      expect(result.exportData.quiz.title).toBe('Export Test Quiz');
+    });
+
+    it('should throw error for private quiz by non-owner', async () => {
+      await expect(quizUseCases.exportQuiz({
+        quizId,
+        requesterId: 'another-user'
+      })).rejects.toThrow('Not authorized to export this quiz');
+    });
+
+    it('should throw error for non-existent quiz', async () => {
+      await expect(quizUseCases.exportQuiz({
+        quizId: 'non-existent',
+        requesterId: userId
+      })).rejects.toThrow('Quiz not found');
+    });
+  });
+
+  describe('importQuiz', () => {
+    const validImportData = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      quiz: {
+        title: 'Imported Quiz',
+        description: 'An imported quiz',
+        questions: [
+          {
+            text: 'Question 1',
+            type: 'MULTIPLE_CHOICE',
+            options: ['A', 'B', 'C', 'D'],
+            correctAnswerIndex: 0,
+            timeLimit: 30,
+            points: 1000
+          },
+          {
+            text: 'Question 2',
+            options: ['X', 'Y'],
+            correctAnswerIndex: 1
+          }
+        ]
+      }
+    };
+
+    it('should import quiz from valid JSON', async () => {
+      const result = await quizUseCases.importQuiz({
+        jsonData: validImportData,
+        requesterId: userId
+      });
+
+      expect(result.quiz).toBeDefined();
+      expect(result.quiz.title).toBe('Imported Quiz');
+      expect(result.quiz.description).toBe('An imported quiz');
+      expect(result.quiz.createdBy).toBe(userId);
+      expect(result.quiz.isPublic).toBe(false);
+      expect(result.questionCount).toBe(2);
+    });
+
+    it('should import quiz as public', async () => {
+      const result = await quizUseCases.importQuiz({
+        jsonData: validImportData,
+        requesterId: userId,
+        isPublic: true
+      });
+
+      expect(result.quiz.isPublic).toBe(true);
+    });
+
+    it('should apply default values for missing fields', async () => {
+      const result = await quizUseCases.importQuiz({
+        jsonData: validImportData,
+        requesterId: userId
+      });
+
+      // Question 2 should have default timeLimit and points
+      const quiz = await quizUseCases.getQuiz({ quizId: result.quiz.id });
+      expect(quiz.quiz.getQuestion(1).timeLimit).toBe(30);
+      expect(quiz.quiz.getQuestion(1).points).toBe(1000);
+    });
+
+    it('should throw error for missing version', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: { quiz: { title: 'Test', questions: [] } },
+        requesterId: userId
+      })).rejects.toThrow('Invalid import data: missing version');
+    });
+
+    it('should throw error for missing quiz object', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: { version: '1.0' },
+        requesterId: userId
+      })).rejects.toThrow('Invalid import data: missing quiz object');
+    });
+
+    it('should throw error for missing quiz title', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: { version: '1.0', quiz: { questions: [] } },
+        requesterId: userId
+      })).rejects.toThrow('Invalid import data: quiz must have a title');
+    });
+
+    it('should throw error for missing questions array', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: { version: '1.0', quiz: { title: 'Test' } },
+        requesterId: userId
+      })).rejects.toThrow('Invalid import data: questions must be an array');
+    });
+
+    it('should throw error for too many questions', async () => {
+      const tooManyQuestions = Array.from({ length: 51 }, (_, i) => ({
+        text: `Question ${i}`,
+        options: ['A', 'B'],
+        correctAnswerIndex: 0
+      }));
+
+      await expect(quizUseCases.importQuiz({
+        jsonData: { version: '1.0', quiz: { title: 'Test', questions: tooManyQuestions } },
+        requesterId: userId
+      })).rejects.toThrow('Invalid import data: maximum 50 questions allowed');
+    });
+
+    it('should throw error for invalid question text', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: {
+          version: '1.0',
+          quiz: {
+            title: 'Test',
+            questions: [{ options: ['A', 'B'], correctAnswerIndex: 0 }]
+          }
+        },
+        requesterId: userId
+      })).rejects.toThrow('Invalid question at index 0: missing text');
+    });
+
+    it('should throw error for invalid options count', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: {
+          version: '1.0',
+          quiz: {
+            title: 'Test',
+            questions: [{ text: 'Q1', options: ['Only one'], correctAnswerIndex: 0 }]
+          }
+        },
+        requesterId: userId
+      })).rejects.toThrow('Invalid question at index 0: must have 2-4 options');
+    });
+
+    it('should throw error for invalid correctAnswerIndex', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: {
+          version: '1.0',
+          quiz: {
+            title: 'Test',
+            questions: [{ text: 'Q1', options: ['A', 'B'], correctAnswerIndex: 5 }]
+          }
+        },
+        requesterId: userId
+      })).rejects.toThrow('Invalid question at index 0: invalid correctAnswerIndex');
+    });
+
+    it('should throw error for invalid timeLimit', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: {
+          version: '1.0',
+          quiz: {
+            title: 'Test',
+            questions: [{ text: 'Q1', options: ['A', 'B'], correctAnswerIndex: 0, timeLimit: 3 }]
+          }
+        },
+        requesterId: userId
+      })).rejects.toThrow('Invalid question at index 0: timeLimit must be between 5 and 120');
+    });
+
+    it('should throw error for invalid points', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: {
+          version: '1.0',
+          quiz: {
+            title: 'Test',
+            questions: [{ text: 'Q1', options: ['A', 'B'], correctAnswerIndex: 0, points: 50 }]
+          }
+        },
+        requesterId: userId
+      })).rejects.toThrow('Invalid question at index 0: points must be between 100 and 10000');
+    });
+
+    it('should throw error for null import data', async () => {
+      await expect(quizUseCases.importQuiz({
+        jsonData: null,
+        requesterId: userId
+      })).rejects.toThrow('Invalid import data: must be an object');
+    });
+  });
+
+  describe('deleteQuiz with active game check', () => {
+    const { RoomRepository } = require('../../../infrastructure/repositories/RoomRepository');
+
+    it('should prevent deletion when quiz is in active game', async () => {
+      const roomRepository = new RoomRepository();
+      const useCasesWithRoom = new QuizUseCases(quizRepository, roomRepository);
+
+      // Create quiz
+      const quizResult = await useCasesWithRoom.createQuiz({
+        title: 'Quiz',
+        createdBy: userId
+      });
+
+      // Create room using this quiz
+      const { Room } = require('../../../domain/entities');
+      const room = new Room({
+        id: 'room-1',
+        pin: '123456',
+        hostId: 'host-socket',
+        quizId: quizResult.quiz.id
+      });
+      await roomRepository.save(room);
+
+      // Try to delete quiz
+      await expect(useCasesWithRoom.deleteQuiz({
+        quizId: quizResult.quiz.id,
+        requesterId: userId
+      })).rejects.toThrow('Cannot delete quiz while it is being used in an active game');
+
+      // Cleanup
+      await roomRepository.clear();
+    });
+  });
+
+  describe('deleteQuiz with cascade game sessions', () => {
+    it('should delete related game sessions', async () => {
+      const mockGameSessionRepo = {
+        deleteByQuiz: jest.fn().mockResolvedValue(5)
+      };
+      const useCasesWithSession = new QuizUseCases(quizRepository, null, mockGameSessionRepo);
+
+      const quizResult = await useCasesWithSession.createQuiz({
+        title: 'Quiz',
+        createdBy: userId
+      });
+
+      const result = await useCasesWithSession.deleteQuiz({
+        quizId: quizResult.quiz.id,
+        requesterId: userId
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.deletedSessionsCount).toBe(5);
+      expect(mockGameSessionRepo.deleteByQuiz).toHaveBeenCalledWith(quizResult.quiz.id);
+    });
+  });
+
+  describe('export/import roundtrip', () => {
+    it('should successfully import an exported quiz', async () => {
+      // Create original quiz with questions
+      const originalResult = await quizUseCases.createQuiz({
+        title: 'Roundtrip Quiz',
+        description: 'Testing export/import',
+        createdBy: userId
+      });
+
+      await quizUseCases.addQuestion({
+        quizId: originalResult.quiz.id,
+        questionData: {
+          text: 'What is 1+1?',
+          options: ['1', '2', '3'],
+          correctAnswerIndex: 1,
+          timeLimit: 20,
+          points: 500
+        },
+        requesterId: userId
+      });
+
+      // Export
+      const exportResult = await quizUseCases.exportQuiz({
+        quizId: originalResult.quiz.id,
+        requesterId: userId
+      });
+
+      // Import as new quiz
+      const importResult = await quizUseCases.importQuiz({
+        jsonData: exportResult.exportData,
+        requesterId: 'user-2'
+      });
+
+      expect(importResult.quiz.title).toBe('Roundtrip Quiz');
+      expect(importResult.quiz.description).toBe('Testing export/import');
+      expect(importResult.quiz.createdBy).toBe('user-2');
+      expect(importResult.questionCount).toBe(1);
+
+      // Verify question data
+      const questions = await quizUseCases.getQuestions({ quizId: importResult.quiz.id });
+      expect(questions.questions[0].text).toBe('What is 1+1?');
+      expect(questions.questions[0].correctAnswerIndex).toBe(1);
+      expect(questions.questions[0].timeLimit).toBe(20);
+      expect(questions.questions[0].points).toBe(500);
+    });
+  });
 });

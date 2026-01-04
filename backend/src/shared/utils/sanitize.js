@@ -91,7 +91,6 @@ const sanitizeNickname = (nickname) => {
 };
 
 module.exports = {
-  sanitizeString,
   sanitizeObject,
   sanitizeEmail,
   sanitizeNickname

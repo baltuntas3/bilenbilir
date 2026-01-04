@@ -120,25 +120,4 @@ class SocketRateLimiter {
 // Singleton instance
 const socketRateLimiter = new SocketRateLimiter();
 
-/**
- * Rate limit middleware for socket events
- * @param {string} eventName - Event name to rate limit
- * @returns {Function} Middleware function
- */
-const rateLimitSocket = (eventName) => {
-  return (socket, data, next) => {
-    const result = socketRateLimiter.checkLimit(socket.id, eventName);
-
-    if (!result.allowed) {
-      socket.emit('error', {
-        error: 'Too many requests',
-        retryAfter: result.retryAfter
-      });
-      return; // Don't call next
-    }
-
-    next();
-  };
-};
-
-module.exports = { SocketRateLimiter, socketRateLimiter, rateLimitSocket };
+module.exports = { SocketRateLimiter, socketRateLimiter };

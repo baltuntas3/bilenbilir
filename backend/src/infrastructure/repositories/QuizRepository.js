@@ -69,10 +69,6 @@ class QuizRepository {
     return this.quizzes.delete(id);
   }
 
-  async exists(id) {
-    return this.quizzes.has(id);
-  }
-
   async getAll({ page = 1, limit = 100 } = {}) {
     const allQuizzes = Array.from(this.quizzes.values());
     const total = allQuizzes.length;

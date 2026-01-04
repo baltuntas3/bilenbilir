@@ -25,16 +25,6 @@ const createRateLimiter = (options = {}) => {
 };
 
 /**
- * General API rate limiter
- * 100 requests per 15 minutes
- */
-const generalLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again later'
-});
-
-/**
  * Authentication rate limiter (stricter)
  * 10 attempts per 15 minutes for login/register
  */
@@ -64,21 +54,9 @@ const quizCreationLimiter = createRateLimiter({
   message: 'Quiz creation limit reached, please try again later'
 });
 
-/**
- * Game creation rate limiter
- * 30 games per hour
- */
-const gameCreationLimiter = createRateLimiter({
-  windowMs: 60 * 60 * 1000,
-  max: 30,
-  message: 'Game creation limit reached, please try again later'
-});
-
 module.exports = {
   createRateLimiter,
-  generalLimiter,
   authLimiter,
   passwordResetLimiter,
-  quizCreationLimiter,
-  gameCreationLimiter
+  quizCreationLimiter
 };

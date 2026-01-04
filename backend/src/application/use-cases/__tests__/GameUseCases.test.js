@@ -449,4 +449,325 @@ describe('GameUseCases', () => {
       expect(answer2.player.score).toBeGreaterThan(score1 * 2); // More than just base score
     });
   });
+
+  describe('roomExists', () => {
+    it('should return true for existing room', async () => {
+      const exists = await gameUseCases.roomExists(roomPin);
+      expect(exists).toBe(true);
+    });
+
+    it('should return false for non-existent room', async () => {
+      const exists = await gameUseCases.roomExists('999999');
+      expect(exists).toBe(false);
+    });
+  });
+
+  describe('submitAnswer validation', () => {
+    beforeEach(async () => {
+      await gameUseCases.startGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+      await gameUseCases.startAnsweringPhase({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+    });
+
+    it('should throw error for negative answer index', async () => {
+      await expect(gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'player-socket-1',
+        answerIndex: -1,
+        elapsedTimeMs: 1000
+      })).rejects.toThrow('Invalid answer index');
+    });
+
+    it('should throw error for null answer index', async () => {
+      await expect(gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'player-socket-1',
+        answerIndex: null,
+        elapsedTimeMs: 1000
+      })).rejects.toThrow('Invalid answer index');
+    });
+
+    it('should throw error for float answer index', async () => {
+      await expect(gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'player-socket-1',
+        answerIndex: 1.5,
+        elapsedTimeMs: 1000
+      })).rejects.toThrow('Invalid answer index');
+    });
+
+    it('should throw error for answer index out of bounds', async () => {
+      await expect(gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'player-socket-1',
+        answerIndex: 10, // Only 4 options
+        elapsedTimeMs: 1000
+      })).rejects.toThrow('Answer index out of bounds');
+    });
+
+    it('should throw error for non-existent player', async () => {
+      await expect(gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'non-existent-socket',
+        answerIndex: 1,
+        elapsedTimeMs: 1000
+      })).rejects.toThrow('Player not found');
+    });
+
+    it('should handle null elapsed time', async () => {
+      const result = await gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'player-socket-1',
+        answerIndex: 1,
+        elapsedTimeMs: null
+      });
+
+      expect(result.answer).toBeDefined();
+    });
+
+    it('should handle undefined elapsed time', async () => {
+      const result = await gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'player-socket-1',
+        answerIndex: 1,
+        elapsedTimeMs: undefined
+      });
+
+      expect(result.answer).toBeDefined();
+    });
+  });
+
+  describe('cleanupExpiredLocks', () => {
+    it('should return cleanup counts', () => {
+      const result = gameUseCases.cleanupExpiredLocks();
+
+      expect(result).toHaveProperty('pendingAnswers');
+      expect(result).toHaveProperty('pendingArchives');
+      expect(typeof result.pendingAnswers).toBe('number');
+      expect(typeof result.pendingArchives).toBe('number');
+    });
+
+    it('should clean expired locks', async () => {
+      // Manually add an expired lock
+      gameUseCases.pendingAnswers.set('expired-key', Date.now() - 20000);
+
+      const result = gameUseCases.cleanupExpiredLocks();
+
+      expect(result.pendingAnswers).toBe(1);
+      expect(gameUseCases.pendingAnswers.has('expired-key')).toBe(false);
+    });
+  });
+
+  describe('pauseGame and resumeGame', () => {
+    beforeEach(async () => {
+      await gameUseCases.startGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+      await gameUseCases.startAnsweringPhase({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+      await gameUseCases.endAnsweringPhase({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+      await gameUseCases.showLeaderboard({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+    });
+
+    it('should pause game from leaderboard', async () => {
+      const result = await gameUseCases.pauseGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+
+      expect(result.room.state).toBe(RoomState.PAUSED);
+      expect(result.pausedAt).toBeInstanceOf(Date);
+    });
+
+    it('should throw error when non-host tries to pause', async () => {
+      await expect(gameUseCases.pauseGame({
+        pin: roomPin,
+        requesterId: 'player-socket-1'
+      })).rejects.toThrow('Only host can pause the game');
+    });
+
+    it('should resume paused game', async () => {
+      await gameUseCases.pauseGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+
+      const result = await gameUseCases.resumeGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+
+      expect(result.room.state).toBe(RoomState.LEADERBOARD);
+      expect(result.resumedState).toBe(RoomState.LEADERBOARD);
+      expect(result.pauseDuration).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should throw error when resuming non-paused game', async () => {
+      await expect(gameUseCases.resumeGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      })).rejects.toThrow('Game is not paused');
+    });
+
+    it('should throw error when non-host tries to resume', async () => {
+      await gameUseCases.pauseGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+
+      await expect(gameUseCases.resumeGame({
+        pin: roomPin,
+        requesterId: 'player-socket-1'
+      })).rejects.toThrow('Only host can resume the game');
+    });
+  });
+
+  describe('archiveGame', () => {
+    it('should return null when no gameSessionRepository', async () => {
+      const useCasesWithoutRepo = new GameUseCases(roomRepository, quizRepository, null);
+
+      const result = await useCasesWithoutRepo.archiveGame({ pin: roomPin });
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('saveInterruptedGame', () => {
+    it('should return null when no gameSessionRepository', async () => {
+      const useCasesWithoutRepo = new GameUseCases(roomRepository, quizRepository, null);
+
+      const result = await useCasesWithoutRepo.saveInterruptedGame({ pin: roomPin, reason: 'test' });
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null for non-existent room', async () => {
+      const mockGameSessionRepo = { save: jest.fn() };
+      const useCasesWithMockRepo = new GameUseCases(roomRepository, quizRepository, mockGameSessionRepo);
+
+      const result = await useCasesWithMockRepo.saveInterruptedGame({ pin: '999999', reason: 'test' });
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null for game that has not started', async () => {
+      const mockGameSessionRepo = { save: jest.fn() };
+      const useCasesWithMockRepo = new GameUseCases(roomRepository, quizRepository, mockGameSessionRepo);
+
+      // Room exists but game not started (no quiz snapshot)
+      const result = await useCasesWithMockRepo.saveInterruptedGame({ pin: roomPin, reason: 'test' });
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getInterruptedGames', () => {
+    it('should return empty when no gameSessionRepository', async () => {
+      const useCasesWithoutRepo = new GameUseCases(roomRepository, quizRepository, null);
+
+      const result = await useCasesWithoutRepo.getInterruptedGames({ hostId: 'host-1' });
+
+      expect(result.sessions).toEqual([]);
+      expect(result.pagination.total).toBe(0);
+    });
+  });
+
+  describe('startGame validation', () => {
+    it('should throw error for quiz with no questions', async () => {
+      // Create empty quiz
+      const emptyQuiz = new Quiz({
+        id: 'empty-quiz',
+        title: 'Empty Quiz',
+        createdBy: 'user-1'
+      });
+      await quizRepository.save(emptyQuiz);
+
+      // Create room with empty quiz
+      const createResult = await roomUseCases.createRoom({
+        hostId: 'host-socket-2',
+        quizId: 'empty-quiz'
+      });
+
+      await roomUseCases.joinRoom({
+        pin: createResult.room.pin,
+        nickname: 'Player',
+        socketId: 'player-socket-3'
+      });
+
+      await expect(gameUseCases.startGame({
+        pin: createResult.room.pin,
+        requesterId: 'host-socket-2'
+      })).rejects.toThrow('Quiz must have at least one question');
+    });
+  });
+
+  describe('endAnsweringPhase validation', () => {
+    it('should throw error when not in answering phase', async () => {
+      await expect(gameUseCases.endAnsweringPhase({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      })).rejects.toThrow('Not in answering phase');
+    });
+
+    it('should allow server-triggered end', async () => {
+      await gameUseCases.startGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+      await gameUseCases.startAnsweringPhase({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+
+      const result = await gameUseCases.endAnsweringPhase({
+        pin: roomPin,
+        requesterId: 'server'
+      });
+
+      expect(result.room.state).toBe(RoomState.SHOW_RESULTS);
+    });
+  });
+
+  describe('concurrent answer submission protection', () => {
+    beforeEach(async () => {
+      await gameUseCases.startGame({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+      await gameUseCases.startAnsweringPhase({
+        pin: roomPin,
+        requesterId: 'host-socket'
+      });
+    });
+
+    it('should reject concurrent answer submissions from same player', async () => {
+      // Manually set a pending lock
+      const submissionKey = `${roomPin}:player-socket-1`;
+      gameUseCases.pendingAnswers.set(submissionKey, Date.now());
+
+      await expect(gameUseCases.submitAnswer({
+        pin: roomPin,
+        socketId: 'player-socket-1',
+        answerIndex: 1,
+        elapsedTimeMs: 1000
+      })).rejects.toThrow('Answer submission in progress');
+
+      // Cleanup
+      gameUseCases.pendingAnswers.delete(submissionKey);
+    });
+  });
 });

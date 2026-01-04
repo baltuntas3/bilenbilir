@@ -43,8 +43,5 @@ const sanitize = (req, res, next) => {
 };
 
 module.exports = {
-  sanitizeBody,
-  sanitizeQuery,
-  sanitizeParams,
   sanitize
 };
