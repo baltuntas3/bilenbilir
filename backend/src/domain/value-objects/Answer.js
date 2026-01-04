@@ -1,6 +1,8 @@
 const { ValidationError } = require('../../shared/errors');
 
 const MAX_STREAK_BONUS = 500;
+// Maximum possible score per answer (should match Question.MAX_POINTS + MAX_STREAK_BONUS)
+const MAX_ANSWER_SCORE = 10500;
 
 class Answer {
   constructor({ playerId, questionId, roomPin, answerIndex, isCorrect, elapsedTimeMs, score = 0, streakBonus = 0, submittedAt = new Date() }) {
@@ -18,7 +20,9 @@ class Answer {
   }
 
   getTotalScore() {
-    return this.score + this.streakBonus;
+    // Cap total score to prevent overflow
+    const total = this.score + this.streakBonus;
+    return Math.min(total, MAX_ANSWER_SCORE);
   }
 
   equals(other) {

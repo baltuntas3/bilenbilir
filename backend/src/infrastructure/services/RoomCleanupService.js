@@ -180,10 +180,16 @@ class RoomCleanupService {
               this.io.in(room.pin).socketsLeave(room.pin);
             }
 
-            // Only delete if not already deleted by archival
-            const roomStillExists = await this.roomRepository.findByPin(room.pin);
-            if (roomStillExists) {
-              await this.roomRepository.delete(room.pin);
+            // Atomically delete room - handle race condition where archival already deleted it
+            try {
+              const deleted = await this.roomRepository.delete(room.pin);
+              if (!deleted) {
+                // Room was already deleted (by archival or another process) - this is expected
+                console.log(`Room ${room.pin} already deleted by archival process`);
+              }
+            } catch (deleteError) {
+              // Log but don't fail - room may have been deleted by concurrent operation
+              console.warn(`Room ${room.pin} delete failed (may already be deleted):`, deleteError.message);
             }
           }
         } catch (roomError) {

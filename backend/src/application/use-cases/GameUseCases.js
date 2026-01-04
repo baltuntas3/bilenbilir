@@ -172,6 +172,12 @@ class GameUseCases {
     // Create immutable quiz snapshot for the game session
     // This prevents mid-game modifications from affecting the ongoing game
     const quizSnapshot = quiz.clone();
+
+    // Verify snapshot is properly frozen (defense-in-depth)
+    if (!Object.isFrozen(quizSnapshot)) {
+      throw new ValidationError('Failed to create immutable quiz snapshot - quiz not frozen');
+    }
+
     room.setQuizSnapshot(quizSnapshot);
 
     // Move to first question intro

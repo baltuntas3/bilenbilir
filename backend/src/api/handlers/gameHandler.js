@@ -48,13 +48,24 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         requesterId: socket.id
       });
 
+      // Send to host with full question data
       socket.emit('game_started', {
         totalQuestions: result.totalQuestions,
-        currentQuestion: result.currentQuestion
+        currentQuestion: result.currentQuestion,
+        questionIndex: 0
       });
 
+      // Send to players without answer
       socket.to(pin).emit('game_started', {
         totalQuestions: result.totalQuestions,
+        currentQuestion: result.currentQuestion ? {
+          text: result.currentQuestion.text,
+          type: result.currentQuestion.type,
+          options: result.currentQuestion.options,
+          timeLimit: result.currentQuestion.timeLimit,
+          points: result.currentQuestion.points,
+          imageUrl: result.currentQuestion.imageUrl
+        } : null,
         questionIndex: 0
       });
     } catch (error) {
@@ -78,6 +89,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       // Start server-side timer with race condition protection
       timerService.startTimer(pin, result.timeLimit, async () => {
+        console.log(`[Timer] Timer expired for room ${pin}`);
         try {
           // Zombie callback check: verify room still exists before processing
           // Room could have been deleted/closed while timer was running
@@ -92,6 +104,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
             requesterId: 'server'
           });
 
+          console.log(`[Timer] Emitting show_results for room ${pin}:`, !!endResult);
           if (endResult) {
             io.to(pin).emit('time_expired');
             io.to(pin).emit('show_results', {
@@ -105,6 +118,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           // Ignore expected errors when room state has changed
           if (err.message !== 'Not in answering phase' && err.message !== 'Room not found') {
             console.error('Auto-end error:', err.message);
+          } else {
+            console.log(`[Timer] Expected error for room ${pin}: ${err.message}`);
           }
         }
       });
@@ -150,6 +165,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       const timerSync = timerService.getTimerSync(pin);
       if (timerSync && timerSync.totalTimeMs) {
         elapsedTimeMs = Math.min(elapsedTimeMs, timerSync.totalTimeMs);
+      }
+
+      // Re-check timer expiration just before submission to minimize race window
+      // This double-check reduces (but doesn't eliminate) the race condition window
+      if (timerService.isTimeExpired(pin)) {
+        socket.emit('error', { error: 'Time expired' });
+        return;
       }
 
       const result = await gameUseCases.submitAnswer({
@@ -266,15 +288,25 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           console.error('Failed to archive game:', archiveError.message);
         }
       } else {
+        // Send to host with full question data
         socket.emit('question_intro', {
           questionIndex: result.questionIndex,
           totalQuestions: result.totalQuestions,
           currentQuestion: result.currentQuestion
         });
 
+        // Send to players without correct answer
         socket.to(pin).emit('question_intro', {
           questionIndex: result.questionIndex,
-          totalQuestions: result.totalQuestions
+          totalQuestions: result.totalQuestions,
+          currentQuestion: result.currentQuestion ? {
+            text: result.currentQuestion.text,
+            type: result.currentQuestion.type,
+            options: result.currentQuestion.options,
+            timeLimit: result.currentQuestion.timeLimit,
+            points: result.currentQuestion.points,
+            imageUrl: result.currentQuestion.imageUrl
+          } : null
         });
       }
     } catch (error) {

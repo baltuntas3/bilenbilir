@@ -193,28 +193,31 @@ class MongoUserRepository {
    * @returns {Promise<{users: User[], pagination: object}>}
    */
   async findAll({ page = 1, limit = 20 } = {}) {
-    const skip = (page - 1) * limit;
+    // Validate pagination bounds to prevent DoS
+    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000)); // Max 1000 pages
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100)); // Max 100 per page
+    const skip = (safePage - 1) * safeLimit;
 
     const [docs, total] = await Promise.all([
       UserModel.find()
         .select('-password')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(safeLimit),
       UserModel.countDocuments()
     ]);
 
     const users = docs.map(doc => this._toDomain(doc, false));
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil(total / safeLimit);
 
     return {
       users,
       pagination: {
-        page,
-        limit,
+        page: safePage,
+        limit: safeLimit,
         total,
         totalPages,
-        hasMore: page < totalPages
+        hasMore: safePage < totalPages
       }
     };
   }
