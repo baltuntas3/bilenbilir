@@ -8,17 +8,23 @@ import '@mantine/notifications/styles.css';
 
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
+import { GameProvider } from './context/GameContext';
 import AppRoutes from './routes';
+import Layout from './components/Layout';
 import { theme } from './theme';
 
 export default function App() {
   return (
-    <MantineProvider theme={theme} defaultColorScheme="light">
+    <MantineProvider theme={theme} defaultColorScheme="auto">
       <Notifications position="top-right" />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
-            <AppRoutes />
+            <GameProvider>
+              <Layout>
+                <AppRoutes />
+              </Layout>
+            </GameProvider>
           </AuthProvider>
         </BrowserRouter>
       </QueryClientProvider>

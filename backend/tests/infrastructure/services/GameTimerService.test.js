@@ -67,10 +67,10 @@ describe('GameTimerService', () => {
       jest.useFakeTimers();
 
       const onExpire = jest.fn();
-      timerService.startTimer('123456', 2, onExpire);
+      timerService.startTimer('123456', 5, onExpire);
 
-      // Advance 2 seconds
-      jest.advanceTimersByTime(2000);
+      // Advance 5 seconds (minimum valid duration)
+      jest.advanceTimersByTime(5000);
 
       expect(onExpire).toHaveBeenCalled();
 
@@ -172,10 +172,10 @@ describe('GameTimerService', () => {
     it('should return false after timer expires', () => {
       jest.useFakeTimers();
 
-      timerService.startTimer('123456', 1, jest.fn());
+      timerService.startTimer('123456', 5, jest.fn());
 
-      // Advance past expiration
-      jest.advanceTimersByTime(1500);
+      // Advance past expiration (5 seconds is minimum valid duration)
+      jest.advanceTimersByTime(5500);
 
       expect(timerService.isTimerActive('123456')).toBe(false);
 
@@ -201,10 +201,10 @@ describe('GameTimerService', () => {
     it('should return true after timer expires', () => {
       jest.useFakeTimers();
 
-      timerService.startTimer('123456', 1, jest.fn());
+      timerService.startTimer('123456', 5, jest.fn());
 
-      // Advance past expiration
-      jest.advanceTimersByTime(1500);
+      // Advance past expiration (5 seconds is minimum valid duration)
+      jest.advanceTimersByTime(5500);
 
       expect(timerService.isTimeExpired('123456')).toBe(true);
 

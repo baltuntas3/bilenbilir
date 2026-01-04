@@ -45,8 +45,8 @@ class QuizUseCases {
       createdBy,
       isPublic
     });
-    await this.quizRepository.save(quiz);
-    return { quiz };
+    const savedQuiz = await this.quizRepository.save(quiz);
+    return { quiz: savedQuiz };
   }
 
   /**
@@ -61,9 +61,11 @@ class QuizUseCases {
       ...questionData
     });
     quiz.addQuestion(question);
-    await this.quizRepository.save(quiz);
+    const savedQuiz = await this.quizRepository.save(quiz);
 
-    return { quiz, question };
+    // Get the saved question (with MongoDB _id)
+    const savedQuestion = savedQuiz.questions[savedQuiz.questions.length - 1];
+    return { quiz: savedQuiz, question: savedQuestion };
   }
 
   /**
@@ -74,9 +76,9 @@ class QuizUseCases {
     this._validateQuizOwnership(quiz, requesterId);
 
     quiz.removeQuestion(questionId);
-    await this.quizRepository.save(quiz);
+    const savedQuiz = await this.quizRepository.save(quiz);
 
-    return { quiz };
+    return { quiz: savedQuiz };
   }
 
   /**
@@ -114,8 +116,8 @@ class QuizUseCases {
     if (description !== undefined) quiz.updateDescription(description);
     if (isPublic !== undefined) quiz.setPublic(isPublic);
 
-    await this.quizRepository.save(quiz);
-    return { quiz };
+    const savedQuiz = await this.quizRepository.save(quiz);
+    return { quiz: savedQuiz };
   }
 
   /**
@@ -154,9 +156,9 @@ class QuizUseCases {
     this._validateQuizOwnership(quiz, requesterId);
 
     quiz.reorderQuestions(questionOrder);
-    await this.quizRepository.save(quiz);
+    const savedQuiz = await this.quizRepository.save(quiz);
 
-    return { quiz };
+    return { quiz: savedQuiz };
   }
 
   /**
@@ -194,9 +196,11 @@ class QuizUseCases {
     });
 
     quiz.questions[questionIndex] = updatedQuestion;
-    await this.quizRepository.save(quiz);
+    const savedQuiz = await this.quizRepository.save(quiz);
 
-    return { quiz, question: updatedQuestion };
+    // Get the saved question (with MongoDB _id)
+    const savedQuestion = savedQuiz.questions[questionIndex];
+    return { quiz: savedQuiz, question: savedQuestion };
   }
 
   // ==================== IMPORT/EXPORT METHODS ====================
@@ -329,9 +333,9 @@ class QuizUseCases {
       quiz.addQuestion(question);
     }
 
-    await this.quizRepository.save(quiz);
+    const savedQuiz = await this.quizRepository.save(quiz);
 
-    return { quiz, questionCount: quiz.questions.length };
+    return { quiz: savedQuiz, questionCount: savedQuiz.questions.length };
   }
 }
 

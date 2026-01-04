@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Container, Title, Text, Button, Stack, SimpleGrid, Card, Group } from '@mantine/core';
-import { IconSearch, IconPlus, IconList, IconUser } from '@tabler/icons-react';
+import { Container, Title, Text, Stack, SimpleGrid, Card, Group } from '@mantine/core';
+import { IconSearch, IconPlus, IconList, IconUsers } from '@tabler/icons-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
@@ -10,10 +10,20 @@ export default function Home() {
     <Container size="lg" my={40}>
       <Stack align="center" gap="md" mb="xl">
         <Title>Welcome, {user?.username}!</Title>
-        <Text c="dimmed">Bilenbilir Quiz Application</Text>
+        <Text c="dimmed">What would you like to do?</Text>
       </Stack>
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+        <Card component={Link} to="/join" withBorder shadow="sm" padding="lg" style={{ textDecoration: 'none' }}>
+          <Group>
+            <IconUsers size={32} stroke={1.5} />
+            <div>
+              <Text fw={500}>Join Game</Text>
+              <Text size="sm" c="dimmed">Enter a game PIN to join</Text>
+            </div>
+          </Group>
+        </Card>
+
         <Card component={Link} to="/quizzes" withBorder shadow="sm" padding="lg" style={{ textDecoration: 'none' }}>
           <Group>
             <IconSearch size={32} stroke={1.5} />
@@ -40,16 +50,6 @@ export default function Home() {
             <div>
               <Text fw={500}>Create Quiz</Text>
               <Text size="sm" c="dimmed">Create a new quiz</Text>
-            </div>
-          </Group>
-        </Card>
-
-        <Card component={Link} to="/profile" withBorder shadow="sm" padding="lg" style={{ textDecoration: 'none' }}>
-          <Group>
-            <IconUser size={32} stroke={1.5} />
-            <div>
-              <Text fw={500}>Profile</Text>
-              <Text size="sm" c="dimmed">Manage your account settings</Text>
             </div>
           </Group>
         </Card>

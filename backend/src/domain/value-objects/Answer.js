@@ -1,3 +1,5 @@
+const { ValidationError } = require('../../shared/errors');
+
 const MAX_STREAK_BONUS = 500;
 
 class Answer {
@@ -29,14 +31,30 @@ class Answer {
   }
 
   static create({ playerId, questionId, roomPin, answerIndex, question, elapsedTimeMs, currentStreak }) {
+    // Validate required IDs
+    if (!playerId || typeof playerId !== 'string') {
+      throw new ValidationError('playerId is required and must be a string');
+    }
+    if (!questionId || typeof questionId !== 'string') {
+      throw new ValidationError('questionId is required and must be a string');
+    }
+    if (!roomPin || typeof roomPin !== 'string') {
+      throw new ValidationError('roomPin is required and must be a string');
+    }
+
+    // Validate answerIndex
+    if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) || answerIndex < 0) {
+      throw new ValidationError('answerIndex must be a non-negative integer');
+    }
+
     // Validate question is provided
     if (!question || typeof question.isCorrect !== 'function') {
-      throw new Error('Valid question is required to create Answer');
+      throw new ValidationError('Valid question is required to create Answer');
     }
 
     // Validate elapsedTimeMs
     if (typeof elapsedTimeMs !== 'number' || !Number.isFinite(elapsedTimeMs) || elapsedTimeMs < 0) {
-      throw new Error('elapsedTimeMs must be a non-negative number');
+      throw new ValidationError('elapsedTimeMs must be a non-negative number');
     }
 
     // Validate and sanitize currentStreak

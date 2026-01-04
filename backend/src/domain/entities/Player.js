@@ -40,6 +40,9 @@ class Player extends BaseParticipant {
     if (typeof points !== 'number' || !Number.isFinite(points)) {
       throw new ValidationError('Points must be a valid number');
     }
+    if (points < 0) {
+      throw new ValidationError('Points cannot be negative');
+    }
     this._score = this._score.add(points);
   }
 
@@ -49,8 +52,9 @@ class Player extends BaseParticipant {
       this.streak++;
     }
     this.correctAnswers++;
-    if (this.streak > this.longestStreak) {
-      this.longestStreak = this.streak;
+    // Cap longestStreak at MAX_STREAK as well for consistency
+    if (this.streak > this.longestStreak && this.longestStreak < MAX_STREAK) {
+      this.longestStreak = Math.min(this.streak, MAX_STREAK);
     }
   }
 
@@ -64,9 +68,19 @@ class Player extends BaseParticipant {
       throw new ForbiddenError('Cannot submit answer while disconnected');
     }
 
+    // Validate answerIndex
+    if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) || answerIndex < 0) {
+      throw new ValidationError('Answer index must be a non-negative integer');
+    }
+
+    // Validate elapsedTimeMs
+    if (typeof elapsedTimeMs !== 'number' || !Number.isFinite(elapsedTimeMs) || elapsedTimeMs < 0) {
+      throw new ValidationError('Elapsed time must be a non-negative number');
+    }
+
     this.answerAttempt = {
       answerIndex,
-      elapsedTimeMs,
+      elapsedTimeMs: Math.max(0, elapsedTimeMs),
       submittedAt: new Date()
     };
   }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Container, Title, Button, Card, Text, Group, Badge, Stack, Pagination, Center, Loader, ActionIcon, Menu } from '@mantine/core';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { IconPlus, IconDotsVertical, IconEdit, IconTrash, IconEye } from '@tabler/icons-react';
+import { IconPlus, IconDotsVertical, IconEdit, IconTrash, IconEye, IconPlayerPlay } from '@tabler/icons-react';
 import { quizService } from '../services/quizService';
 import { showToast } from '../utils/toast';
 
@@ -81,6 +81,15 @@ export default function MyQuizzes() {
                     </ActionIcon>
                   </Menu.Target>
                   <Menu.Dropdown>
+                    <Menu.Item
+                      component={Link}
+                      to={`/host/${quiz.id || quiz._id}`}
+                      leftSection={<IconPlayerPlay size={14} />}
+                      disabled={(quiz.questionCount || quiz.questions?.length || 0) === 0}
+                    >
+                      Play
+                    </Menu.Item>
+                    <Menu.Divider />
                     <Menu.Item
                       component={Link}
                       to={`/quizzes/${quiz.id || quiz._id}`}

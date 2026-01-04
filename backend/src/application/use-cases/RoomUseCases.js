@@ -9,8 +9,8 @@ const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
 // Default grace period for host reconnection (5 minutes - longer since host is more critical)
 const DEFAULT_HOST_GRACE_PERIOD = 300000;
 
-// Lock TTL in milliseconds (10 seconds - should be enough for a join operation)
-const JOIN_LOCK_TTL = 10000;
+// Lock TTL in milliseconds (60 seconds - allows for slow networks and retries)
+const JOIN_LOCK_TTL = 60000;
 
 class RoomUseCases {
   constructor(roomRepository, quizRepository, options = {}) {
@@ -220,12 +220,26 @@ class RoomUseCases {
 
   /**
    * Close/delete a room (host only)
+   * Returns warning if game is in progress
    */
   async closeRoom({ pin, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
     this._throwIfNotHost(room, requesterId);
+
+    // Track if game was in progress for response
+    const wasGameInProgress = room.state !== RoomState.WAITING_PLAYERS &&
+                              room.state !== RoomState.PODIUM;
+    const playerCount = room.getPlayerCount();
+    const spectatorCount = room.getSpectatorCount();
+
     await this.roomRepository.delete(pin);
-    return { success: true };
+
+    return {
+      success: true,
+      wasGameInProgress,
+      disconnectedPlayers: playerCount,
+      disconnectedSpectators: spectatorCount
+    };
   }
 
   /**
@@ -334,6 +348,14 @@ class RoomUseCases {
    */
   async findRoomByPlayerToken({ playerToken }) {
     return await this.roomRepository.findByPlayerToken(playerToken);
+  }
+
+  /**
+   * Find room by spectator token (for reconnection)
+   * Uses O(1) index lookup for performance
+   */
+  async findRoomBySpectatorToken({ spectatorToken }) {
+    return await this.roomRepository.findBySpectatorToken(spectatorToken);
   }
 
   /**

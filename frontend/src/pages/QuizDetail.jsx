@@ -66,9 +66,16 @@ export default function QuizDetail() {
                 Edit
               </Button>
             )}
-            <Button leftSection={<IconPlayerPlay size={16} />} disabled={questions.length === 0}>
-              Play
-            </Button>
+            {isOwner && (
+              <Button
+                component={Link}
+                to={`/host/${id}`}
+                leftSection={<IconPlayerPlay size={16} />}
+                disabled={questions.length === 0}
+              >
+                Host Game
+              </Button>
+            )}
           </Group>
         </Group>
 

@@ -3,10 +3,10 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { generateToken, authenticate } = require('../middlewares/authMiddleware');
 const { authLimiter, passwordResetLimiter } = require('../middlewares/rateLimiter');
-const { ValidationError, UnauthorizedError, ForbiddenError, NotFoundError, ConflictError } = require('../../shared/errors');
+const { ValidationError, UnauthorizedError, ForbiddenError, NotFoundError, ConflictError, InternalError } = require('../../shared/errors');
 const { sanitizeEmail } = require('../../shared/utils/sanitize');
 const { emailService } = require('../../infrastructure/services');
-const { mongoUserRepository, mongoQuizRepository } = require('../../infrastructure/repositories');
+const { mongoUserRepository, mongoQuizRepository, gameSessionRepository } = require('../../infrastructure/repositories');
 
 const router = express.Router();
 
@@ -40,12 +40,28 @@ router.post('/register', authLimiter, async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create user
-    const user = await mongoUserRepository.create({
-      email,
-      password: hashedPassword,
-      username
-    });
+    // Create user - handle race condition with duplicate key error
+    let user;
+    try {
+      user = await mongoUserRepository.create({
+        email,
+        password: hashedPassword,
+        username
+      });
+    } catch (error) {
+      // Handle MongoDB duplicate key error (race condition)
+      if (error.code === 11000 || error.message?.includes('duplicate key')) {
+        // Determine which field caused the conflict
+        if (error.keyPattern?.email || error.message?.includes('email')) {
+          throw new ConflictError('Email already registered');
+        }
+        if (error.keyPattern?.username || error.message?.includes('username')) {
+          throw new ConflictError('Username already taken');
+        }
+        throw new ConflictError('Email or username already in use');
+      }
+      throw error;
+    }
 
     // Generate token
     const token = generateToken(user);
@@ -88,15 +104,16 @@ router.post('/login', authLimiter, async (req, res, next) => {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    if (!user.isActive) {
-      throw new ForbiddenError('Account is deactivated');
-    }
-
-    // Check password
+    // Check password first to prevent timing attacks that could reveal account existence
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       throw new UnauthorizedError('Invalid credentials');
+    }
+
+    // Check account status after password verification
+    if (!user.isActive) {
+      throw new ForbiddenError('Account is deactivated');
     }
 
     // Generate token
@@ -215,12 +232,24 @@ router.put('/change-password', authenticate, async (req, res, next) => {
 
     await mongoUserRepository.updateById(req.user.id, { password: hashedPassword });
 
-    // Send password changed notification (non-blocking)
-    emailService.sendPasswordChanged(user.email).catch(err => {
+    // Send password changed notification
+    let emailWarning = null;
+    try {
+      const emailResult = await emailService.sendPasswordChanged(user.email);
+      if (emailResult && (emailResult.failed || emailResult.skipped)) {
+        emailWarning = 'Password changed but notification email could not be sent';
+        console.error('Failed to send password changed email:', emailResult.reason || emailResult.error);
+      }
+    } catch (err) {
+      emailWarning = 'Password changed but notification email could not be sent';
       console.error('Failed to send password changed email:', err.message);
-    });
+    }
 
-    res.json({ message: 'Password changed successfully' });
+    const response = { message: 'Password changed successfully' };
+    if (emailWarning) {
+      response.warning = emailWarning;
+    }
+    res.json(response);
   } catch (error) {
     next(error);
   }
@@ -286,7 +315,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => 
  * POST /api/auth/reset-password
  * Reset password using token
  */
-router.post('/reset-password', async (req, res, next) => {
+router.post('/reset-password', passwordResetLimiter, async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
 
@@ -351,16 +380,23 @@ router.delete('/account', authenticate, async (req, res, next) => {
     // Delete user's quizzes
     const deletedQuizzes = await mongoQuizRepository.deleteByCreator(req.user.id);
 
+    // Delete user's game sessions
+    let deletedSessions = 0;
+    if (gameSessionRepository && gameSessionRepository.deleteByHost) {
+      deletedSessions = await gameSessionRepository.deleteByHost(req.user.id);
+    }
+
     // Delete user account
     const deleted = await mongoUserRepository.deleteById(req.user.id);
 
     if (!deleted) {
-      throw new Error('Failed to delete account');
+      throw new InternalError('Failed to delete account');
     }
 
     res.json({
       message: 'Account deleted successfully',
-      deletedQuizzes
+      deletedQuizzes,
+      deletedSessions
     });
   } catch (error) {
     next(error);

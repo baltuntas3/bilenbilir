@@ -121,5 +121,15 @@ describe('Quiz', () => {
       expect(() => quiz.reorderQuestions(['q1', 'q2', 'invalid']))
         .toThrow('Invalid question IDs in order');
     });
+
+    it('should throw error for duplicate IDs in order', () => {
+      expect(() => quiz.reorderQuestions(['q1', 'q1', 'q2']))
+        .toThrow('Duplicate question IDs in order: q1');
+    });
+
+    it('should throw error for multiple duplicate IDs', () => {
+      expect(() => quiz.reorderQuestions(['q1', 'q1', 'q1']))
+        .toThrow('Duplicate question IDs in order');
+    });
   });
 });

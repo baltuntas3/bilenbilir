@@ -378,7 +378,12 @@ class GameUseCases {
 
       const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
-      // ===== PHASE 4: Validate answer against question (bounds check) =====
+      // ===== PHASE 4: Validate question has valid options array =====
+      if (!currentQuestion.options || !Array.isArray(currentQuestion.options) || currentQuestion.options.length === 0) {
+        throw new ValidationError('Question has invalid or missing options');
+      }
+
+      // Validate answer against question (bounds check)
       if (answerIndex >= currentQuestion.options.length) {
         throw new ValidationError('Answer index out of bounds');
       }
@@ -413,7 +418,8 @@ class GameUseCases {
         isCorrect: answer.isCorrect,
         elapsedTimeMs: validElapsedTime,
         score: answer.getTotalScore(),
-        streak: player.streak
+        streak: player.streak,
+        optionCount: currentQuestion.options.length
       });
 
       await this.roomRepository.save(room);

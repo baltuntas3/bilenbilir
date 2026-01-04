@@ -137,12 +137,19 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
 
       // Use server-side elapsed time (NEVER trust client-provided time)
-      const elapsedTimeMs = timerService.getElapsedTime(pin);
+      let elapsedTimeMs = timerService.getElapsedTime(pin);
 
       // Validate elapsed time - if null, timer doesn't exist
       if (elapsedTimeMs === null) {
         socket.emit('error', { error: 'No active timer for this room' });
         return;
+      }
+
+      // Cap elapsed time at timer's configured duration to handle edge cases
+      // where submission comes in just as timer expires
+      const timerSync = timerService.getTimerSync(pin);
+      if (timerSync && timerSync.totalTimeMs) {
+        elapsedTimeMs = Math.min(elapsedTimeMs, timerSync.totalTimeMs);
       }
 
       const result = await gameUseCases.submitAnswer({

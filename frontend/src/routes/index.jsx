@@ -19,6 +19,12 @@ import QuizCreate from '../pages/QuizCreate';
 import QuizDetail from '../pages/QuizDetail';
 import QuizEdit from '../pages/QuizEdit';
 
+// Game Pages
+import JoinGame from '../pages/JoinGame';
+import HostLobby from '../pages/HostLobby';
+import HostGame from '../pages/HostGame';
+import PlayerGame from '../pages/PlayerGame';
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -38,6 +44,12 @@ export default function AppRoutes() {
       <Route path="/my-quizzes" element={<ProtectedRoute><MyQuizzes /></ProtectedRoute>} />
       <Route path="/quizzes/create" element={<ProtectedRoute><QuizCreate /></ProtectedRoute>} />
       <Route path="/quizzes/:id/edit" element={<ProtectedRoute><QuizEdit /></ProtectedRoute>} />
+
+      {/* Game Routes */}
+      <Route path="/join" element={<JoinGame />} />
+      <Route path="/play" element={<PlayerGame />} />
+      <Route path="/host/:quizId" element={<ProtectedRoute><HostLobby /></ProtectedRoute>} />
+      <Route path="/host" element={<ProtectedRoute><HostGame /></ProtectedRoute>} />
     </Routes>
   );
 }

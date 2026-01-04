@@ -1,4 +1,4 @@
-import { TextInput, Textarea, Select, NumberInput, Button, Stack, Group, ActionIcon, Radio } from '@mantine/core';
+import { TextInput, Textarea, Select, NumberInput, Button, Stack, Group, ActionIcon, Radio, Text, Input } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMutation } from '@tanstack/react-query';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
@@ -122,7 +122,7 @@ export default function QuestionForm({ quizId, question, onSaved, onCancel }) {
 
         <div>
           <Group justify="space-between" mb="xs">
-            <TextInput.Label>Options</TextInput.Label>
+            <Text size="sm" fw={500}>Options</Text>
             {form.values.type === 'MULTIPLE_CHOICE' && form.values.options.length < 4 && (
               <Button
                 size="xs"
@@ -168,10 +168,10 @@ export default function QuestionForm({ quizId, question, onSaved, onCancel }) {
             </Stack>
           </Radio.Group>
           {form.errors.options && (
-            <TextInput.Error>{form.errors.options}</TextInput.Error>
+            <Input.Error>{form.errors.options}</Input.Error>
           )}
           {form.errors.correctAnswerIndex && (
-            <TextInput.Error>{form.errors.correctAnswerIndex}</TextInput.Error>
+            <Input.Error>{form.errors.correctAnswerIndex}</Input.Error>
           )}
         </div>
 

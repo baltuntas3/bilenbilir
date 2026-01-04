@@ -161,6 +161,36 @@ class GameSessionRepository {
   }
 
   /**
+   * Find game sessions by quiz and host (for proper authorization)
+   * @param {string} quizId - Quiz ID
+   * @param {string} hostId - Host user ID
+   * @param {Object} options - Pagination options
+   * @returns {Promise<{sessions: GameSession[], pagination: Object}>}
+   */
+  async findByQuizAndHost(quizId, hostId, { page = 1, limit = 20 } = {}) {
+    const skip = (page - 1) * limit;
+    const filter = { quiz: quizId, host: hostId };
+    const [docs, total] = await Promise.all([
+      GameSessionModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      GameSessionModel.countDocuments(filter)
+    ]);
+
+    return {
+      sessions: docs.map(doc => this._toDomain(doc)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
+  }
+
+  /**
    * Get recent game sessions
    * @param {Object} options - Pagination options
    * @returns {Promise<{sessions: GameSession[], pagination: Object}>}
@@ -206,6 +236,16 @@ class GameSessionRepository {
    */
   async deleteByQuiz(quizId) {
     const result = await GameSessionModel.deleteMany({ quiz: quizId });
+    return result.deletedCount || 0;
+  }
+
+  /**
+   * Delete all game sessions for a host (cascade delete)
+   * @param {string} hostId - Host user ID
+   * @returns {Promise<number>} Number of deleted sessions
+   */
+  async deleteByHost(hostId) {
+    const result = await GameSessionModel.deleteMany({ host: hostId });
     return result.deletedCount || 0;
   }
 }

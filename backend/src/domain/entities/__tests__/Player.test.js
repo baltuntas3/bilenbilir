@@ -151,6 +151,11 @@ describe('Player', () => {
     it('should throw error for NaN', () => {
       expect(() => player.addScore(NaN)).toThrow('Points must be a valid number');
     });
+
+    it('should throw error for negative points', () => {
+      expect(() => player.addScore(-100)).toThrow('Points cannot be negative');
+      expect(() => player.addScore(-1)).toThrow('Points cannot be negative');
+    });
   });
 
   describe('playerToken property', () => {
@@ -196,6 +201,19 @@ describe('Player', () => {
 
       // But correctAnswers should still increment
       expect(player.correctAnswers).toBe(2);
+    });
+
+    it('should cap longestStreak at MAX_STREAK (1000)', () => {
+      // Set streak and longestStreak near cap
+      player.streak = 999;
+      player.longestStreak = 999;
+      player.incrementStreak();
+
+      expect(player.longestStreak).toBe(1000);
+
+      // Should not increment longestStreak beyond 1000
+      player.incrementStreak();
+      expect(player.longestStreak).toBe(1000);
     });
   });
 

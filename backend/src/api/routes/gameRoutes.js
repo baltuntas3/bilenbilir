@@ -50,15 +50,11 @@ router.get('/quiz/:quizId/history', authenticate, async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
 
-    const result = await gameSessionRepository.findByQuiz(quizId, { page, limit });
-
-    // Filter to only show sessions where user was the host
-    const userSessions = result.sessions.filter(s =>
-      s.hostId === req.user.id
-    );
+    // Use findByQuizAndHost for proper authorization and correct pagination
+    const result = await gameSessionRepository.findByQuizAndHost(quizId, req.user.id, { page, limit });
 
     res.json({
-      games: userSessions.map(session => ({
+      games: result.sessions.map(session => ({
         id: session.id,
         pin: session.pin,
         playerCount: session.playerCount,

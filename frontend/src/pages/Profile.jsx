@@ -9,7 +9,7 @@ import { showToast } from '../utils/toast';
 import { usernameValidation, passwordValidation, requiredPasswordValidation, confirmPasswordValidation } from '../constants/validation';
 
 export default function Profile() {
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser } = useAuth();
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -66,24 +66,13 @@ export default function Profile() {
   const deleteAccountMutation = useMutation({
     mutationFn: (data) => authService.deleteAccount(data.password),
     onSuccess: () => {
-      logout();
       navigate('/login');
     },
   });
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
   return (
     <Container size={600} my={40}>
-      <Group justify="space-between" mb="lg">
-        <Title>Profile Settings</Title>
-        <Button variant="light" onClick={handleLogout}>
-          Logout
-        </Button>
-      </Group>
+      <Title mb="lg">Profile Settings</Title>
 
       {/* Profile Info Section */}
       <Paper withBorder shadow="md" p={30} radius="md" mb="lg">

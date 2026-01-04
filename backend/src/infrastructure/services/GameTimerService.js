@@ -1,3 +1,9 @@
+const { ValidationError } = require('../../shared/errors');
+
+// Timer duration bounds
+const MIN_DURATION_SECONDS = 5;
+const MAX_DURATION_SECONDS = 120;
+
 /**
  * Game Timer Service
  * Manages server-side timers for answering phases
@@ -29,12 +35,15 @@ class GameTimerService {
 
   /**
    * Start a timer for a room's answering phase
+   * @throws {ValidationError} If duration is invalid
    */
   startTimer(pin, durationSeconds, onExpire) {
-    // Validate duration
-    if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-      console.warn(`Invalid timer duration: ${durationSeconds}, using default 30s`);
-      durationSeconds = 30;
+    // Validate duration - throw error instead of silent fallback
+    if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds)) {
+      throw new ValidationError('Timer duration must be a valid number');
+    }
+    if (durationSeconds < MIN_DURATION_SECONDS || durationSeconds > MAX_DURATION_SECONDS) {
+      throw new ValidationError(`Timer duration must be between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS} seconds`);
     }
 
     this.stopTimer(pin);

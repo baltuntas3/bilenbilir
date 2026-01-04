@@ -104,6 +104,13 @@ class Quiz {
       throw new ValidationError(`newOrder length (${newOrder.length}) must match questions length (${this.questions.length})`);
     }
 
+    // Check for duplicate IDs in newOrder
+    const uniqueIds = new Set(newOrder);
+    if (uniqueIds.size !== newOrder.length) {
+      const duplicates = newOrder.filter((id, idx) => newOrder.indexOf(id) !== idx);
+      throw new ValidationError(`Duplicate question IDs in order: ${[...new Set(duplicates)].join(', ')}`);
+    }
+
     const questionMap = new Map(this.questions.map(q => [q.id, q]));
     const reordered = newOrder.map(id => questionMap.get(id));
 
@@ -131,9 +138,20 @@ class Quiz {
    */
   clone() {
     // Clone and freeze all questions (Question.clone() returns frozen questions)
-    const frozenQuestions = Object.freeze(
-      this.questions.map(q => q.clone())
-    );
+    const clonedQuestions = this.questions.map(q => q.clone());
+    const frozenQuestions = Object.freeze(clonedQuestions);
+
+    // Verify questions array is frozen
+    if (!Object.isFrozen(frozenQuestions)) {
+      throw new ValidationError('Failed to freeze questions array for quiz snapshot');
+    }
+
+    // Verify each question is frozen
+    for (let i = 0; i < frozenQuestions.length; i++) {
+      if (!Object.isFrozen(frozenQuestions[i])) {
+        throw new ValidationError(`Failed to freeze question at index ${i} for quiz snapshot`);
+      }
+    }
 
     // Clone Date to prevent shared reference mutation
     const clonedCreatedAt = this.createdAt instanceof Date
@@ -152,7 +170,14 @@ class Quiz {
     });
 
     // Freeze the quiz object to prevent modifications
-    return Object.freeze(clonedQuiz);
+    const frozenQuiz = Object.freeze(clonedQuiz);
+
+    // Verify quiz is frozen
+    if (!Object.isFrozen(frozenQuiz)) {
+      throw new ValidationError('Failed to freeze quiz for snapshot');
+    }
+
+    return frozenQuiz;
   }
 }
 

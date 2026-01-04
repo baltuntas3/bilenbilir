@@ -4,16 +4,18 @@ const { mongoUserRepository } = require('../../infrastructure/repositories/Mongo
 const { mongoQuizRepository } = require('../../infrastructure/repositories/MongoQuizRepository');
 const { roomRepository } = require('../../infrastructure/repositories/RoomRepository');
 const { gameSessionRepository } = require('../../infrastructure/repositories/GameSessionRepository');
+const { auditLogRepository } = require('../../infrastructure/repositories/AuditLogRepository');
 const { authenticate, requireAdmin } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 
-// Initialize AdminUseCases with all repositories
+// Initialize AdminUseCases with all repositories including audit logging
 const adminUseCases = new AdminUseCases(
   mongoUserRepository,
   mongoQuizRepository,
   roomRepository,
-  gameSessionRepository
+  gameSessionRepository,
+  auditLogRepository
 );
 
 // All admin routes require authentication and admin role

@@ -23,8 +23,6 @@ const authenticate = (req, res, next) => {
 
     req.user = {
       id: decoded.userId,
-      email: decoded.email,
-      username: decoded.username,
       role: decoded.role
     };
 
@@ -57,8 +55,6 @@ const optionalAuthenticate = (req, res, next) => {
 
     req.user = {
       id: decoded.userId,
-      email: decoded.email,
-      username: decoded.username,
       role: decoded.role
     };
 
@@ -88,13 +84,12 @@ const requireAdmin = (req, res, next) => {
 
 /**
  * Generate JWT token
+ * Only includes userId and role - email/username should be fetched from database when needed
  */
 const generateToken = (user) => {
   return jwt.sign(
     {
       userId: user._id || user.id,
-      email: user.email,
-      username: user.username,
       role: user.role
     },
     JWT_SECRET,

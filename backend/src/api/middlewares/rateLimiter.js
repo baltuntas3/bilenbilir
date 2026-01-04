@@ -54,9 +54,20 @@ const quizCreationLimiter = createRateLimiter({
   message: 'Quiz creation limit reached, please try again later'
 });
 
+/**
+ * Search rate limiter
+ * 60 searches per minute to prevent abuse
+ */
+const searchLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: 'Too many search requests, please try again later'
+});
+
 module.exports = {
   createRateLimiter,
   authLimiter,
   passwordResetLimiter,
-  quizCreationLimiter
+  quizCreationLimiter,
+  searchLimiter
 };

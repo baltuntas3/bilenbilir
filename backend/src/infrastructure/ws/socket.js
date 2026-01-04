@@ -20,14 +20,18 @@ const gameUseCases = new GameUseCases(roomRepository, mongoQuizRepository, gameS
  * Verify JWT token for socket authentication
  * @param {string} token - JWT token
  * @returns {object|null} - Decoded user or null
+ * @throws {Error} If JWT_SECRET is not configured (critical misconfiguration)
  */
 const verifySocketToken = (token) => {
   if (!token) return null;
 
-  try {
-    const JWT_SECRET = process.env.JWT_SECRET;
-    if (!JWT_SECRET) return null;
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET) {
+    // Critical misconfiguration - should fail loudly like authMiddleware does
+    throw new Error('JWT_SECRET environment variable is not set. Authentication is not possible.');
+  }
 
+  try {
     return jwt.verify(token, JWT_SECRET);
   } catch {
     return null;
@@ -50,14 +54,20 @@ const initializeSocket = (server) => {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
 
-    // Verify token if provided (optional for players, required for hosts)
-    const user = verifySocketToken(token);
+    try {
+      // Verify token if provided (optional for players, required for hosts)
+      const user = verifySocketToken(token);
 
-    // Attach user info to socket for later use
-    socket.user = user;
-    socket.isAuthenticated = !!user;
+      // Attach user info to socket for later use
+      socket.user = user;
+      socket.isAuthenticated = !!user;
 
-    next();
+      next();
+    } catch (error) {
+      // JWT_SECRET not configured - critical error
+      console.error('[Socket] Authentication error:', error.message);
+      next(new Error('Server authentication configuration error'));
+    }
   });
 
   // Initialize timer service

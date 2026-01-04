@@ -11,10 +11,17 @@ const ALLOWED_IMAGE_PROTOCOLS = ['http:', 'https:'];
 const MAX_POINTS = 10000;
 const MIN_POINTS = 100;
 
+// Valid question types
+const VALID_QUESTION_TYPES = Object.values(QuestionType);
+
 class Question {
   constructor({ id, text, type = QuestionType.MULTIPLE_CHOICE, options, correctAnswerIndex, timeLimit = 30, points = 1000, imageUrl = null }) {
     this.id = id;
     this.text = text;
+    // Validate and set type
+    if (!VALID_QUESTION_TYPES.includes(type)) {
+      throw new ValidationError(`Invalid question type: ${type}. Must be one of: ${VALID_QUESTION_TYPES.join(', ')}`);
+    }
     this.type = type;
     this.options = options;
     this.correctAnswerIndex = correctAnswerIndex;

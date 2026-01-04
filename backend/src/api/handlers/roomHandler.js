@@ -374,12 +374,17 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // ==================== SPECTATOR EVENTS ====================
 
   // Join as spectator
+  // Note: Spectators do not require authentication by design (guests can watch)
+  // Audit logging is enabled for tracking purposes
   socket.on('join_as_spectator', async (data) => {
     try {
       if (!checkRateLimit('join_as_spectator')) return;
 
       const { pin, nickname } = sanitizeObject(data || {});
       await ensureNotInRoom();
+
+      // Audit log for spectator joins (authenticated status tracked for security review)
+      console.log(`[Spectator] Join attempt: pin=${pin}, nickname=${nickname}, authenticated=${socket.isAuthenticated}, socketId=${socket.id}`);
 
       const sanitizedNickname = sanitizeNickname(nickname);
       if (!sanitizedNickname) {

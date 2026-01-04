@@ -884,7 +884,8 @@ describe('Room', () => {
         isCorrect: true,
         elapsedTimeMs: 1500,
         score: 900,
-        streak: 1
+        streak: 1,
+        optionCount: 4
       });
 
       const history = room.getAnswerHistory();
@@ -899,8 +900,17 @@ describe('Room', () => {
       expect(() => room.recordAnswer(null))
         .toThrow('Answer data is required');
 
+      // playerId validation comes first now
       expect(() => room.recordAnswer({ answerIndex: 0, isCorrect: true }))
+        .toThrow('Player ID is required and must be a string');
+
+      // After playerId, playerNickname is checked
+      expect(() => room.recordAnswer({ playerId: 'p1', answerIndex: 0, isCorrect: true }))
         .toThrow('Player nickname is required for answer record');
+
+      // After playerNickname, questionId is checked
+      expect(() => room.recordAnswer({ playerId: 'p1', playerNickname: 'Test', answerIndex: 0, isCorrect: true }))
+        .toThrow('Question ID is required and must be a string');
     });
   });
 
@@ -1002,11 +1012,12 @@ describe('Room', () => {
       expect(room.haveAllPlayersAnswered()).toBe(true);
     });
 
-    it('should return true for empty connected players', () => {
+    it('should return false for empty connected players to prevent incorrect game advancement', () => {
       room.getPlayer('s1').setDisconnected();
       room.getPlayer('s2').setDisconnected();
 
-      expect(room.haveAllPlayersAnswered()).toBe(true);
+      // Changed behavior: returns false when no connected players to prevent game from advancing incorrectly
+      expect(room.haveAllPlayersAnswered()).toBe(false);
     });
   });
 

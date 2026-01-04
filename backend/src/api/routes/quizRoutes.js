@@ -3,7 +3,7 @@ const { QuizUseCases } = require('../../application/use-cases');
 const { mongoQuizRepository } = require('../../infrastructure/repositories/MongoQuizRepository');
 const { authenticate, optionalAuthenticate } = require('../middlewares/authMiddleware');
 const { ForbiddenError } = require('../../shared/errors');
-const { quizCreationLimiter } = require('../middlewares/rateLimiter');
+const { quizCreationLimiter, searchLimiter } = require('../middlewares/rateLimiter');
 const { ValidationError } = require('../../shared/errors');
 
 const router = express.Router();
@@ -56,7 +56,7 @@ router.get('/', async (req, res, next) => {
  * Search public quizzes by title or description
  * Query params: q (required), page (default 1), limit (default 20, max 100)
  */
-router.get('/search', async (req, res, next) => {
+router.get('/search', searchLimiter, async (req, res, next) => {
   try {
     const { q } = req.query;
 

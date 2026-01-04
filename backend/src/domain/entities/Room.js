@@ -5,10 +5,12 @@
  */
 
 const { PIN } = require('../value-objects/PIN');
+const { Nickname } = require('../value-objects/Nickname');
 const { ValidationError, ForbiddenError, UnauthorizedError, ConflictError } = require('../../shared/errors');
 
 const MAX_PLAYERS = 50;
 const MAX_SPECTATORS = 10;
+const MAX_STREAK = 1000; // Same as Player.js for consistency
 
 const RoomState = {
   WAITING_PLAYERS: 'WAITING_PLAYERS',
@@ -278,10 +280,12 @@ class Room {
   /**
    * Check if all connected players have answered
    * Disconnected players are excluded from this check
+   * Returns false if no connected players exist to prevent incorrect game advancement
    */
   haveAllPlayersAnswered() {
     const connectedPlayers = this.players.filter(p => !p.isDisconnected());
-    if (connectedPlayers.length === 0) return true;
+    // Return false if no connected players - game should not advance automatically
+    if (connectedPlayers.length === 0) return false;
     return connectedPlayers.every(p => p.hasAnswered());
   }
 
@@ -312,6 +316,17 @@ class Room {
     if (!this.isHost(requesterId)) {
       throw new ForbiddenError('Only host can advance questions');
     }
+
+    // Validate totalQuestions parameter
+    if (typeof totalQuestions !== 'number' || !Number.isInteger(totalQuestions) || totalQuestions < 1) {
+      throw new ValidationError('totalQuestions must be a positive integer');
+    }
+
+    // Validate current index is within bounds before proceeding
+    if (this.currentQuestionIndex < 0 || this.currentQuestionIndex >= totalQuestions) {
+      throw new ValidationError(`currentQuestionIndex ${this.currentQuestionIndex} is out of bounds (0-${totalQuestions - 1})`);
+    }
+
     if (this.currentQuestionIndex >= totalQuestions - 1) {
       this.state = RoomState.PODIUM;
       return false;
@@ -331,6 +346,7 @@ class Room {
 
   /**
    * Get answer distribution for current question
+   * Creates a snapshot of player answers to prevent race conditions during iteration
    * @param {number} optionCount - Number of options in the question
    * @param {Function} isCorrectFn - Function to check if answer index is correct
    * @returns {{ distribution: number[], correctCount: number, skippedCount: number }} Distribution array, correct answer count, and count of invalid answers skipped
@@ -344,28 +360,40 @@ class Room {
       throw new ValidationError('optionCount exceeds maximum allowed value');
     }
 
+    // Validate isCorrectFn
+    if (typeof isCorrectFn !== 'function') {
+      throw new ValidationError('isCorrectFn must be a function');
+    }
+
     const distribution = new Array(optionCount).fill(0);
     let correctCount = 0;
     let skippedCount = 0;
 
-    this.players.forEach(player => {
-      if (player.hasAnswered()) {
-        const idx = player.answerAttempt.answerIndex;
+    // Create a snapshot of player answers to prevent race conditions
+    // Capture answer data upfront before any processing
+    const answerSnapshots = this.players
+      .filter(player => player.hasAnswered() && player.answerAttempt)
+      .map(player => ({
+        nickname: player.nickname,
+        answerIndex: player.answerAttempt.answerIndex
+      }));
 
-        // Validate answer index is within valid range
-        if (typeof idx !== 'number' || idx < 0 || idx >= distribution.length) {
-          // Log corrupted/invalid answer data for debugging
-          console.warn(`[Room ${this.pin}] Invalid answer index ${idx} from player ${player.nickname} (expected 0-${distribution.length - 1})`);
-          skippedCount++;
-          return;
-        }
+    // Process the snapshot (immutable data)
+    for (const snapshot of answerSnapshots) {
+      const idx = snapshot.answerIndex;
 
-        distribution[idx]++;
-        if (isCorrectFn(idx)) {
-          correctCount++;
-        }
+      // Validate answer index is within valid range
+      if (typeof idx !== 'number' || !Number.isInteger(idx) || idx < 0 || idx >= distribution.length) {
+        console.warn(`[Room ${this.pin}] Invalid answer index ${idx} from player ${snapshot.nickname} (expected 0-${distribution.length - 1})`);
+        skippedCount++;
+        continue;
       }
-    });
+
+      distribution[idx]++;
+      if (isCorrectFn(idx)) {
+        correctCount++;
+      }
+    }
 
     return { distribution, correctCount, skippedCount };
   }
@@ -390,21 +418,41 @@ class Room {
    * @param {number} answerData.elapsedTimeMs - Response time in milliseconds
    * @param {number} answerData.score - Points earned
    * @param {number} [answerData.streak] - Current streak (optional)
+   * @param {number} answerData.optionCount - Number of options in question (required for validation)
    */
   recordAnswer(answerData) {
     // Validate required fields
     if (!answerData || typeof answerData !== 'object') {
       throw new ValidationError('Answer data is required');
     }
+    // Validate playerId
+    if (!answerData.playerId || typeof answerData.playerId !== 'string') {
+      throw new ValidationError('Player ID is required and must be a string');
+    }
     if (!answerData.playerNickname || typeof answerData.playerNickname !== 'string') {
       throw new ValidationError('Player nickname is required for answer record');
     }
-    if (typeof answerData.answerIndex !== 'number' || answerData.answerIndex < 0) {
+    // Validate questionId
+    if (!answerData.questionId || typeof answerData.questionId !== 'string') {
+      throw new ValidationError('Question ID is required and must be a string');
+    }
+    if (typeof answerData.answerIndex !== 'number' || !Number.isInteger(answerData.answerIndex) || answerData.answerIndex < 0) {
       throw new ValidationError('Valid answer index is required');
+    }
+    // Validate optionCount is provided for bounds checking
+    if (typeof answerData.optionCount !== 'number' || !Number.isInteger(answerData.optionCount) || answerData.optionCount < 2) {
+      throw new ValidationError('optionCount is required and must be at least 2');
+    }
+    // Validate answer index is within valid range
+    if (answerData.answerIndex >= answerData.optionCount) {
+      throw new ValidationError(`Answer index ${answerData.answerIndex} is out of range (0-${answerData.optionCount - 1})`);
     }
     if (typeof answerData.isCorrect !== 'boolean') {
       throw new ValidationError('isCorrect must be a boolean');
     }
+
+    // Sanitize streak with upper bound
+    const safeStreak = Math.min(Math.max(0, answerData.streak || 0), MAX_STREAK);
 
     this.answerHistory.push({
       playerId: answerData.playerId,
@@ -414,7 +462,7 @@ class Room {
       isCorrect: answerData.isCorrect,
       elapsedTimeMs: Math.max(0, answerData.elapsedTimeMs || 0),
       score: Math.max(0, answerData.score || 0),
-      streak: Math.max(0, answerData.streak || 0),
+      streak: safeStreak,
       questionIndex: this.currentQuestionIndex,
       timestamp: new Date()
     });
@@ -478,6 +526,23 @@ class Room {
   }
 
   /**
+   * Normalize nickname for consistent comparisons
+   * Uses Nickname VO when valid, falls back to toLowerCase for edge cases
+   * @private
+   */
+  _normalizeNickname(nickname) {
+    if (!nickname || typeof nickname !== 'string') {
+      return '';
+    }
+    try {
+      return new Nickname(nickname).normalized();
+    } catch {
+      // Fallback for invalid nicknames (shouldn't happen in normal flow)
+      return nickname.toLowerCase().trim();
+    }
+  }
+
+  /**
    * Check if a nickname is banned
    * @param {string} nickname - Nickname to check
    * @returns {boolean}
@@ -487,7 +552,7 @@ class Room {
     if (!nickname || typeof nickname !== 'string') {
       return false;
     }
-    const normalizedNickname = nickname.toLowerCase();
+    const normalizedNickname = this._normalizeNickname(nickname);
     return this.bannedNicknames.includes(normalizedNickname);
   }
 
@@ -506,7 +571,7 @@ class Room {
       throw new ValidationError('Valid nickname is required');
     }
 
-    const normalizedNickname = nickname.toLowerCase();
+    const normalizedNickname = this._normalizeNickname(nickname);
     this.bannedNicknames = this.bannedNicknames.filter(n => n !== normalizedNickname);
   }
 

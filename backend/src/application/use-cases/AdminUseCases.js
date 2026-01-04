@@ -1,12 +1,14 @@
 const { NotFoundError, ForbiddenError, ValidationError } = require('../../shared/errors');
 
 class AdminUseCases {
-  constructor(userRepository, quizRepository, roomRepository, gameSessionRepository, auditLogRepository = null) {
+  constructor(userRepository, quizRepository, roomRepository, gameSessionRepository, auditLogRepository = null, options = {}) {
     this.userRepository = userRepository;
     this.quizRepository = quizRepository;
     this.roomRepository = roomRepository;
     this.gameSessionRepository = gameSessionRepository;
     this.auditLogRepository = auditLogRepository;
+    // Callback for notifying room closure (set by socket handler)
+    this.onRoomClosed = options.onRoomClosed || null;
   }
 
   /**
@@ -133,17 +135,17 @@ class AdminUseCases {
       throw new ValidationError('Invalid role. Must be "user" or "admin"');
     }
 
-    // Prevent admin from demoting themselves
-    if (requesterId === userId && role !== 'admin') {
-      throw new ForbiddenError('Cannot demote yourself');
-    }
-
-    // Get old role for audit
+    // Get target user first to ensure they exist
     const oldUser = await this.userRepository.findById(userId);
     if (!oldUser) {
       throw new NotFoundError('User not found');
     }
     const oldRole = oldUser.role;
+
+    // Prevent admin from demoting themselves (check after verifying user exists)
+    if (requesterId === userId && role !== 'admin') {
+      throw new ForbiddenError('Cannot demote yourself');
+    }
 
     const user = await this.userRepository.updateById(userId, { role });
 
@@ -216,6 +218,34 @@ class AdminUseCases {
       deletedQuizCount = await this.quizRepository.deleteByCreator(userId);
     }
 
+    // Delete user's game sessions
+    let deletedSessionCount = 0;
+    if (this.gameSessionRepository && this.gameSessionRepository.deleteByHost) {
+      deletedSessionCount = await this.gameSessionRepository.deleteByHost(userId);
+    }
+
+    // Close any active rooms hosted by this user and notify players
+    if (this.roomRepository) {
+      const rooms = await this.roomRepository.getAll();
+      for (const room of rooms) {
+        if (room.hostUserId === userId) {
+          // Notify players before closing room
+          if (this.onRoomClosed) {
+            try {
+              await this.onRoomClosed(room.pin, {
+                reason: 'Host account deleted',
+                playerCount: room.getPlayerCount(),
+                spectatorCount: room.getSpectatorCount()
+              });
+            } catch (error) {
+              console.error('[AdminUseCases] Failed to notify room closure for deleted user:', error.message);
+            }
+          }
+          await this.roomRepository.delete(room.pin);
+        }
+      }
+    }
+
     // Delete user
     await this.userRepository.deleteById(userId);
 
@@ -223,10 +253,11 @@ class AdminUseCases {
     await this._logAction(admin, 'USER_DELETED', 'user', userId, {
       deletedUserEmail: userEmail,
       deletedUsername: username,
-      deletedQuizCount
+      deletedQuizCount,
+      deletedSessionCount
     });
 
-    return { success: true };
+    return { success: true, deletedQuizCount, deletedSessionCount };
   }
 
   // ==================== QUIZ MANAGEMENT ====================
@@ -322,7 +353,21 @@ class AdminUseCases {
 
     const roomState = room.state;
     const playerCount = room.getPlayerCount();
+    const spectatorCount = room.getSpectatorCount();
     const quizId = room.quizId;
+
+    // Notify players before closing room
+    if (this.onRoomClosed) {
+      try {
+        await this.onRoomClosed(pin, {
+          reason: 'Room closed by administrator',
+          playerCount,
+          spectatorCount
+        });
+      } catch (error) {
+        console.error('[AdminUseCases] Failed to notify room closure:', error.message);
+      }
+    }
 
     await this.roomRepository.delete(pin);
 
@@ -330,10 +375,11 @@ class AdminUseCases {
     await this._logAction(admin, 'ROOM_CLOSED_ADMIN', 'room', pin, {
       roomState,
       playerCount,
+      spectatorCount,
       quizId
     });
 
-    return { success: true, pin };
+    return { success: true, pin, playerCount, spectatorCount };
   }
 
   // ==================== SESSION MANAGEMENT ====================

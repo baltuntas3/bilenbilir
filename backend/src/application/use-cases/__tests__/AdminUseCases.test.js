@@ -52,7 +52,8 @@ describe('AdminUseCases', () => {
       findById: jest.fn(),
       getRecent: jest.fn(),
       delete: jest.fn(),
-      deleteByQuiz: jest.fn()
+      deleteByQuiz: jest.fn(),
+      deleteByHost: jest.fn()
     };
 
     mockAuditLogRepository = {
@@ -266,6 +267,8 @@ describe('AdminUseCases', () => {
 
     it('should delete user and their quizzes', async () => {
       mockQuizRepository.deleteByCreator.mockResolvedValue(3);
+      mockGameSessionRepository.deleteByHost.mockResolvedValue(2);
+      mockRoomRepository.getAll.mockResolvedValue([]);
       mockUserRepository.deleteById.mockResolvedValue(true);
 
       const result = await adminUseCases.deleteUser({
@@ -388,6 +391,7 @@ describe('AdminUseCases', () => {
         pin: '123456',
         state: 'WAITING_PLAYERS',
         getPlayerCount: () => 3,
+        getSpectatorCount: () => 1,
         quizId: 'quiz-1'
       });
       mockRoomRepository.delete.mockResolvedValue(true);
