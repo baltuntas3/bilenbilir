@@ -280,4 +280,60 @@ router.delete('/:id/questions/:questionId', authenticate, async (req, res, next)
   }
 });
 
+// ==================== IMPORT/EXPORT ENDPOINTS ====================
+
+/**
+ * GET /api/quizzes/:id/export
+ * Export quiz to JSON format
+ * Public quizzes: accessible to everyone
+ * Private quizzes: owner only
+ */
+router.get('/:id/export', optionalAuthenticate, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await quizUseCases.exportQuiz({
+      quizId: id,
+      requesterId: req.user?.id || null
+    });
+
+    // Set headers for file download
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="quiz-${id}.json"`);
+
+    res.json(result.exportData);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/quizzes/import
+ * Import quiz from JSON format (requires auth)
+ * Body: { data: {...}, isPublic?: boolean }
+ */
+router.post('/import', authenticate, quizCreationLimiter, async (req, res, next) => {
+  try {
+    const { data, isPublic } = req.body;
+
+    if (!data) {
+      throw new ValidationError('Import data is required');
+    }
+
+    const result = await quizUseCases.importQuiz({
+      jsonData: data,
+      requesterId: req.user.id,
+      isPublic: isPublic || false
+    });
+
+    res.status(201).json({
+      quiz: result.quiz,
+      questionCount: result.questionCount,
+      message: `Quiz imported successfully with ${result.questionCount} questions`
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

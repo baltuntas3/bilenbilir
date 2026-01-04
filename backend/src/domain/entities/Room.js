@@ -8,6 +8,7 @@ const { PIN } = require('../value-objects/PIN');
 const { ValidationError, ForbiddenError, UnauthorizedError, ConflictError } = require('../../shared/errors');
 
 const MAX_PLAYERS = 50;
+const MAX_SPECTATORS = 10;
 
 const RoomState = {
   WAITING_PLAYERS: 'WAITING_PLAYERS',
@@ -15,6 +16,7 @@ const RoomState = {
   ANSWERING_PHASE: 'ANSWERING_PHASE',
   SHOW_RESULTS: 'SHOW_RESULTS',
   LEADERBOARD: 'LEADERBOARD',
+  PAUSED: 'PAUSED',
   PODIUM: 'PODIUM'
 };
 
@@ -24,12 +26,14 @@ const validTransitions = {
   [RoomState.QUESTION_INTRO]: [RoomState.ANSWERING_PHASE],
   [RoomState.ANSWERING_PHASE]: [RoomState.SHOW_RESULTS],
   [RoomState.SHOW_RESULTS]: [RoomState.LEADERBOARD],
-  [RoomState.LEADERBOARD]: [RoomState.QUESTION_INTRO, RoomState.PODIUM],
+  [RoomState.LEADERBOARD]: [RoomState.QUESTION_INTRO, RoomState.PODIUM, RoomState.PAUSED],
+  [RoomState.PAUSED]: [RoomState.LEADERBOARD, RoomState.QUESTION_INTRO],
   [RoomState.PODIUM]: [] // Terminal state
 };
 
 class Room {
   static MAX_PLAYERS = MAX_PLAYERS;
+  static MAX_SPECTATORS = MAX_SPECTATORS;
 
   constructor({ id, pin, hostId, hostUserId, hostToken, quizId, state = RoomState.WAITING_PLAYERS, currentQuestionIndex = 0, createdAt = new Date() }) {
     this.id = id;
@@ -46,6 +50,8 @@ class Room {
     this.currentQuestionIndex = currentQuestionIndex;
     this.createdAt = createdAt;
     this.players = [];
+    this.spectators = [];
+    this.bannedNicknames = [];
     this.hostDisconnectedAt = null;
     // Track all answers for archiving
     this.answerHistory = [];
@@ -53,6 +59,9 @@ class Room {
     this.quizSnapshot = null;
     // Track when game actually started (for accurate archiving)
     this.gameStartedAt = null;
+    // Pause state tracking
+    this.pausedAt = null;
+    this.pausedFromState = null;
   }
 
   /**
@@ -157,6 +166,11 @@ class Room {
 
     if (this.players.length >= MAX_PLAYERS) {
       throw new ValidationError(`Room is full (maximum ${MAX_PLAYERS} players)`);
+    }
+
+    // Check if nickname is banned
+    if (this.isNicknameBanned(player.nickname)) {
+      throw new ForbiddenError('This nickname is banned from this room');
     }
 
     // Use Player's VO-backed case-insensitive comparison
@@ -411,6 +425,303 @@ class Room {
    */
   getAnswerHistory() {
     return [...this.answerHistory];
+  }
+
+  // ==================== KICK/BAN METHODS ====================
+
+  /**
+   * Get player by ID
+   * @param {string} playerId - Player ID
+   * @returns {Player|null}
+   */
+  getPlayerById(playerId) {
+    return this.players.find(p => p.id === playerId) || null;
+  }
+
+  /**
+   * Kick a player from the room (host only)
+   * @param {string} playerId - Player ID to kick
+   * @param {string} requesterId - Socket ID of requester
+   * @returns {Player} The kicked player
+   */
+  kickPlayer(playerId, requesterId) {
+    if (!this.isHost(requesterId)) {
+      throw new ForbiddenError('Only host can kick players');
+    }
+
+    const player = this.getPlayerById(playerId);
+    if (!player) {
+      throw new ValidationError('Player not found');
+    }
+
+    this.players = this.players.filter(p => p.id !== playerId);
+    return player;
+  }
+
+  /**
+   * Ban a player from the room (host only)
+   * Kicks the player and adds their nickname to ban list
+   * @param {string} playerId - Player ID to ban
+   * @param {string} requesterId - Socket ID of requester
+   * @returns {Player} The banned player
+   */
+  banPlayer(playerId, requesterId) {
+    const player = this.kickPlayer(playerId, requesterId);
+
+    // Add normalized nickname to ban list (using Player's VO method)
+    const normalizedNickname = player.getNormalizedNickname();
+    if (!this.bannedNicknames.includes(normalizedNickname)) {
+      this.bannedNicknames.push(normalizedNickname);
+    }
+
+    return player;
+  }
+
+  /**
+   * Check if a nickname is banned
+   * @param {string} nickname - Nickname to check
+   * @returns {boolean}
+   */
+  isNicknameBanned(nickname) {
+    // Null/undefined check to prevent crash
+    if (!nickname || typeof nickname !== 'string') {
+      return false;
+    }
+    const normalizedNickname = nickname.toLowerCase();
+    return this.bannedNicknames.includes(normalizedNickname);
+  }
+
+  /**
+   * Unban a nickname (host only)
+   * @param {string} nickname - Nickname to unban
+   * @param {string} requesterId - Socket ID of requester
+   */
+  unbanNickname(nickname, requesterId) {
+    if (!this.isHost(requesterId)) {
+      throw new ForbiddenError('Only host can unban players');
+    }
+
+    // Validate nickname
+    if (!nickname || typeof nickname !== 'string') {
+      throw new ValidationError('Valid nickname is required');
+    }
+
+    const normalizedNickname = nickname.toLowerCase();
+    this.bannedNicknames = this.bannedNicknames.filter(n => n !== normalizedNickname);
+  }
+
+  /**
+   * Get list of banned nicknames
+   * @returns {string[]}
+   */
+  getBannedNicknames() {
+    return [...this.bannedNicknames];
+  }
+
+  // ==================== SPECTATOR METHODS ====================
+
+  /**
+   * Add a spectator to the room
+   * @param {Spectator} spectator - Spectator to add
+   */
+  addSpectator(spectator) {
+    if (this.spectators.length >= MAX_SPECTATORS) {
+      throw new ValidationError(`Room is full (maximum ${MAX_SPECTATORS} spectators)`);
+    }
+
+    // Check if nickname is already taken by player or spectator (using VO methods)
+    const nicknameExistsPlayer = this.players.some(p => p.hasNickname(spectator.nickname));
+    const nicknameExistsSpectator = this.spectators.some(s => s.hasNickname(spectator.nickname));
+
+    if (nicknameExistsPlayer || nicknameExistsSpectator) {
+      throw new ConflictError('Nickname already taken');
+    }
+
+    this.spectators.push(spectator);
+  }
+
+  /**
+   * Remove a spectator from the room
+   * @param {string} socketId - Socket ID of spectator to remove
+   */
+  removeSpectator(socketId) {
+    this.spectators = this.spectators.filter(s => s.socketId !== socketId);
+  }
+
+  /**
+   * Get spectator by socket ID
+   * @param {string} socketId - Socket ID
+   * @returns {Spectator|null}
+   */
+  getSpectator(socketId) {
+    return this.spectators.find(s => s.socketId === socketId) || null;
+  }
+
+  /**
+   * Get spectator count
+   * @returns {number}
+   */
+  getSpectatorCount() {
+    return this.spectators.length;
+  }
+
+  /**
+   * Get all spectators
+   * @returns {Spectator[]}
+   */
+  getAllSpectators() {
+    return [...this.spectators];
+  }
+
+  /**
+   * Check if socket is a spectator
+   * @param {string} socketId - Socket ID
+   * @returns {boolean}
+   */
+  isSpectator(socketId) {
+    return this.spectators.some(s => s.socketId === socketId);
+  }
+
+  /**
+   * Get spectator by token
+   * @param {string} spectatorToken - Spectator token
+   * @returns {Spectator|null}
+   */
+  getSpectatorByToken(spectatorToken) {
+    return this.spectators.find(s => s.spectatorToken === spectatorToken) || null;
+  }
+
+  /**
+   * Mark spectator as disconnected
+   * @param {string} socketId - Socket ID
+   * @returns {Spectator|null} The disconnected spectator
+   */
+  setSpectatorDisconnected(socketId) {
+    const spectator = this.getSpectator(socketId);
+    if (spectator) {
+      spectator.setDisconnected();
+    }
+    return spectator;
+  }
+
+  /**
+   * Reconnect spectator with token validation
+   * @param {string} spectatorToken - Spectator token
+   * @param {string} newSocketId - New socket ID
+   * @param {number|null} gracePeriodMs - Grace period in ms (null to skip check)
+   * @param {string|null} newToken - New token for rotation
+   * @returns {Spectator} The reconnected spectator
+   */
+  reconnectSpectator(spectatorToken, newSocketId, gracePeriodMs = null, newToken = null) {
+    const spectator = this.getSpectatorByToken(spectatorToken);
+    if (!spectator) {
+      throw new UnauthorizedError('Invalid spectator token');
+    }
+
+    // Check if token has expired
+    if (spectator.isTokenExpired()) {
+      throw new UnauthorizedError('Spectator token has expired');
+    }
+
+    // Check if spectator exceeded grace period
+    if (gracePeriodMs !== null && spectator.isDisconnected()) {
+      const disconnectedDuration = spectator.getDisconnectedDuration();
+      if (disconnectedDuration > gracePeriodMs) {
+        throw new ForbiddenError('Reconnection timeout expired');
+      }
+    }
+
+    // Rotate token on reconnect for security
+    spectator.reconnect(newSocketId, newToken);
+    return spectator;
+  }
+
+  /**
+   * Remove spectators who have been disconnected longer than grace period
+   * @param {number} gracePeriodMs - Grace period in milliseconds
+   * @returns {Spectator[]} Removed spectators
+   */
+  removeStaleDisconnectedSpectators(gracePeriodMs) {
+    const staleSpectators = this.spectators.filter(s =>
+      s.isDisconnected() && s.getDisconnectedDuration() > gracePeriodMs
+    );
+
+    this.spectators = this.spectators.filter(s =>
+      !s.isDisconnected() || s.getDisconnectedDuration() <= gracePeriodMs
+    );
+
+    return staleSpectators;
+  }
+
+  /**
+   * Get all disconnected spectators
+   * @returns {Spectator[]}
+   */
+  getDisconnectedSpectators() {
+    return this.spectators.filter(s => s.isDisconnected());
+  }
+
+  /**
+   * Get count of connected (non-disconnected) spectators
+   * @returns {number}
+   */
+  getConnectedSpectatorCount() {
+    return this.spectators.filter(s => !s.isDisconnected()).length;
+  }
+
+  // ==================== PAUSE/RESUME METHODS ====================
+
+  /**
+   * Pause the game (host only, only from LEADERBOARD state)
+   * @param {string} requesterId - Socket ID of requester
+   */
+  pause(requesterId) {
+    if (!this.isHost(requesterId)) {
+      throw new ForbiddenError('Only host can pause the game');
+    }
+
+    if (this.state !== RoomState.LEADERBOARD) {
+      throw new ValidationError('Game can only be paused from leaderboard');
+    }
+
+    this.pausedFromState = this.state;
+    this.pausedAt = new Date();
+    this.state = RoomState.PAUSED;
+  }
+
+  /**
+   * Resume the game (host only)
+   * @param {string} requesterId - Socket ID of requester
+   */
+  resume(requesterId) {
+    if (!this.isHost(requesterId)) {
+      throw new ForbiddenError('Only host can resume the game');
+    }
+
+    if (this.state !== RoomState.PAUSED) {
+      throw new ValidationError('Game is not paused');
+    }
+
+    this.state = this.pausedFromState || RoomState.LEADERBOARD;
+    this.pausedAt = null;
+    this.pausedFromState = null;
+  }
+
+  /**
+   * Check if game is paused
+   * @returns {boolean}
+   */
+  isPaused() {
+    return this.state === RoomState.PAUSED;
+  }
+
+  /**
+   * Get pause duration in milliseconds
+   * @returns {number}
+   */
+  getPauseDuration() {
+    if (!this.pausedAt) return 0;
+    return Date.now() - this.pausedAt.getTime();
   }
 }
 

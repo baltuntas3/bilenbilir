@@ -79,6 +79,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Start server-side timer with race condition protection
       timerService.startTimer(pin, result.timeLimit, async () => {
         try {
+          // Zombie callback check: verify room still exists before processing
+          // Room could have been deleted/closed while timer was running
+          const roomExists = await gameUseCases.roomExists(pin);
+          if (!roomExists) {
+            console.log(`Timer callback skipped - room ${pin} no longer exists`);
+            return;
+          }
+
           const endResult = await gameUseCases.endAnsweringPhase({
             pin,
             requesterId: 'server'
@@ -94,7 +102,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
             });
           }
         } catch (err) {
-          if (err.message !== 'Not in answering phase') {
+          // Ignore expected errors when room state has changed
+          if (err.message !== 'Not in answering phase' && err.message !== 'Room not found') {
             console.error('Auto-end error:', err.message);
           }
         }
@@ -117,13 +126,17 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       const { pin, answerIndex } = data || {};
 
+      // SECURITY: Only use pin and answerIndex from client
+      // Elapsed time MUST be calculated server-side to prevent manipulation
+      // Client could send fake elapsedTimeMs to get maximum score
+
       // Check if timer has expired (server-side validation)
       if (timerService.isTimeExpired(pin)) {
         socket.emit('error', { error: 'Time expired' });
         return;
       }
 
-      // Use server-side elapsed time
+      // Use server-side elapsed time (NEVER trust client-provided time)
       const elapsedTimeMs = timerService.getElapsedTime(pin);
 
       // Validate elapsed time - if null, timer doesn't exist
@@ -298,6 +311,54 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       } else {
         socket.emit('timer_sync', { active: false });
       }
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // ==================== PAUSE/RESUME EVENTS ====================
+
+  // Host pauses the game (only from LEADERBOARD state)
+  socket.on('pause_game', async (data) => {
+    try {
+      if (!checkRateLimit('pause_game')) return;
+      requireAuth();
+
+      const { pin } = data || {};
+
+      // Stop timer if any is running (safety measure to prevent desync)
+      timerService.stopTimer(pin);
+
+      const result = await gameUseCases.pauseGame({
+        pin,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('game_paused', {
+        pausedAt: result.pausedAt
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Host resumes the game
+  socket.on('resume_game', async (data) => {
+    try {
+      if (!checkRateLimit('resume_game')) return;
+      requireAuth();
+
+      const { pin } = data || {};
+
+      const result = await gameUseCases.resumeGame({
+        pin,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('game_resumed', {
+        state: result.resumedState,
+        pauseDuration: result.pauseDuration
+      });
     } catch (error) {
       handleSocketError(socket, error);
     }

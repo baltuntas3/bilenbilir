@@ -1,6 +1,9 @@
 const { Quiz, Question } = require('../../domain/entities');
 const { generateId } = require('../../shared/utils/generateId');
-const { NotFoundError, ForbiddenError, ConflictError } = require('../../shared/errors');
+const { NotFoundError, ForbiddenError, ConflictError, ValidationError } = require('../../shared/errors');
+
+// Current export format version
+const EXPORT_VERSION = '1.0';
 
 class QuizUseCases {
   constructor(quizRepository, roomRepository = null, gameSessionRepository = null) {
@@ -194,6 +197,141 @@ class QuizUseCases {
     await this.quizRepository.save(quiz);
 
     return { quiz, question: updatedQuestion };
+  }
+
+  // ==================== IMPORT/EXPORT METHODS ====================
+
+  /**
+   * Export quiz to JSON format
+   * @param {string} quizId - Quiz ID to export
+   * @param {string} requesterId - User ID requesting export
+   */
+  async exportQuiz({ quizId, requesterId }) {
+    const quiz = await this._getQuizOrThrow(quizId);
+
+    // Only owner can export private quizzes
+    if (!quiz.isPublic && quiz.createdBy !== requesterId) {
+      throw new ForbiddenError('Not authorized to export this quiz');
+    }
+
+    const exportData = {
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      quiz: {
+        title: quiz.title,
+        description: quiz.description || '',
+        questions: quiz.questions.map(q => ({
+          text: q.text,
+          type: q.type,
+          options: q.options,
+          correctAnswerIndex: q.correctAnswerIndex,
+          timeLimit: q.timeLimit,
+          points: q.points,
+          imageUrl: q.imageUrl || null
+        }))
+      }
+    };
+
+    return { exportData };
+  }
+
+  /**
+   * Validate import data structure
+   * @private
+   */
+  _validateImportData(jsonData) {
+    if (!jsonData || typeof jsonData !== 'object') {
+      throw new ValidationError('Invalid import data: must be an object');
+    }
+
+    if (!jsonData.version) {
+      throw new ValidationError('Invalid import data: missing version');
+    }
+
+    if (!jsonData.quiz || typeof jsonData.quiz !== 'object') {
+      throw new ValidationError('Invalid import data: missing quiz object');
+    }
+
+    const { quiz } = jsonData;
+
+    if (!quiz.title || typeof quiz.title !== 'string') {
+      throw new ValidationError('Invalid import data: quiz must have a title');
+    }
+
+    if (!Array.isArray(quiz.questions)) {
+      throw new ValidationError('Invalid import data: questions must be an array');
+    }
+
+    if (quiz.questions.length > 50) {
+      throw new ValidationError('Invalid import data: maximum 50 questions allowed');
+    }
+
+    // Validate each question
+    quiz.questions.forEach((q, index) => {
+      if (!q.text || typeof q.text !== 'string') {
+        throw new ValidationError(`Invalid question at index ${index}: missing text`);
+      }
+
+      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) {
+        throw new ValidationError(`Invalid question at index ${index}: must have 2-4 options`);
+      }
+
+      if (typeof q.correctAnswerIndex !== 'number' || q.correctAnswerIndex < 0 || q.correctAnswerIndex >= q.options.length) {
+        throw new ValidationError(`Invalid question at index ${index}: invalid correctAnswerIndex`);
+      }
+
+      // Validate optional fields
+      if (q.timeLimit !== undefined && (typeof q.timeLimit !== 'number' || q.timeLimit < 5 || q.timeLimit > 120)) {
+        throw new ValidationError(`Invalid question at index ${index}: timeLimit must be between 5 and 120`);
+      }
+
+      if (q.points !== undefined && (typeof q.points !== 'number' || q.points < 100 || q.points > 10000)) {
+        throw new ValidationError(`Invalid question at index ${index}: points must be between 100 and 10000`);
+      }
+    });
+
+    return true;
+  }
+
+  /**
+   * Import quiz from JSON format
+   * @param {object} jsonData - The JSON data to import
+   * @param {string} requesterId - User ID creating the quiz
+   * @param {boolean} isPublic - Whether the imported quiz should be public
+   */
+  async importQuiz({ jsonData, requesterId, isPublic = false }) {
+    // Validate import data structure
+    this._validateImportData(jsonData);
+
+    const { quiz: quizData } = jsonData;
+
+    // Create new quiz
+    const quiz = new Quiz({
+      id: generateId(),
+      title: quizData.title,
+      description: quizData.description || '',
+      createdBy: requesterId,
+      isPublic
+    });
+
+    // Add questions
+    for (const qData of quizData.questions) {
+      const question = new Question({
+        id: generateId(),
+        text: qData.text,
+        type: qData.type || 'MULTIPLE_CHOICE',
+        options: qData.options,
+        correctAnswerIndex: qData.correctAnswerIndex,
+        timeLimit: qData.timeLimit || 30,
+        points: qData.points || 1000,
+        imageUrl: qData.imageUrl || null
+      });
+      quiz.addQuestion(question);
+    }
+
+    await this.quizRepository.save(quiz);
+
+    return { quiz, questionCount: quiz.questions.length };
   }
 }
 

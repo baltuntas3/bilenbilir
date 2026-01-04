@@ -2,6 +2,7 @@ const { RoomRepository, roomRepository } = require('./RoomRepository');
 const { GameSessionRepository, gameSessionRepository } = require('./GameSessionRepository');
 const { MongoQuizRepository, mongoQuizRepository } = require('./MongoQuizRepository');
 const { MongoUserRepository, mongoUserRepository } = require('./MongoUserRepository');
+const { AuditLogRepository, auditLogRepository } = require('./AuditLogRepository');
 
 module.exports = {
   RoomRepository,
@@ -11,5 +12,7 @@ module.exports = {
   MongoQuizRepository,
   mongoQuizRepository,
   MongoUserRepository,
-  mongoUserRepository
+  mongoUserRepository,
+  AuditLogRepository,
+  auditLogRepository
 };

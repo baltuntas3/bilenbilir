@@ -1,4 +1,4 @@
-const { Room, RoomState, Player } = require('../../domain/entities');
+const { Room, RoomState, Player, Spectator } = require('../../domain/entities');
 const { PIN, Nickname } = require('../../domain/value-objects');
 const { generateId } = require('../../shared/utils/generateId');
 const { NotFoundError, ForbiddenError, ValidationError, ConflictError } = require('../../shared/errors');
@@ -121,6 +121,12 @@ class RoomUseCases {
    * @param {string} quizId - Quiz ID to use for the game
    */
   async createRoom({ hostId, hostUserId, quizId }) {
+    // Check if host already has an active room
+    const existingRoom = await this.roomRepository.findByHostUserId(hostUserId);
+    if (existingRoom) {
+      throw new ConflictError(`You already have an active room (PIN: ${existingRoom.pin}). Close it before creating a new one.`);
+    }
+
     const quiz = await this._getQuizOrThrow(quizId);
 
     // Generate unique PIN with exponential backoff info
@@ -235,7 +241,7 @@ class RoomUseCases {
       return { type: 'not_in_room' };
     }
 
-    const { room, role, player } = result;
+    const { room, role, player, spectator } = result;
 
     if (role === 'host') {
       // Mark host as disconnected instead of deleting room immediately
@@ -263,6 +269,19 @@ class RoomUseCases {
         player,
         playerCount: room.getPlayerCount(),
         canReconnect: room.state !== RoomState.WAITING_PLAYERS
+      };
+    }
+
+    if (role === 'spectator' && spectator) {
+      // Mark spectator as disconnected for potential reconnection
+      room.setSpectatorDisconnected(socketId);
+      await this.roomRepository.save(room);
+      return {
+        type: 'spectator_disconnected',
+        pin: room.pin,
+        spectator,
+        spectatorCount: room.getSpectatorCount(),
+        canReconnect: true
       };
     }
 
@@ -324,6 +343,124 @@ class RoomUseCases {
    */
   async findRoomBySocketId({ socketId }) {
     return await this.roomRepository.findBySocketId(socketId);
+  }
+
+  // ==================== KICK/BAN METHODS ====================
+
+  /**
+   * Kick a player from the room (host only)
+   * @param {string} pin - Room PIN
+   * @param {string} playerId - Player ID to kick
+   * @param {string} requesterId - Socket ID of requester (host)
+   */
+  async kickPlayer({ pin, playerId, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    const player = room.kickPlayer(playerId, requesterId);
+    await this.roomRepository.save(room);
+    return { room, player };
+  }
+
+  /**
+   * Ban a player from the room (host only)
+   * Kicks the player and prevents them from rejoining with same nickname
+   * @param {string} pin - Room PIN
+   * @param {string} playerId - Player ID to ban
+   * @param {string} requesterId - Socket ID of requester (host)
+   */
+  async banPlayer({ pin, playerId, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    const player = room.banPlayer(playerId, requesterId);
+    await this.roomRepository.save(room);
+    return { room, player };
+  }
+
+  /**
+   * Unban a nickname (host only)
+   * @param {string} pin - Room PIN
+   * @param {string} nickname - Nickname to unban
+   * @param {string} requesterId - Socket ID of requester (host)
+   */
+  async unbanNickname({ pin, nickname, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    room.unbanNickname(nickname, requesterId);
+    await this.roomRepository.save(room);
+    return { room };
+  }
+
+  /**
+   * Get banned nicknames for a room
+   * @param {string} pin - Room PIN
+   */
+  async getBannedNicknames({ pin }) {
+    const room = await this._getRoomOrThrow(pin);
+    return { bannedNicknames: room.getBannedNicknames() };
+  }
+
+  // ==================== SPECTATOR METHODS ====================
+
+  /**
+   * Join a room as spectator
+   * @param {string} pin - Room PIN
+   * @param {string} nickname - Spectator nickname
+   * @param {string} socketId - Socket ID
+   */
+  async joinAsSpectator({ pin, nickname, socketId }) {
+    const room = await this._getRoomOrThrow(pin);
+    const spectatorToken = generateId(); // Token for spectator reconnection
+
+    const spectator = new Spectator({
+      id: generateId(),
+      socketId,
+      nickname,
+      roomPin: pin,
+      spectatorToken
+    });
+
+    room.addSpectator(spectator);
+    await this.roomRepository.save(room);
+
+    return { room, spectator, spectatorToken };
+  }
+
+  /**
+   * Leave a room as spectator
+   * @param {string} pin - Room PIN
+   * @param {string} socketId - Socket ID
+   */
+  async leaveAsSpectator({ pin, socketId }) {
+    const room = await this._getRoomOrThrow(pin);
+    room.removeSpectator(socketId);
+    await this.roomRepository.save(room);
+    return { room };
+  }
+
+  /**
+   * Reconnect spectator to room using spectatorToken
+   * @param {string} pin - Room PIN
+   * @param {string} spectatorToken - Spectator token
+   * @param {string} newSocketId - New socket ID
+   */
+  async reconnectSpectator({ pin, spectatorToken, newSocketId }) {
+    const room = await this._getRoomOrThrow(pin);
+    // Generate new token for security (token rotation)
+    const newSpectatorToken = generateId();
+    const spectator = room.reconnectSpectator(
+      spectatorToken,
+      newSocketId,
+      this.playerGracePeriod, // Use same grace period as players
+      newSpectatorToken
+    );
+    await this.roomRepository.save(room);
+    return { room, spectator, newSpectatorToken };
+  }
+
+  /**
+   * Get all spectators in a room
+   * @param {string} pin - Room PIN
+   */
+  async getSpectators({ pin }) {
+    const room = await this._getRoomOrThrow(pin);
+    return { spectators: room.getAllSpectators() };
   }
 }
 

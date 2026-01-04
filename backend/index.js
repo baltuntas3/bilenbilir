@@ -6,7 +6,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const connectDB = require('./src/infrastructure/db/connection');
 const { initializeSocket, stopCleanupService, stopTimerService, stopRateLimiter, gameUseCases } = require('./src/infrastructure/ws/socket');
-const { quizRoutes, authRoutes, gameRoutes } = require('./src/api/routes');
+const { quizRoutes, authRoutes, gameRoutes, adminRoutes } = require('./src/api/routes');
 const { errorHandler } = require('./src/api/middlewares/errorHandler');
 const { sanitize } = require('./src/api/middlewares/sanitizeMiddleware');
 const { emailService } = require('./src/infrastructure/services');
@@ -36,6 +36,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/games', gameRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Global error handler (must be last middleware)
 app.use(errorHandler);

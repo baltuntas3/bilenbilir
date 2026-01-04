@@ -9,6 +9,8 @@ class User {
   static MAX_USERNAME_LENGTH = 30;
   static MIN_PASSWORD_LENGTH = 6;
   static ROLES = ['user', 'admin'];
+  // RFC 5322 compliant email regex (simplified version)
+  static EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   constructor({
     id,
@@ -43,7 +45,18 @@ class User {
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
 
+    this._validateEmail();
     this._validateUsername();
+  }
+
+  /**
+   * Validate email format
+   * @private
+   */
+  _validateEmail() {
+    if (!User.EMAIL_REGEX.test(this.email)) {
+      throw new ValidationError('Invalid email format');
+    }
   }
 
   /**

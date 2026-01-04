@@ -213,6 +213,18 @@ class RoomCleanupService {
           console.error('Join lock cleanup error:', lockError.message);
         }
       }
+
+      // Clean up expired game locks (pending answers and archives) to prevent memory leak
+      if (this.gameUseCases) {
+        try {
+          const { pendingAnswers, pendingArchives } = this.gameUseCases.cleanupExpiredLocks();
+          if (pendingAnswers > 0 || pendingArchives > 0) {
+            console.log(`Cleaned up ${pendingAnswers} expired pending answers, ${pendingArchives} expired pending archives`);
+          }
+        } catch (lockError) {
+          console.error('Game lock cleanup error:', lockError.message);
+        }
+      }
     } catch (error) {
       console.error('Room cleanup error:', error.message);
     } finally {

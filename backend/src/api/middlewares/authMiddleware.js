@@ -70,6 +70,23 @@ const optionalAuthenticate = (req, res, next) => {
 };
 
 /**
+ * Admin authorization middleware
+ * Must be used after authenticate middleware
+ * Checks if user has admin role
+ */
+const requireAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  next();
+};
+
+/**
  * Generate JWT token
  */
 const generateToken = (user) => {
@@ -85,4 +102,4 @@ const generateToken = (user) => {
   );
 };
 
-module.exports = { authenticate, optionalAuthenticate, generateToken, JWT_SECRET };
+module.exports = { authenticate, optionalAuthenticate, requireAdmin, generateToken, JWT_SECRET };

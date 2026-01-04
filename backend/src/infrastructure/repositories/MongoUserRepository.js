@@ -186,6 +186,40 @@ class MongoUserRepository {
   }
 
   /**
+   * Find all users with pagination (admin only)
+   * @param {object} options - Query options
+   * @param {number} options.page - Page number (default: 1)
+   * @param {number} options.limit - Items per page (default: 20)
+   * @returns {Promise<{users: User[], pagination: object}>}
+   */
+  async findAll({ page = 1, limit = 20 } = {}) {
+    const skip = (page - 1) * limit;
+
+    const [docs, total] = await Promise.all([
+      UserModel.find()
+        .select('-password')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      UserModel.countDocuments()
+    ]);
+
+    const users = docs.map(doc => this._toDomain(doc, false));
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      users,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages
+      }
+    };
+  }
+
+  /**
    * Delete user by ID
    * @param {string} id - User ID
    * @returns {Promise<boolean>} True if user was deleted

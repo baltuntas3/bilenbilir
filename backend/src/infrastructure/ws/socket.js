@@ -90,6 +90,12 @@ const initializeSocket = (server) => {
             nickname: result.player.nickname,
             playerCount: result.playerCount
           });
+        } else if (result.type === 'spectator_disconnected') {
+          io.to(result.pin).emit('spectator_left', {
+            spectatorId: result.spectator.id,
+            nickname: result.spectator.nickname,
+            spectatorCount: result.spectatorCount
+          });
         }
       } catch (error) {
         console.error('Disconnect handler error:', error.message);

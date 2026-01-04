@@ -29,8 +29,26 @@ class RoomRepository {
 
     // Secondary indexes for O(1) lookups
     this.hostTokenIndex = new Map(); // hostToken -> pin
-    this.socketIdIndex = new Map(); // socketId -> pin (for both host and players)
+    this.socketIdIndex = new Map(); // socketId -> pin (for host, players, and spectators)
     this.playerTokenIndex = new Map(); // playerToken -> pin
+    this.spectatorTokenIndex = new Map(); // spectatorToken -> pin
+  }
+
+  /**
+   * Safely index a socket ID, removing any stale entry from other rooms first
+   * Prevents race condition where same socket could be indexed to multiple rooms
+   * @private
+   */
+  _safeIndexSocket(socketId, pin) {
+    if (!socketId) return;
+
+    const existingPin = this.socketIdIndex.get(socketId);
+    if (existingPin && existingPin !== pin) {
+      // Socket was indexed to different room - this shouldn't happen normally
+      // but clean it up as a safety measure
+      console.warn(`Socket ${socketId} was indexed to room ${existingPin}, re-indexing to ${pin}`);
+    }
+    this.socketIdIndex.set(socketId, pin);
   }
 
   /**
@@ -48,10 +66,8 @@ class RoomRepository {
       this.hostTokenIndex.set(room.hostToken, pin);
     }
 
-    // Index host socket ID
-    if (room.hostId) {
-      this.socketIdIndex.set(room.hostId, pin);
-    }
+    // Index host socket ID (with safety check)
+    this._safeIndexSocket(room.hostId, pin);
 
     // Index all player tokens and socket IDs (skip expired tokens)
     for (const player of room.getAllPlayers()) {
@@ -59,9 +75,18 @@ class RoomRepository {
       if (player.playerToken && !player.isTokenExpired()) {
         this.playerTokenIndex.set(player.playerToken, pin);
       }
-      if (player.socketId) {
-        this.socketIdIndex.set(player.socketId, pin);
+      // Safe index with race condition prevention
+      this._safeIndexSocket(player.socketId, pin);
+    }
+
+    // Index all spectator tokens and socket IDs (skip expired tokens)
+    for (const spectator of room.getAllSpectators()) {
+      // Only index non-expired tokens
+      if (spectator.spectatorToken && !spectator.isTokenExpired()) {
+        this.spectatorTokenIndex.set(spectator.spectatorToken, pin);
       }
+      // Safe index with race condition prevention
+      this._safeIndexSocket(spectator.socketId, pin);
     }
   }
 
@@ -90,6 +115,16 @@ class RoomRepository {
       }
       if (player.socketId) {
         this.socketIdIndex.delete(player.socketId);
+      }
+    }
+
+    // Remove all spectator indexes
+    for (const spectator of room.getAllSpectators()) {
+      if (spectator.spectatorToken) {
+        this.spectatorTokenIndex.delete(spectator.spectatorToken);
+      }
+      if (spectator.socketId) {
+        this.socketIdIndex.delete(spectator.socketId);
       }
     }
   }
@@ -139,7 +174,7 @@ class RoomRepository {
   /**
    * Find room by socket ID - O(1) lookup
    * Automatically cleans up stale index entries
-   * @returns {{ room: Room, role: 'host' | 'player', player?: Player } | null}
+   * @returns {{ room: Room, role: 'host' | 'player' | 'spectator', player?: Player, spectator?: Spectator } | null}
    */
   async findBySocketId(socketId) {
     const pin = this.socketIdIndex.get(socketId);
@@ -152,7 +187,7 @@ class RoomRepository {
       return null;
     }
 
-    // Determine if socket is host or player
+    // Determine if socket is host, player, or spectator
     if (room.isHost(socketId)) {
       return { room, role: 'host' };
     }
@@ -160,6 +195,11 @@ class RoomRepository {
     const player = room.getPlayer(socketId);
     if (player) {
       return { room, role: 'player', player };
+    }
+
+    const spectator = room.getSpectator(socketId);
+    if (spectator) {
+      return { room, role: 'spectator', spectator };
     }
 
     // Socket not found in room, clean up stale index entry
@@ -201,6 +241,39 @@ class RoomRepository {
   }
 
   /**
+   * Find room by spectator token - O(1) lookup
+   * Automatically removes expired tokens from index
+   * @returns {{ room: Room, spectator: Spectator } | null}
+   */
+  async findBySpectatorToken(spectatorToken) {
+    const pin = this.spectatorTokenIndex.get(spectatorToken);
+    if (!pin) return null;
+
+    const room = this.rooms.get(pin);
+    if (!room) {
+      // Room doesn't exist, clean up stale index entry
+      this.spectatorTokenIndex.delete(spectatorToken);
+      return null;
+    }
+
+    const spectator = room.getSpectatorByToken(spectatorToken);
+    if (!spectator) {
+      // Spectator not found, clean up stale index entry
+      this.spectatorTokenIndex.delete(spectatorToken);
+      return null;
+    }
+
+    // Check if token is expired
+    if (spectator.isTokenExpired()) {
+      // Token expired, remove from index
+      this.spectatorTokenIndex.delete(spectatorToken);
+      return null;
+    }
+
+    return { room, spectator };
+  }
+
+  /**
    * Clean up expired tokens from all indexes
    * Called periodically by cleanup service
    * @returns {number} Number of expired tokens removed
@@ -208,6 +281,7 @@ class RoomRepository {
   cleanupExpiredTokens() {
     let removedCount = 0;
 
+    // Clean up expired player tokens
     for (const [token, pin] of this.playerTokenIndex.entries()) {
       const room = this.rooms.get(pin);
       if (!room) {
@@ -219,6 +293,22 @@ class RoomRepository {
       const player = room.getPlayerByToken(token);
       if (!player || player.isTokenExpired()) {
         this.playerTokenIndex.delete(token);
+        removedCount++;
+      }
+    }
+
+    // Clean up expired spectator tokens
+    for (const [token, pin] of this.spectatorTokenIndex.entries()) {
+      const room = this.rooms.get(pin);
+      if (!room) {
+        this.spectatorTokenIndex.delete(token);
+        removedCount++;
+        continue;
+      }
+
+      const spectator = room.getSpectatorByToken(token);
+      if (!spectator || spectator.isTokenExpired()) {
+        this.spectatorTokenIndex.delete(token);
         removedCount++;
       }
     }
@@ -239,11 +329,29 @@ class RoomRepository {
     return Array.from(this.rooms.values());
   }
 
+  /**
+   * Find room by host user ID (MongoDB User ID)
+   * Used to enforce one room per host
+   * @param {string} hostUserId - Host's MongoDB User ID
+   * @returns {Room|null}
+   */
+  async findByHostUserId(hostUserId) {
+    if (!hostUserId) return null;
+
+    for (const room of this.rooms.values()) {
+      if (room.hostUserId === hostUserId) {
+        return room;
+      }
+    }
+    return null;
+  }
+
   async clear() {
     this.rooms.clear();
     this.hostTokenIndex.clear();
     this.socketIdIndex.clear();
     this.playerTokenIndex.clear();
+    this.spectatorTokenIndex.clear();
   }
 }
 

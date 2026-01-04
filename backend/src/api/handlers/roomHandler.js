@@ -269,6 +269,232 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       handleSocketError(socket, error);
     }
   });
+
+  // ==================== KICK/BAN EVENTS ====================
+
+  // Host kicks a player
+  socket.on('kick_player', async (data) => {
+    try {
+      if (!checkRateLimit('kick_player')) return;
+      requireAuth();
+
+      const { pin, playerId } = data || {};
+
+      const result = await roomUseCases.kickPlayer({
+        pin,
+        playerId,
+        requesterId: socket.id
+      });
+
+      // Notify kicked player
+      const kickedSocket = io.sockets.sockets.get(result.player.socketId);
+      if (kickedSocket) {
+        kickedSocket.emit('you_were_kicked', { reason: 'kicked' });
+        kickedSocket.leave(pin);
+      }
+
+      // Notify room
+      io.to(pin).emit('player_kicked', {
+        playerId: result.player.id,
+        nickname: result.player.nickname,
+        playerCount: result.room.getPlayerCount()
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Host bans a player
+  socket.on('ban_player', async (data) => {
+    try {
+      if (!checkRateLimit('ban_player')) return;
+      requireAuth();
+
+      const { pin, playerId } = data || {};
+
+      const result = await roomUseCases.banPlayer({
+        pin,
+        playerId,
+        requesterId: socket.id
+      });
+
+      // Notify banned player
+      const bannedSocket = io.sockets.sockets.get(result.player.socketId);
+      if (bannedSocket) {
+        bannedSocket.emit('you_were_kicked', { reason: 'banned' });
+        bannedSocket.leave(pin);
+      }
+
+      // Notify room
+      io.to(pin).emit('player_banned', {
+        playerId: result.player.id,
+        nickname: result.player.nickname,
+        playerCount: result.room.getPlayerCount()
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Host unbans a nickname
+  socket.on('unban_nickname', async (data) => {
+    try {
+      if (!checkRateLimit('unban_nickname')) return;
+      requireAuth();
+
+      const { pin, nickname } = data || {};
+
+      await roomUseCases.unbanNickname({
+        pin,
+        nickname,
+        requesterId: socket.id
+      });
+
+      socket.emit('nickname_unbanned', { nickname });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Get banned nicknames
+  socket.on('get_banned_nicknames', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await roomUseCases.getBannedNicknames({ pin });
+
+      socket.emit('banned_nicknames', {
+        bannedNicknames: result.bannedNicknames
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // ==================== SPECTATOR EVENTS ====================
+
+  // Join as spectator
+  socket.on('join_as_spectator', async (data) => {
+    try {
+      if (!checkRateLimit('join_as_spectator')) return;
+
+      const { pin, nickname } = sanitizeObject(data || {});
+      await ensureNotInRoom();
+
+      const sanitizedNickname = sanitizeNickname(nickname);
+      if (!sanitizedNickname) {
+        socket.emit('error', { error: 'Invalid nickname format' });
+        return;
+      }
+
+      const result = await roomUseCases.joinAsSpectator({
+        pin,
+        nickname: sanitizedNickname,
+        socketId: socket.id
+      });
+
+      socket.join(pin);
+
+      socket.emit('room_joined_spectator', {
+        pin,
+        spectatorId: result.spectator.id,
+        spectatorToken: result.spectatorToken, // Token for reconnection
+        nickname: result.spectator.nickname,
+        state: result.room.state,
+        playerCount: result.room.getPlayerCount(),
+        spectatorCount: result.room.getSpectatorCount()
+      });
+
+      io.to(pin).emit('spectator_joined', {
+        spectator: {
+          id: result.spectator.id,
+          nickname: result.spectator.nickname
+        },
+        spectatorCount: result.room.getSpectatorCount()
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Leave as spectator
+  socket.on('leave_spectator', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await roomUseCases.leaveAsSpectator({
+        pin,
+        socketId: socket.id
+      });
+
+      socket.leave(pin);
+
+      io.to(pin).emit('spectator_left', {
+        socketId: socket.id,
+        spectatorCount: result.room.getSpectatorCount()
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Spectator reconnects to room
+  socket.on('reconnect_spectator', async (data) => {
+    try {
+      if (!checkRateLimit('reconnect_spectator')) return;
+
+      const { pin, spectatorToken } = data || {};
+
+      // Early token format validation
+      if (!spectatorToken || typeof spectatorToken !== 'string' || spectatorToken.trim().length === 0) {
+        socket.emit('error', { error: 'Spectator token is required' });
+        return;
+      }
+
+      const result = await roomUseCases.reconnectSpectator({
+        pin,
+        spectatorToken,
+        newSocketId: socket.id
+      });
+
+      socket.join(pin);
+
+      socket.emit('spectator_reconnected', {
+        pin: result.room.pin,
+        spectatorId: result.spectator.id,
+        nickname: result.spectator.nickname,
+        state: result.room.state,
+        playerCount: result.room.getPlayerCount(),
+        spectatorCount: result.room.getSpectatorCount(),
+        spectatorToken: result.newSpectatorToken // New rotated token for security
+      });
+
+      socket.to(pin).emit('spectator_returned', {
+        spectatorId: result.spectator.id,
+        nickname: result.spectator.nickname
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Get spectators list
+  socket.on('get_spectators', async (data) => {
+    try {
+      const { pin } = data || {};
+
+      const result = await roomUseCases.getSpectators({ pin });
+
+      socket.emit('spectators_list', {
+        spectators: result.spectators.map(s => ({
+          id: s.id,
+          nickname: s.nickname
+        }))
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
 };
 
 module.exports = { createRoomHandler };

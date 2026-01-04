@@ -3,6 +3,8 @@ const { Player } = require('./Player');
 const { Quiz } = require('./Quiz');
 const { Question, QuestionType } = require('./Question');
 const { User } = require('./User');
+const { Spectator } = require('./Spectator');
+const { BaseParticipant } = require('./BaseParticipant');
 
 // Re-export Records for backward compatibility
 // Prefer importing directly from 'domain/records' for new code
@@ -17,6 +19,8 @@ module.exports = {
   Question,
   QuestionType,
   User,
+  Spectator,
+  BaseParticipant,
   // Records (re-exported for backward compatibility)
   GameSession,
   GameSessionStatus,

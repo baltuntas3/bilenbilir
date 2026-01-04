@@ -10,6 +10,7 @@ class GameUseCases {
 
     /**
      * Map to track answer submissions in progress (race condition protection)
+     * Key: `${pin}:${socketId}`, Value: timestamp when lock was acquired
      *
      * TODO: Redis Integration for Distributed Systems
      * ================================================
@@ -33,9 +34,12 @@ class GameUseCases {
 
     /**
      * Map to track game archival in progress (prevents duplicate archives)
-     * Key: pin, Value: true (locked)
+     * Key: pin, Value: timestamp when lock was acquired
      */
     this.pendingArchives = new Map();
+
+    // Lock timeout in milliseconds (10 seconds)
+    this.LOCK_TIMEOUT_MS = 10000;
   }
 
   /**
@@ -48,6 +52,72 @@ class GameUseCases {
       throw new NotFoundError('Room not found');
     }
     return room;
+  }
+
+  /**
+   * Check if room exists (for zombie callback prevention)
+   * @param {string} pin - Room PIN
+   * @returns {Promise<boolean>}
+   */
+  async roomExists(pin) {
+    return await this.roomRepository.exists(pin);
+  }
+
+  /**
+   * Acquire a lock with timeout support
+   * Returns true if lock acquired, false if lock exists and not expired
+   * @private
+   */
+  _acquireLock(map, key) {
+    const now = Date.now();
+    const existingLock = map.get(key);
+
+    // Check if lock exists and is not expired
+    if (existingLock && (now - existingLock) < this.LOCK_TIMEOUT_MS) {
+      return false;
+    }
+
+    // Acquire lock with timestamp
+    map.set(key, now);
+    return true;
+  }
+
+  /**
+   * Release a lock
+   * @private
+   */
+  _releaseLock(map, key) {
+    map.delete(key);
+  }
+
+  /**
+   * Clean up expired locks from a map
+   * @private
+   * @returns {number} Number of expired locks removed
+   */
+  _cleanupExpiredLocks(map) {
+    const now = Date.now();
+    let removedCount = 0;
+
+    for (const [key, timestamp] of map.entries()) {
+      if ((now - timestamp) >= this.LOCK_TIMEOUT_MS) {
+        map.delete(key);
+        removedCount++;
+      }
+    }
+
+    return removedCount;
+  }
+
+  /**
+   * Clean up all expired locks (call periodically)
+   * @returns {{ pendingAnswers: number, pendingArchives: number }}
+   */
+  cleanupExpiredLocks() {
+    return {
+      pendingAnswers: this._cleanupExpiredLocks(this.pendingAnswers),
+      pendingArchives: this._cleanupExpiredLocks(this.pendingArchives)
+    };
   }
 
   /**
@@ -299,12 +369,11 @@ class GameUseCases {
     }
     const validElapsedTime = Math.max(0, elapsedTimeMs || 0);
 
-    // ===== PHASE 2: Acquire lock =====
+    // ===== PHASE 2: Acquire lock with timeout =====
     const submissionKey = `${pin}:${socketId}`;
-    if (this.pendingAnswers.has(submissionKey)) {
+    if (!this._acquireLock(this.pendingAnswers, submissionKey)) {
       throw new ConflictError('Answer submission in progress');
     }
-    this.pendingAnswers.set(submissionKey, true);
 
     try {
       // ===== PHASE 3: Load and validate state =====
@@ -381,8 +450,8 @@ class GameUseCases {
         totalPlayers: room.getConnectedPlayerCount()
       };
     } finally {
-      // Always clean up the pending flag
-      this.pendingAnswers.delete(submissionKey);
+      // Always release the lock
+      this._releaseLock(this.pendingAnswers, submissionKey);
     }
   }
 
@@ -499,11 +568,10 @@ class GameUseCases {
       return null;
     }
 
-    // Acquire archive lock to prevent duplicate archives
-    if (this.pendingArchives.has(pin)) {
+    // Acquire archive lock with timeout to prevent duplicate archives
+    if (!this._acquireLock(this.pendingArchives, pin)) {
       throw new ConflictError('Game archival already in progress');
     }
-    this.pendingArchives.set(pin, true);
 
     let session = null;
     try {
@@ -545,7 +613,7 @@ class GameUseCases {
       return { session };
     } finally {
       // Always release the archive lock
-      this.pendingArchives.delete(pin);
+      this._releaseLock(this.pendingArchives, pin);
     }
   }
 
@@ -560,11 +628,10 @@ class GameUseCases {
       return null;
     }
 
-    // Check if already being archived
-    if (this.pendingArchives.has(pin)) {
+    // Check if already being archived (with timeout support)
+    if (!this._acquireLock(this.pendingArchives, pin)) {
       return null;
     }
-    this.pendingArchives.set(pin, true);
 
     try {
       const room = await this.roomRepository.findByPin(pin);
@@ -613,7 +680,7 @@ class GameUseCases {
 
       return { session };
     } finally {
-      this.pendingArchives.delete(pin);
+      this._releaseLock(this.pendingArchives, pin);
     }
   }
 
@@ -663,6 +730,42 @@ class GameUseCases {
     return {
       sessions: interruptedSessions,
       pagination: result.pagination
+    };
+  }
+
+  // ==================== PAUSE/RESUME METHODS ====================
+
+  /**
+   * Pause the game (host only, only from LEADERBOARD state)
+   * @param {string} pin - Room PIN
+   * @param {string} requesterId - Socket ID of requester
+   */
+  async pauseGame({ pin, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    room.pause(requesterId);
+    await this.roomRepository.save(room);
+
+    return {
+      room,
+      pausedAt: room.pausedAt
+    };
+  }
+
+  /**
+   * Resume the game (host only)
+   * @param {string} pin - Room PIN
+   * @param {string} requesterId - Socket ID of requester
+   */
+  async resumeGame({ pin, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    const pauseDuration = room.getPauseDuration();
+    room.resume(requesterId);
+    await this.roomRepository.save(room);
+
+    return {
+      room,
+      pauseDuration,
+      resumedState: room.state
     };
   }
 }
