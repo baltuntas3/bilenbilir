@@ -306,27 +306,6 @@ class GameUseCases {
   }
 
   /**
-   * Get current question (called after intro timer)
-   * Uses the frozen quiz snapshot to ensure consistency
-   */
-  async getCurrentQuestion({ pin }) {
-    const room = await this._getRoomOrThrow(pin);
-    const snapshot = room.getQuizSnapshot();
-
-    if (!snapshot) {
-      throw new ValidationError('Game has not started');
-    }
-
-    const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
-
-    return {
-      questionIndex: room.currentQuestionIndex,
-      totalQuestions: snapshot.getTotalQuestions(),
-      question: currentQuestion.getPublicData()
-    };
-  }
-
-  /**
    * Start answering phase (called after intro countdown)
    * Uses the frozen quiz snapshot to ensure consistency
    */
