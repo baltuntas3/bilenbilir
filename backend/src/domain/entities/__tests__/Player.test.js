@@ -126,5 +126,190 @@ describe('Player', () => {
       expect(player.isDisconnected()).toBe(false);
       expect(player.socketId).toBe('new-socket-id');
     });
+
+    it('should rotate token on reconnect', () => {
+      player.playerToken = 'old-token';
+      player.setDisconnected();
+      player.reconnect('new-socket-id', 'new-token');
+
+      expect(player.playerToken).toBe('new-token');
+    });
+  });
+
+  describe('addScore validation', () => {
+    it('should throw error for non-number points', () => {
+      expect(() => player.addScore('100')).toThrow('Points must be a valid number');
+      expect(() => player.addScore(null)).toThrow('Points must be a valid number');
+      expect(() => player.addScore(undefined)).toThrow('Points must be a valid number');
+    });
+
+    it('should throw error for Infinity', () => {
+      expect(() => player.addScore(Infinity)).toThrow('Points must be a valid number');
+      expect(() => player.addScore(-Infinity)).toThrow('Points must be a valid number');
+    });
+
+    it('should throw error for NaN', () => {
+      expect(() => player.addScore(NaN)).toThrow('Points must be a valid number');
+    });
+  });
+
+  describe('playerToken property', () => {
+    it('should get and set playerToken', () => {
+      expect(player.playerToken).toBeNull();
+
+      player.playerToken = 'test-token';
+      expect(player.playerToken).toBe('test-token');
+    });
+
+    it('should initialize with token', () => {
+      const tokenPlayer = new Player({
+        id: 'p-1',
+        socketId: 's-1',
+        nickname: 'TokenPlayer',
+        roomPin: '123456',
+        playerToken: 'initial-token'
+      });
+
+      expect(tokenPlayer.playerToken).toBe('initial-token');
+    });
+  });
+
+  describe('submitAnswer when disconnected', () => {
+    it('should throw error when submitting while disconnected', () => {
+      player.setDisconnected();
+
+      expect(() => player.submitAnswer(0, 1000))
+        .toThrow('Cannot submit answer while disconnected');
+    });
+  });
+
+  describe('streak cap', () => {
+    it('should cap streak at MAX_STREAK (1000)', () => {
+      // Set streak near cap
+      player.streak = 999;
+      player.incrementStreak();
+      expect(player.streak).toBe(1000);
+
+      // Should not increment beyond 1000
+      player.incrementStreak();
+      expect(player.streak).toBe(1000);
+
+      // But correctAnswers should still increment
+      expect(player.correctAnswers).toBe(2);
+    });
+  });
+
+  describe('toJSON', () => {
+    beforeEach(() => {
+      player.addScore(500);
+      player.incrementStreak();
+      player.incrementStreak();
+    });
+
+    it('should return basic info with score by default', () => {
+      const json = player.toJSON();
+
+      expect(json).toEqual({
+        id: 'player-1',
+        nickname: 'TestPlayer',
+        score: 500
+      });
+    });
+
+    it('should exclude score when includeScore is false', () => {
+      const json = player.toJSON({ includeScore: false });
+
+      expect(json).toEqual({
+        id: 'player-1',
+        nickname: 'TestPlayer'
+      });
+      expect(json.score).toBeUndefined();
+    });
+
+    it('should include stats when includeStats is true', () => {
+      const json = player.toJSON({ includeStats: true });
+
+      expect(json).toEqual({
+        id: 'player-1',
+        nickname: 'TestPlayer',
+        score: 500,
+        streak: 2,
+        correctAnswers: 2,
+        longestStreak: 2
+      });
+    });
+
+    it('should include stats without score', () => {
+      const json = player.toJSON({ includeScore: false, includeStats: true });
+
+      expect(json).toEqual({
+        id: 'player-1',
+        nickname: 'TestPlayer',
+        streak: 2,
+        correctAnswers: 2,
+        longestStreak: 2
+      });
+    });
+  });
+
+  describe('token validation (inherited from BaseParticipant)', () => {
+    it('should return false for hasValidToken when no token', () => {
+      expect(player.hasValidToken()).toBe(false);
+    });
+
+    it('should return true for hasValidToken when token exists and not expired', () => {
+      player.playerToken = 'valid-token';
+      player.tokenCreatedAt = new Date();
+      expect(player.hasValidToken()).toBe(true);
+    });
+
+    it('should return true for isTokenExpired when no token', () => {
+      expect(player.isTokenExpired()).toBe(true);
+    });
+
+    it('should return true for isTokenExpired when token is old', () => {
+      player.playerToken = 'old-token';
+      player.tokenCreatedAt = new Date(Date.now() - (25 * 60 * 60 * 1000)); // 25 hours ago
+      expect(player.isTokenExpired()).toBe(true);
+    });
+  });
+
+  describe('nickname methods (inherited from BaseParticipant)', () => {
+    it('should check nickname case-insensitively', () => {
+      expect(player.hasNickname('TestPlayer')).toBe(true);
+      expect(player.hasNickname('testplayer')).toBe(true);
+      expect(player.hasNickname('TESTPLAYER')).toBe(true);
+      expect(player.hasNickname('Other')).toBe(false);
+    });
+
+    it('should return normalized nickname', () => {
+      expect(player.getNormalizedNickname()).toBe('testplayer');
+    });
+  });
+
+  describe('constructor with initial values', () => {
+    it('should accept initial score, streak, and stats', () => {
+      const existingPlayer = new Player({
+        id: 'p-1',
+        socketId: 's-1',
+        nickname: 'Existing',
+        roomPin: '123456',
+        score: 1500,
+        streak: 5,
+        correctAnswers: 10,
+        longestStreak: 7
+      });
+
+      expect(existingPlayer.score).toBe(1500);
+      expect(existingPlayer.streak).toBe(5);
+      expect(existingPlayer.correctAnswers).toBe(10);
+      expect(existingPlayer.longestStreak).toBe(7);
+    });
+  });
+
+  describe('static constants', () => {
+    it('should have TOKEN_EXPIRATION_MS defined', () => {
+      expect(Player.TOKEN_EXPIRATION_MS).toBe(24 * 60 * 60 * 1000);
+    });
   });
 });
