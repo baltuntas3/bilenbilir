@@ -86,25 +86,17 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         pin,
         requesterId: socket.id
       });
-
-      // Start server-side timer with race condition protection
+      // Start server-side timer
       timerService.startTimer(pin, result.timeLimit, async () => {
-        console.log(`[Timer] Timer expired for room ${pin}`);
         try {
-          // Zombie callback check: verify room still exists before processing
-          // Room could have been deleted/closed while timer was running
           const roomExists = await gameUseCases.roomExists(pin);
-          if (!roomExists) {
-            console.log(`Timer callback skipped - room ${pin} no longer exists`);
-            return;
-          }
+          if (!roomExists) return;
 
           const endResult = await gameUseCases.endAnsweringPhase({
             pin,
             requesterId: 'server'
           });
 
-          console.log(`[Timer] Emitting show_results for room ${pin}:`, !!endResult);
           if (endResult) {
             io.to(pin).emit('time_expired');
             io.to(pin).emit('show_results', {
@@ -118,8 +110,6 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           // Ignore expected errors when room state has changed
           if (err.message !== 'Not in answering phase' && err.message !== 'Room not found') {
             console.error('Auto-end error:', err.message);
-          } else {
-            console.log(`[Timer] Expected error for room ${pin}: ${err.message}`);
           }
         }
       });
@@ -196,6 +186,26 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       if (result.allAnswered) {
         timerService.stopTimer(pin);
         io.to(pin).emit('all_players_answered');
+
+        // Auto-transition to results when all players have answered
+        try {
+          const endResult = await gameUseCases.endAnsweringPhase({
+            pin,
+            requesterId: 'server'
+          });
+
+          if (endResult) {
+            io.to(pin).emit('show_results', {
+              correctAnswerIndex: endResult.correctAnswerIndex,
+              distribution: endResult.distribution,
+              correctCount: endResult.correctCount,
+              totalPlayers: endResult.totalPlayers
+            });
+          }
+        } catch (err) {
+          // Log but don't fail - host can still manually end
+          console.error('Auto-end after all answered error:', err.message);
+        }
       }
     } catch (error) {
       handleSocketError(socket, error);

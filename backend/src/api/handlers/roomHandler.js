@@ -270,6 +270,46 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
     }
   });
 
+  // ==================== HOST ROOM MANAGEMENT ====================
+
+  // Get host's active room
+  socket.on('get_my_room', async () => {
+    try {
+      if (!checkRateLimit('get_my_room')) return;
+      requireAuth();
+
+      const result = await roomUseCases.getHostRoom({
+        hostUserId: socket.user.userId
+      });
+
+      socket.emit('my_room', result); // null if no active room
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Force close host's existing room
+  socket.on('force_close_room', async () => {
+    try {
+      if (!checkRateLimit('force_close_room')) return;
+      requireAuth();
+
+      const result = await roomUseCases.forceCloseHostRoom({
+        hostUserId: socket.user.userId
+      });
+
+      if (result.closed) {
+        // Notify all players in the room
+        io.to(result.pin).emit('room_closed', { reason: 'Host closed the room' });
+        io.in(result.pin).socketsLeave(result.pin);
+      }
+
+      socket.emit('room_force_closed', result);
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
   // ==================== KICK/BAN EVENTS ====================
 
   // Host kicks a player

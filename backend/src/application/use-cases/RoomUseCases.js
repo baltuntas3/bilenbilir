@@ -359,6 +359,51 @@ class RoomUseCases {
   }
 
   /**
+   * Get host's active room by user ID
+   * Returns room info if host has an active room, null otherwise
+   */
+  async getHostRoom({ hostUserId }) {
+    const room = await this.roomRepository.findByHostUserId(hostUserId);
+
+    if (!room) {
+      return null;
+    }
+
+    return {
+      pin: room.pin,
+      hostToken: room.hostToken,
+      state: room.state,
+      playerCount: room.getPlayerCount(),
+      connectedPlayerCount: room.getConnectedPlayerCount(),
+      currentQuestionIndex: room.currentQuestionIndex,
+      quizId: room.quizId,
+      createdAt: room.createdAt,
+      isHostDisconnected: room.isHostDisconnected(),
+    };
+  }
+
+  /**
+   * Force close host's active room
+   * Used when host wants to close existing room to create a new one
+   */
+  async forceCloseHostRoom({ hostUserId }) {
+    const room = await this.roomRepository.findByHostUserId(hostUserId);
+
+    if (!room) {
+      return { closed: false, reason: 'No active room found' };
+    }
+
+    await this.roomRepository.delete(room.pin);
+
+    return {
+      closed: true,
+      pin: room.pin,
+      state: room.state,
+      playerCount: room.getPlayerCount()
+    };
+  }
+
+  /**
    * Find room where socket is participating (as host or player)
    * Used to prevent same socket from joining multiple rooms
    * Uses O(1) index lookup for performance

@@ -6,14 +6,25 @@ class SocketService {
   constructor() {
     this.socket = null;
     this.listeners = new Map();
+    this.connectionPromise = null;
+    this.currentSocketId = null;
   }
 
   connect(token = null) {
+    // If already connected with the same socket, return existing promise
     if (this.socket?.connected) {
-      return this.socket;
+      return Promise.resolve(this.socket);
+    }
+
+    // If connection is in progress, return existing promise
+    if (this.connectionPromise) {
+      return this.connectionPromise;
     }
 
     const auth = token ? { token } : {};
+
+    // Store if we had a previous socket (need to re-attach listeners)
+    const hadPreviousSocket = this.socket !== null;
 
     this.socket = io(SOCKET_URL, {
       auth,
@@ -23,19 +34,42 @@ class SocketService {
       reconnectionDelay: 1000,
     });
 
-    this.socket.on('connect', () => {
-      console.log('Socket connected:', this.socket.id);
+    this.connectionPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Connection timeout'));
+      }, 10000);
+
+      this.socket.on('connect', () => {
+        clearTimeout(timeout);
+        console.log('Socket connected:', this.socket.id);
+        this.currentSocketId = this.socket.id;
+
+        // Re-attach stored listeners if this is a new socket
+        if (hadPreviousSocket && this.listeners.size > 0) {
+          console.log('Re-attaching listeners to new socket...');
+          this.listeners.forEach((callbacks, event) => {
+            callbacks.forEach(callback => {
+              this.socket.on(event, callback);
+            });
+          });
+        }
+
+        resolve(this.socket);
+      });
+
+      this.socket.on('connect_error', (error) => {
+        clearTimeout(timeout);
+        console.error('Socket connection error:', error.message);
+        reject(error);
+      });
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log('Socket disconnected:', reason);
+      this.connectionPromise = null;
     });
 
-    this.socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error.message);
-    });
-
-    return this.socket;
+    return this.connectionPromise;
   }
 
   disconnect() {
@@ -43,19 +77,16 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
       this.listeners.clear();
+      this.connectionPromise = null;
     }
   }
 
-  emit(event, data, callback) {
+  emit(event, data) {
     if (!this.socket?.connected) {
-      console.error('Socket not connected');
+      console.error('Socket not connected, cannot emit:', event);
       return;
     }
-    if (callback) {
-      this.socket.emit(event, data, callback);
-    } else {
-      this.socket.emit(event, data);
-    }
+    this.socket.emit(event, data);
   }
 
   on(event, callback) {
@@ -102,85 +133,6 @@ class SocketService {
 
   getSocketId() {
     return this.socket?.id;
-  }
-
-  // Room Events
-  createRoom(quizId, callback) {
-    this.emit('create_room', { quizId }, callback);
-  }
-
-  joinRoom(pin, nickname, callback) {
-    this.emit('join_room', { pin, nickname }, callback);
-  }
-
-  leaveRoom(pin, callback) {
-    this.emit('leave_room', { pin }, callback);
-  }
-
-  closeRoom(pin, callback) {
-    this.emit('close_room', { pin }, callback);
-  }
-
-  getPlayers(pin, callback) {
-    this.emit('get_players', { pin }, callback);
-  }
-
-  kickPlayer(pin, playerId, callback) {
-    this.emit('kick_player', { pin, playerId }, callback);
-  }
-
-  banPlayer(pin, playerId, callback) {
-    this.emit('ban_player', { pin, playerId }, callback);
-  }
-
-  // Reconnection Events
-  reconnectHost(pin, hostToken, callback) {
-    this.emit('reconnect_host', { pin, hostToken }, callback);
-  }
-
-  reconnectPlayer(pin, playerToken, callback) {
-    this.emit('reconnect_player', { pin, playerToken }, callback);
-  }
-
-  // Game Events
-  startGame(pin, callback) {
-    this.emit('start_game', { pin }, callback);
-  }
-
-  startAnswering(pin, callback) {
-    this.emit('start_answering', { pin }, callback);
-  }
-
-  submitAnswer(pin, answerIndex, callback) {
-    this.emit('submit_answer', { pin, answerIndex }, callback);
-  }
-
-  endAnswering(pin, callback) {
-    this.emit('end_answering', { pin }, callback);
-  }
-
-  showLeaderboard(pin, callback) {
-    this.emit('show_leaderboard', { pin }, callback);
-  }
-
-  nextQuestion(pin, callback) {
-    this.emit('next_question', { pin }, callback);
-  }
-
-  getResults(pin, callback) {
-    this.emit('get_results', { pin }, callback);
-  }
-
-  pauseGame(pin, callback) {
-    this.emit('pause_game', { pin }, callback);
-  }
-
-  resumeGame(pin, callback) {
-    this.emit('resume_game', { pin }, callback);
-  }
-
-  requestTimerSync(pin, callback) {
-    this.emit('request_timer_sync', { pin }, callback);
   }
 }
 

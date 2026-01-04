@@ -44,10 +44,12 @@ const initialState = {
 };
 
 export function GameProvider({ children }) {
-  const { token } = useAuth();
+  const { getToken } = useAuth();
   const [state, setState] = useState(initialState);
   const timerRef = useRef(null);
   const endTimeRef = useRef(null);
+  const listenersSetupRef = useRef(false);
+  const lastSocketIdRef = useRef(null);
 
   // Update state helper
   const updateState = useCallback((updates) => {
@@ -60,6 +62,8 @@ export function GameProvider({ children }) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    listenersSetupRef.current = false;
+    lastSocketIdRef.current = null;
     setState(initialState);
   }, []);
 
@@ -93,9 +97,24 @@ export function GameProvider({ children }) {
 
   // Socket event handlers setup
   const setupSocketListeners = useCallback(() => {
+    const currentSocketId = socketService.getSocketId();
+
+    // If socket changed (e.g., after HMR or reconnect), reset the flag
+    if (listenersSetupRef.current && lastSocketIdRef.current !== currentSocketId) {
+      listenersSetupRef.current = false;
+    }
+
+    if (listenersSetupRef.current) {
+      return;
+    }
+
+    listenersSetupRef.current = true;
+    lastSocketIdRef.current = currentSocketId;
+
     // Player events
     socketService.on('player_joined', ({ player, playerCount }) => {
-      updateState((prev) => ({
+      setState((prev) => ({
+        ...prev,
         players: [...prev.players.filter(p => p.id !== player.id), player],
       }));
     });
@@ -107,46 +126,43 @@ export function GameProvider({ children }) {
       }));
     });
 
-    socketService.on('kicked', () => {
-      showToast.error('You have been kicked from the game');
-      resetGame();
-      socketService.disconnect();
-    });
-
-    socketService.on('banned', () => {
-      showToast.error('You have been banned from the game');
+    socketService.on('you_were_kicked', ({ reason }) => {
+      showToast.error(reason === 'banned' ? 'You have been banned from the game' : 'You have been kicked from the game');
       resetGame();
       socketService.disconnect();
     });
 
     // Game flow events
-    socketService.on('game_started', ({ totalQuestions, currentQuestion, questionIndex }) => {
-      updateState({
+    socketService.on('game_started', (data) => {
+      const { totalQuestions, currentQuestion, questionIndex } = data || {};
+      setState((prev) => ({
+        ...prev,
         gameState: GAME_STATES.QUESTION_INTRO,
-        totalQuestions,
-        currentQuestion,
-        currentQuestionIndex: questionIndex,
+        totalQuestions: totalQuestions ?? prev.totalQuestions,
+        currentQuestion: currentQuestion ?? prev.currentQuestion,
+        currentQuestionIndex: questionIndex ?? 0,
         hasAnswered: false,
         lastAnswer: null,
-      });
+      }));
     });
 
-    socketService.on('question_intro', ({ questionIndex, currentQuestion }) => {
-      updateState({
+    socketService.on('question_intro', ({ questionIndex, totalQuestions, currentQuestion }) => {
+      setState((prev) => ({
+        ...prev,
         gameState: GAME_STATES.QUESTION_INTRO,
-        currentQuestion,
-        currentQuestionIndex: questionIndex,
+        currentQuestion: currentQuestion ?? prev.currentQuestion,
+        currentQuestionIndex: questionIndex ?? 0,
+        totalQuestions: totalQuestions ?? prev.totalQuestions,
         hasAnswered: false,
         lastAnswer: null,
         answeredCount: 0,
         answerDistribution: null,
         correctAnswerIndex: null,
-      });
+      }));
     });
 
-    socketService.on('answering_started', ({ timeLimit, optionCount, endTime, serverTime }) => {
-      const adjustedEndTime = endTime + (Date.now() - serverTime);
-      startTimer(timeLimit, adjustedEndTime);
+    socketService.on('answering_started', ({ timeLimit, optionCount }) => {
+      // Timer will be started by timer_started event from GameTimerService
       updateState({
         gameState: GAME_STATES.ANSWERING_PHASE,
         timeLimit,
@@ -176,6 +192,7 @@ export function GameProvider({ children }) {
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
         answerDistribution: distribution,
+        answeredCount: totalPlayers,
       });
     });
 
@@ -201,7 +218,8 @@ export function GameProvider({ children }) {
     });
 
     // Timer events
-    socketService.on('timer_started', ({ duration, endTime, serverTime }) => {
+    socketService.on('timer_started', ({ duration, durationMs, endTime, serverTime }) => {
+      // Adjust endTime for network latency
       const adjustedEndTime = endTime + (Date.now() - serverTime);
       startTimer(duration, adjustedEndTime);
     });
@@ -231,78 +249,118 @@ export function GameProvider({ children }) {
     });
 
     // Room closed
-    socketService.on('room_closed', () => {
-      showToast.info('The game has been closed by the host');
+    socketService.on('room_closed', ({ reason } = {}) => {
+      const message = reason === 'Host reconnection timeout'
+        ? 'The game was closed because the host did not reconnect'
+        : 'The game has been closed by the host';
+      showToast.info(message);
       resetGame();
+      socketService.disconnect();
+    });
+
+    // Host disconnected - notify players
+    socketService.on('host_disconnected', ({ message }) => {
+      showToast.warning(message || 'Host disconnected. Waiting for reconnection...');
+    });
+
+    // Host disconnection warning with countdown
+    socketService.on('host_disconnected_warning', ({ remainingSeconds, message }) => {
+      showToast.warning(`${message} (${remainingSeconds}s remaining)`);
+    });
+
+    // Host returned after disconnection
+    socketService.on('host_returned', () => {
+      showToast.success('Host has reconnected!');
     });
 
     // Error handling
-    socketService.on('error', ({ message }) => {
-      showToast.error(message);
+    socketService.on('error', ({ error, message }) => {
+      showToast.error(error || message || 'An error occurred');
     });
   }, [updateState, startTimer, stopTimer, resetGame]);
 
-  // Connect to socket
-  const connectSocket = useCallback(() => {
-    socketService.connect(token);
+  // Connect to socket and wait for connection
+  const connectSocket = useCallback(async (token = null) => {
+    await socketService.connect(token);
     setupSocketListeners();
-  }, [token, setupSocketListeners]);
+  }, [setupSocketListeners]);
 
   // Create room (host)
-  const createRoom = useCallback((quizId) => {
-    return new Promise((resolve, reject) => {
-      connectSocket();
+  const createRoom = useCallback(async (quizId) => {
+    const token = getToken();
+    if (!token) {
+      throw new Error('You must be logged in to host a game');
+    }
 
-      socketService.createRoom(quizId, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
+    await connectSocket(token);
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socketService.off('room_created', onRoomCreated);
+        reject(new Error('Room creation timed out'));
+      }, 10000);
+
+      const onRoomCreated = (response) => {
+        clearTimeout(timeout);
+        socketService.off('room_created', onRoomCreated);
 
         updateState({
           roomPin: response.pin,
           isHost: true,
           hostToken: response.hostToken,
           gameState: GAME_STATES.WAITING_PLAYERS,
-          quiz: response.quiz,
+          totalQuestions: response.totalQuestions,
+          quiz: {
+            title: response.quizTitle,
+            questionCount: response.totalQuestions,
+          },
           players: [],
         });
 
         resolve(response);
-      });
+      };
+
+      socketService.on('room_created', onRoomCreated);
+      socketService.emit('create_room', { quizId });
     });
-  }, [connectSocket, updateState]);
+  }, [getToken, connectSocket, updateState]);
 
   // Join room (player)
-  const joinRoom = useCallback((pin, nickname) => {
-    return new Promise((resolve, reject) => {
-      connectSocket();
+  const joinRoom = useCallback(async (pin, nickname) => {
+    await connectSocket(); // No token needed for players
 
-      socketService.joinRoom(pin, nickname, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socketService.off('room_joined', onRoomJoined);
+        reject(new Error('Join room timed out'));
+      }, 10000);
+
+      const onRoomJoined = (response) => {
+        clearTimeout(timeout);
+        socketService.off('room_joined', onRoomJoined);
 
         updateState({
-          roomPin: pin,
+          roomPin: response.pin,
           isHost: false,
           playerId: response.playerId,
           playerToken: response.playerToken,
-          nickname,
+          nickname: response.nickname || nickname,
           gameState: GAME_STATES.WAITING_PLAYERS,
-          players: response.players || [],
+          players: [],
         });
 
         resolve(response);
-      });
+      };
+
+      socketService.on('room_joined', onRoomJoined);
+      socketService.emit('join_room', { pin, nickname });
     });
   }, [connectSocket, updateState]);
 
   // Leave room
   const leaveRoom = useCallback(() => {
     if (state.roomPin) {
-      socketService.leaveRoom(state.roomPin);
+      socketService.emit('leave_room', { pin: state.roomPin });
     }
     resetGame();
     socketService.disconnect();
@@ -310,24 +368,70 @@ export function GameProvider({ children }) {
 
   // Close room (host only)
   const closeRoom = useCallback(() => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
+        resolve();
         return;
       }
 
-      socketService.closeRoom(state.roomPin, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-
-        resetGame();
-        socketService.disconnect();
-        resolve(response);
-      });
+      socketService.emit('close_room', { pin: state.roomPin });
+      resetGame();
+      socketService.disconnect();
+      resolve();
     });
   }, [state.isHost, state.roomPin, resetGame]);
+
+  // Get host's existing room
+  const getMyRoom = useCallback(async () => {
+    const token = getToken();
+    if (!token) {
+      return null;
+    }
+
+    await connectSocket(token);
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        socketService.off('my_room', onMyRoom);
+        resolve(null);
+      }, 5000);
+
+      const onMyRoom = (room) => {
+        clearTimeout(timeout);
+        socketService.off('my_room', onMyRoom);
+        resolve(room);
+      };
+
+      socketService.on('my_room', onMyRoom);
+      socketService.emit('get_my_room');
+    });
+  }, [getToken, connectSocket]);
+
+  // Force close existing room (to create a new one)
+  const forceCloseExistingRoom = useCallback(async () => {
+    const token = getToken();
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    await connectSocket(token);
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socketService.off('room_force_closed', onClosed);
+        reject(new Error('Force close timed out'));
+      }, 5000);
+
+      const onClosed = (result) => {
+        clearTimeout(timeout);
+        socketService.off('room_force_closed', onClosed);
+        resolve(result);
+      };
+
+      socketService.on('room_force_closed', onClosed);
+      socketService.emit('force_close_room');
+    });
+  }, [getToken, connectSocket]);
 
   // Start game (host only)
   const startGame = useCallback(() => {
@@ -337,13 +441,8 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.startGame(state.roomPin, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        resolve(response);
-      });
+      socketService.emit('start_game', { pin: state.roomPin });
+      resolve();
     });
   }, [state.isHost, state.roomPin]);
 
@@ -355,13 +454,8 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.startAnswering(state.roomPin, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        resolve(response);
-      });
+      socketService.emit('start_answering', { pin: state.roomPin });
+      resolve();
     });
   }, [state.isHost, state.roomPin]);
 
@@ -373,13 +467,8 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.submitAnswer(state.roomPin, answerIndex, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        resolve(response);
-      });
+      socketService.emit('submit_answer', { pin: state.roomPin, answerIndex });
+      resolve();
     });
   }, [state.isHost, state.roomPin, state.hasAnswered]);
 
@@ -391,13 +480,8 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.endAnswering(state.roomPin, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        resolve(response);
-      });
+      socketService.emit('end_answering', { pin: state.roomPin });
+      resolve();
     });
   }, [state.isHost, state.roomPin]);
 
@@ -409,13 +493,8 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.showLeaderboard(state.roomPin, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        resolve(response);
-      });
+      socketService.emit('show_leaderboard', { pin: state.roomPin });
+      resolve();
     });
   }, [state.isHost, state.roomPin]);
 
@@ -427,13 +506,8 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.nextQuestion(state.roomPin, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        resolve(response);
-      });
+      socketService.emit('next_question', { pin: state.roomPin });
+      resolve();
     });
   }, [state.isHost, state.roomPin]);
 
@@ -445,17 +519,12 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.kickPlayer(state.roomPin, playerId, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        setState((prev) => ({
-          ...prev,
-          players: prev.players.filter((p) => p.id !== playerId),
-        }));
-        resolve(response);
-      });
+      socketService.emit('kick_player', { pin: state.roomPin, playerId });
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.filter((p) => p.id !== playerId),
+      }));
+      resolve();
     });
   }, [state.isHost, state.roomPin]);
 
@@ -467,17 +536,12 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.banPlayer(state.roomPin, playerId, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        setState((prev) => ({
-          ...prev,
-          players: prev.players.filter((p) => p.id !== playerId),
-        }));
-        resolve(response);
-      });
+      socketService.emit('ban_player', { pin: state.roomPin, playerId });
+      setState((prev) => ({
+        ...prev,
+        players: prev.players.filter((p) => p.id !== playerId),
+      }));
+      resolve();
     });
   }, [state.isHost, state.roomPin]);
 
@@ -489,14 +553,14 @@ export function GameProvider({ children }) {
         return;
       }
 
-      socketService.getPlayers(state.roomPin, (response) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
-        }
+      const onPlayersList = (response) => {
+        socketService.off('players_list', onPlayersList);
         updateState({ players: response.players });
         resolve(response.players);
-      });
+      };
+
+      socketService.on('players_list', onPlayersList);
+      socketService.emit('get_players', { pin: state.roomPin });
     });
   }, [state.roomPin, updateState]);
 
@@ -515,6 +579,8 @@ export function GameProvider({ children }) {
     joinRoom,
     leaveRoom,
     closeRoom,
+    getMyRoom,
+    forceCloseExistingRoom,
     startGame,
     startAnswering,
     submitAnswer,

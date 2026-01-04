@@ -101,6 +101,7 @@ export default function HostGame() {
 
   const connectedPlayers = players.filter((p) => !p.disconnectedAt);
 
+
   // Render based on game state
   const renderContent = () => {
     switch (gameState) {

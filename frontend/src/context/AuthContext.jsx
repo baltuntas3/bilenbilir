@@ -42,12 +42,17 @@ export function AuthProvider({ children }) {
     setUser(userData);
   }, []);
 
+  const getToken = useCallback(() => {
+    return localStorage.getItem(TOKEN_KEY);
+  }, []);
+
   const value = {
     user,
     loading,
     login,
     logout,
     updateUser,
+    getToken,
     isAuthenticated: !!user
   };
 

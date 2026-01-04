@@ -9,8 +9,11 @@ import {
   Badge,
   Center,
   Button,
+  SimpleGrid,
+  Progress,
+  ThemeIcon,
 } from '@mantine/core';
-import { IconDoorExit } from '@tabler/icons-react';
+import { IconDoorExit, IconCheck, IconX } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
@@ -41,6 +44,8 @@ export default function PlayerGame() {
     leaderboard,
     podium,
     correctAnswerIndex,
+    answerDistribution,
+    answeredCount,
     hasAnswered,
     submitAnswer,
     leaveRoom,
@@ -53,6 +58,7 @@ export default function PlayerGame() {
   useEffect(() => {
     setSelectedAnswer(null);
   }, [currentQuestionIndex]);
+
 
   // Redirect if not in a game
   useEffect(() => {
@@ -150,35 +156,87 @@ export default function PlayerGame() {
         );
 
       case GAME_STATES.SHOW_RESULTS:
+        const totalPlayerCount = answeredCount || players.length;
         return (
           <Stack gap="xl">
+            {/* Your result */}
+            {lastAnswer && (
+              <Paper p="lg" radius="md" withBorder bg={lastAnswer.isCorrect ? 'green.0' : 'red.0'}>
+                <Group justify="center" gap="md">
+                  <ThemeIcon
+                    size={40}
+                    radius="xl"
+                    color={lastAnswer.isCorrect ? 'green' : 'red'}
+                    variant="filled"
+                  >
+                    {lastAnswer.isCorrect ? <IconCheck size={24} /> : <IconX size={24} />}
+                  </ThemeIcon>
+                  <Stack gap={0}>
+                    <Text size="lg" fw={600}>
+                      {lastAnswer.isCorrect ? 'Correct!' : 'Wrong!'}
+                    </Text>
+                    <Text size="xl" fw={700} c={lastAnswer.isCorrect ? 'green' : 'dimmed'}>
+                      +{lastAnswer.isCorrect ? lastAnswer.score + (lastAnswer.streakBonus || 0) : 0} pts
+                    </Text>
+                  </Stack>
+                </Group>
+              </Paper>
+            )}
+
             <QuestionDisplay
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
             />
 
-            <AnswerOptions
-              options={currentQuestion?.options || []}
-              onSelect={() => {}}
-              disabled
-              selectedIndex={selectedAnswer}
-              correctIndex={correctAnswerIndex}
-              showResults
-            />
+            {/* Answer distribution */}
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              {currentQuestion?.options?.map((option, index) => {
+                const count = answerDistribution?.[index] || 0;
+                const percentage = totalPlayerCount > 0
+                  ? Math.round((count / totalPlayerCount) * 100)
+                  : 0;
+                const isCorrect = index === correctAnswerIndex;
+                const wasSelected = selectedAnswer === index;
 
-            {lastAnswer && (
-              <Center>
-                <Paper p="md" radius="md" withBorder>
-                  <Group gap="md">
-                    <Text c="dimmed">Points earned:</Text>
-                    <Text fw={700} size="xl" c={lastAnswer.isCorrect ? 'green' : 'red'}>
-                      {lastAnswer.isCorrect ? `+${lastAnswer.score + (lastAnswer.streakBonus || 0)}` : '0'}
-                    </Text>
-                  </Group>
-                </Paper>
-              </Center>
-            )}
+                return (
+                  <Paper
+                    key={index}
+                    p="md"
+                    radius="md"
+                    withBorder
+                    style={{
+                      borderColor: isCorrect
+                        ? 'var(--mantine-color-green-5)'
+                        : wasSelected
+                          ? 'var(--mantine-color-red-5)'
+                          : undefined,
+                      borderWidth: isCorrect || wasSelected ? 2 : 1,
+                      backgroundColor: isCorrect ? 'var(--mantine-color-green-0)' : undefined,
+                    }}
+                  >
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Group gap="sm">
+                          <Badge color={isCorrect ? 'green' : wasSelected ? 'red' : 'gray'}>
+                            {String.fromCharCode(65 + index)}
+                          </Badge>
+                          <Text size="sm">{option}</Text>
+                          {isCorrect && <IconCheck size={16} color="var(--mantine-color-green-6)" />}
+                          {wasSelected && !isCorrect && <IconX size={16} color="var(--mantine-color-red-6)" />}
+                        </Group>
+                        <Badge variant="light">{count} ({percentage}%)</Badge>
+                      </Group>
+                      <Progress
+                        value={percentage}
+                        color={isCorrect ? 'green' : 'gray'}
+                        size="sm"
+                      />
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </SimpleGrid>
           </Stack>
         );
 

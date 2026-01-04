@@ -17,6 +17,7 @@ import {
   Menu,
   Center,
   Loader,
+  Alert,
 } from '@mantine/core';
 import {
   IconCopy,
@@ -27,6 +28,8 @@ import {
   IconDotsVertical,
   IconUserMinus,
   IconBan,
+  IconAlertCircle,
+  IconRefresh,
 } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import { showToast } from '../utils/toast';
@@ -40,8 +43,11 @@ export default function HostLobby() {
     gameState,
     players,
     quiz,
+    totalQuestions,
     createRoom,
     closeRoom,
+    getMyRoom,
+    forceCloseExistingRoom,
     startGame,
     kickPlayer,
     banPlayer,
@@ -49,6 +55,8 @@ export default function HostLobby() {
 
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [existingRoom, setExistingRoom] = useState(null);
+  const [closingExisting, setClosingExisting] = useState(false);
 
   useEffect(() => {
     if (!quizId) {
@@ -64,16 +72,34 @@ export default function HostLobby() {
 
     const initRoom = async () => {
       try {
+        // First check if there's an existing room
+        const existing = await getMyRoom();
+        if (existing) {
+          setExistingRoom(existing);
+          setLoading(false);
+          return;
+        }
+
+        // No existing room, create new one
         await createRoom(quizId);
         setLoading(false);
       } catch (error) {
+        // Check if error is about existing room
+        if (error.message?.includes('already have an active room')) {
+          const existing = await getMyRoom();
+          if (existing) {
+            setExistingRoom(existing);
+            setLoading(false);
+            return;
+          }
+        }
         showToast.error(error.message || 'Failed to create room');
         navigate('/my-quizzes');
       }
     };
 
     initRoom();
-  }, [quizId, roomPin, isHost, createRoom, navigate]);
+  }, [quizId, roomPin, isHost, createRoom, getMyRoom, navigate]);
 
   // Redirect to game when game starts
   useEffect(() => {
@@ -81,6 +107,30 @@ export default function HostLobby() {
       navigate('/host');
     }
   }, [gameState, navigate]);
+
+  const handleCloseExistingAndCreate = async () => {
+    setClosingExisting(true);
+    try {
+      await forceCloseExistingRoom();
+      setExistingRoom(null);
+      showToast.success('Previous room closed');
+
+      // Now create new room
+      await createRoom(quizId);
+      setLoading(false);
+    } catch (error) {
+      showToast.error(error.message || 'Failed to close existing room');
+    } finally {
+      setClosingExisting(false);
+    }
+  };
+
+  const handleRejoinExisting = () => {
+    // Navigate to the existing room's quiz host page
+    navigate(`/host/${existingRoom.quizId}`);
+    // Force reload to reconnect
+    window.location.reload();
+  };
 
   const handleStartGame = async () => {
     if (players.length === 0) {
@@ -124,6 +174,71 @@ export default function HostLobby() {
       showToast.error(error.message || 'Failed to ban player');
     }
   };
+
+  // Show existing room options
+  if (existingRoom) {
+    return (
+      <Container size="sm" py="xl">
+        <Stack gap="xl">
+          <Alert
+            icon={<IconAlertCircle size={24} />}
+            title="You have an active room"
+            color="yellow"
+          >
+            You already have an active game room. You can either rejoin it or close it to create a new one.
+          </Alert>
+
+          <Paper shadow="md" p="xl" radius="md" withBorder>
+            <Stack gap="md">
+              <Group justify="space-between">
+                <Text fw={500}>Existing Room</Text>
+                <Badge size="lg">PIN: {existingRoom.pin}</Badge>
+              </Group>
+
+              <SimpleGrid cols={2} spacing="xs">
+                <div>
+                  <Text size="sm" c="dimmed">State</Text>
+                  <Text fw={500}>{existingRoom.state}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">Players</Text>
+                  <Text fw={500}>{existingRoom.connectedPlayerCount} / {existingRoom.playerCount}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">Question</Text>
+                  <Text fw={500}>{existingRoom.currentQuestionIndex + 1}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">Host Status</Text>
+                  <Badge color={existingRoom.isHostDisconnected ? 'red' : 'green'} size="sm">
+                    {existingRoom.isHostDisconnected ? 'Disconnected' : 'Connected'}
+                  </Badge>
+                </div>
+              </SimpleGrid>
+            </Stack>
+          </Paper>
+
+          <Group justify="center" gap="md">
+            <Button
+              variant="light"
+              color="red"
+              leftSection={<IconDoorExit size={18} />}
+              onClick={handleCloseExistingAndCreate}
+              loading={closingExisting}
+            >
+              Close & Create New
+            </Button>
+            <Button
+              leftSection={<IconRefresh size={18} />}
+              onClick={handleRejoinExisting}
+            >
+              Rejoin Existing Room
+            </Button>
+          </Group>
+        </Stack>
+      </Container>
+    );
+  }
 
   if (loading) {
     return (
@@ -175,7 +290,7 @@ export default function HostLobby() {
               <div>
                 <Text fw={500}>{quiz.title}</Text>
                 <Text size="sm" c="dimmed">
-                  {quiz.questions?.length || 0} questions
+                  {quiz.questionCount || totalQuestions || 0} questions
                 </Text>
               </div>
               <Badge size="lg" variant="light">
