@@ -7,6 +7,7 @@ import { IconSearch } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { quizService } from '../services/quizService';
 import { QUIZ_CATEGORIES } from '../constants/validation';
+import StarRating from '../components/StarRating';
 
 export default function Quizzes() {
   const { t } = useTranslation();
@@ -89,6 +90,9 @@ export default function Quizzes() {
                 <Text size="xs" c="dimmed">
                   {t('quiz.playCount', { count: quiz.playCount || 0 })}
                 </Text>
+                {quiz.averageRating > 0 && (
+                  <StarRating value={quiz.averageRating} count={quiz.ratingCount} readOnly size="xs" />
+                )}
                 {quiz.tags && quiz.tags.length > 0 && (
                   <Group gap={4}>
                     {quiz.tags.map((tag) => (

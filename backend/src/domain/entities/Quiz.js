@@ -26,7 +26,7 @@ class Quiz {
   static MAX_TAGS = MAX_TAGS;
   static VALID_CATEGORIES = VALID_CATEGORIES;
 
-  constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, playCount = 0, createdAt = new Date(), category = 'Diğer', tags = [] }) {
+  constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, playCount = 0, createdAt = new Date(), category = 'Diğer', tags = [], slug = null, averageRating = 0, ratingCount = 0 }) {
     if (!id) {
       throw new ValidationError('Quiz id is required');
     }
@@ -47,6 +47,9 @@ class Quiz {
     this.createdAt = createdAt;
     this.category = VALID_CATEGORIES.includes(category) ? category : 'Diğer';
     this.tags = Array.isArray(tags) ? this._validateAndCleanTags(tags) : [];
+    this.slug = slug || null;
+    this.averageRating = Math.max(0, averageRating || 0);
+    this.ratingCount = Math.max(0, ratingCount || 0);
 
     if (this.questions.length > MAX_QUESTIONS) {
       throw new ValidationError(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
@@ -85,6 +88,40 @@ class Quiz {
 
   setPublic(isPublic) {
     this.isPublic = Boolean(isPublic);
+  }
+
+  /**
+   * Generate a URL-friendly slug from a title
+   * Lowercase, replace spaces with hyphens, remove special chars, append random suffix
+   * @param {string} title - Quiz title
+   * @returns {string} URL-friendly slug
+   */
+  static generateSlug(title) {
+    if (!title || typeof title !== 'string') {
+      throw new ValidationError('Title is required to generate slug');
+    }
+
+    // Turkish character map for transliteration
+    const trMap = {
+      'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g',
+      'ı': 'i', 'İ': 'i', 'ö': 'o', 'Ö': 'o',
+      'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u'
+    };
+
+    let slug = title.toLowerCase();
+    // Replace Turkish characters
+    slug = slug.replace(/[çÇğĞıİöÖşŞüÜ]/g, (match) => trMap[match] || match);
+    // Replace spaces and non-alphanumeric with hyphens
+    slug = slug.replace(/[^a-z0-9]+/g, '-');
+    // Remove leading/trailing hyphens
+    slug = slug.replace(/^-+|-+$/g, '');
+    // Truncate to reasonable length
+    slug = slug.substring(0, 60);
+    // Remove trailing hyphen after truncation
+    slug = slug.replace(/-+$/, '');
+    // Append 4 random chars for uniqueness
+    const randomSuffix = Math.random().toString(36).substring(2, 6);
+    return `${slug}-${randomSuffix}`;
   }
 
   updateCategory(category) {
@@ -236,7 +273,10 @@ class Quiz {
       playCount: this.playCount,
       createdAt: clonedCreatedAt,
       category: this.category,
-      tags: [...this.tags]
+      tags: [...this.tags],
+      slug: this.slug,
+      averageRating: this.averageRating,
+      ratingCount: this.ratingCount
     });
 
     return Object.freeze(subsetQuiz);
@@ -287,7 +327,10 @@ class Quiz {
       playCount: this.playCount,
       createdAt: clonedCreatedAt,
       category: this.category,
-      tags: [...this.tags]
+      tags: [...this.tags],
+      slug: this.slug,
+      averageRating: this.averageRating,
+      ratingCount: this.ratingCount
     });
 
     // Freeze the quiz object to prevent modifications

@@ -102,6 +102,11 @@
     "timeLimit": "Time Limit",
     "points": "Points",
     "seconds": "seconds",
+    "explanation": "Explanation",
+    "explanationPlaceholder": "Explanation for the correct answer (optional)",
+    "share": "Share",
+    "shareLink": "Share Link",
+    "linkCopied": "Link copied!",
     "importQuiz": "Import Quiz",
     "exportQuiz": "Export Quiz",
     "enterTitle": "Enter quiz title",
@@ -116,7 +121,11 @@
     "noCreatedQuizzes": "You haven't created any quizzes yet.",
     "createFirstQuiz": "Create Your First Quiz",
     "play": "Play",
-    "view": "View"
+    "view": "View",
+    "rate": "Rate",
+    "rating": "Rating",
+    "ratings": "ratings",
+    "ratingSubmitted": "Rating submitted"
   },
   "game": {
     "pin": "Game PIN",
@@ -154,7 +163,11 @@
     "continue": "Continue",
     "change": "Change",
     "yourNickname": "Your Nickname",
-    "or": "or"
+    "or": "or",
+    "lightningRound": "Lightning Round",
+    "lightningRoundDesc": "Last questions at half time!",
+    "lightningQuestionCount": "Lightning question count",
+    "lightningActive": "⚡ Lightning Round!"
   },
   "team": {
     "teamMode": "Team Mode",
@@ -189,7 +202,20 @@
     "date": "Date",
     "status": "Status",
     "completed": "Completed",
-    "interrupted": "Interrupted"
+    "interrupted": "Interrupted",
+    "replay": "Replay",
+    "replayTitle": "Game Replay",
+    "speed": "Speed",
+    "questionN": "Question {{n}}",
+    "autoPlay": "Auto Play",
+    "replayComplete": "Replay complete",
+    "playerAnswers": "Player Answers",
+    "answer": "Answer",
+    "result": "Result",
+    "responseTime": "Response Time",
+    "correctAnswers": "Correct",
+    "correctLabel": "correct",
+    "answered": "answers"
   },
   "profile": {
     "title": "Profile Settings",

@@ -6,6 +6,7 @@ import { IconUsers, IconEye } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useGame } from '../context/GameContext';
 import { showToast } from '../utils/toast';
+import PlayerAvatar from '../components/game/PlayerAvatar';
 
 export default function JoinGame() {
   const navigate = useNavigate();
@@ -128,6 +129,15 @@ export default function JoinGame() {
                     {...form.getInputProps('nickname')}
                     autoFocus
                   />
+
+                  {form.values.nickname.trim().length >= 2 && (
+                    <Center>
+                      <Stack align="center" gap={4}>
+                        <PlayerAvatar nickname={form.values.nickname.trim()} size="lg" />
+                        <Text size="xs" c="dimmed">Avatarın</Text>
+                      </Stack>
+                    </Center>
+                  )}
 
                   <Button
                     type="submit"

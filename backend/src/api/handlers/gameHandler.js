@@ -72,7 +72,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
               correctAnswerIndex: endResult.correctAnswerIndex,
               distribution: endResult.distribution,
               correctCount: endResult.correctCount,
-              totalPlayers: endResult.totalPlayers
+              totalPlayers: endResult.totalPlayers,
+              explanation: endResult.explanation || null
             });
           }
         } catch (err) {
@@ -85,7 +86,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       io.to(pin).emit('answering_started', {
         timeLimit: result.timeLimit,
-        optionCount: result.optionCount
+        optionCount: result.optionCount,
+        isLightning: result.isLightning || false
       });
     } catch (error) {
       handleSocketError(socket, error);
@@ -147,7 +149,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
               correctAnswerIndex: endResult.correctAnswerIndex,
               distribution: endResult.distribution,
               correctCount: endResult.correctCount,
-              totalPlayers: endResult.totalPlayers
+              totalPlayers: endResult.totalPlayers,
+              explanation: endResult.explanation || null
             });
           }
         } catch (err) {
@@ -180,11 +183,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         correctAnswerIndex: result.correctAnswerIndex,
         distribution: result.distribution,
         correctCount: result.correctCount,
-        totalPlayers: result.totalPlayers
+        totalPlayers: result.totalPlayers,
+        explanation: result.explanation || null
       });
 
       socket.to(pin).emit('round_ended', {
-        correctAnswerIndex: result.correctAnswerIndex
+        correctAnswerIndex: result.correctAnswerIndex,
+        explanation: result.explanation || null
       });
     } catch (error) {
       handleSocketError(socket, error);

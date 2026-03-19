@@ -258,6 +258,18 @@ class RoomUseCases extends SharedUseCases {
     return await this.roomRepository.findBySocketId(socketId);
   }
 
+  // ==================== LIGHTNING ROUND ====================
+
+  async setLightningRound({ pin, enabled, questionCount, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    room.setLightningRound(enabled, questionCount);
+    await this.roomRepository.save(room);
+
+    return { room };
+  }
+
   // ==================== KICK/BAN METHODS ====================
 
   async kickPlayer({ pin, playerId, requesterId }) {

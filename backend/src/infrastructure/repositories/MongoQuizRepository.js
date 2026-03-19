@@ -46,7 +46,8 @@ class MongoQuizRepository {
           correctAnswerIndex: q.correctAnswerIndex,
           timeLimit: q.timeLimit,
           points: q.points,
-          imageUrl: this._sanitizeImageUrl(q.imageUrl)
+          imageUrl: this._sanitizeImageUrl(q.imageUrl),
+          explanation: q.explanation || ''
         });
       } catch (error) {
         // Log but don't fail - return question with sanitized defaults
@@ -80,7 +81,10 @@ class MongoQuizRepository {
       playCount: doc.playCount || 0,
       createdAt: doc.createdAt,
       category: doc.category || 'Diğer',
-      tags: doc.tags || []
+      tags: doc.tags || [],
+      slug: doc.slug || null,
+      averageRating: doc.averageRating || 0,
+      ratingCount: doc.ratingCount || 0
     });
   }
 
@@ -88,7 +92,7 @@ class MongoQuizRepository {
    * Convert Domain entity to plain object for Mongoose
    */
   _toDocument(quiz) {
-    return {
+    const doc = {
       title: quiz.title,
       description: quiz.description,
       category: quiz.category || 'Diğer',
@@ -101,10 +105,15 @@ class MongoQuizRepository {
         correctAnswerIndex: q.correctAnswerIndex,
         timeLimit: q.timeLimit,
         points: q.points,
-        imageUrl: q.imageUrl
+        imageUrl: q.imageUrl,
+        explanation: q.explanation || ''
       })),
       isPublic: quiz.isPublic
     };
+    if (quiz.slug) {
+      doc.slug = quiz.slug;
+    }
+    return doc;
   }
 
   /**
@@ -144,6 +153,19 @@ class MongoQuizRepository {
       return this._toDomain(doc);
     } catch (error) {
       console.error(`[MongoQuizRepository.findById] Error finding quiz ${id}:`, error.message);
+      return null;
+    }
+  }
+
+  async findBySlug(slug) {
+    if (!slug || typeof slug !== 'string') {
+      return null;
+    }
+    try {
+      const doc = await QuizModel.findOne({ slug });
+      return this._toDomain(doc);
+    } catch (error) {
+      console.error(`[MongoQuizRepository.findBySlug] Error finding quiz by slug ${slug}:`, error.message);
       return null;
     }
   }

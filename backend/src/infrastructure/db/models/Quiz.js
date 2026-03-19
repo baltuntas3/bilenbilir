@@ -39,6 +39,11 @@ const questionSchema = new mongoose.Schema({
   imageUrl: {
     type: String,
     default: null
+  },
+  explanation: {
+    type: String,
+    maxlength: 500,
+    default: ''
   }
 }, { _id: true });
 
@@ -63,6 +68,11 @@ const quizSchema = new mongoose.Schema({
     required: true,
     trim: true,
     maxlength: 100
+  },
+  slug: {
+    type: String,
+    unique: true,
+    sparse: true
   },
   description: {
     type: String,
@@ -106,6 +116,14 @@ const quizSchema = new mongoose.Schema({
   playCount: {
     type: Number,
     default: 0
+  },
+  averageRating: {
+    type: Number,
+    default: 0
+  },
+  ratingCount: {
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true
@@ -117,6 +135,7 @@ quizSchema.index({ isPublic: 1 });
 quizSchema.index({ createdAt: -1 });
 quizSchema.index({ category: 1 });
 quizSchema.index({ tags: 1 });
+quizSchema.index({ slug: 1 });
 
 // Virtual for question count
 quizSchema.virtual('questionCount').get(function() {

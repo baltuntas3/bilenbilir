@@ -49,6 +49,7 @@ export default function PlayerGame() {
     answerDistribution,
     answeredCount,
     hasAnswered,
+    explanation,
     submitAnswer,
     leaveRoom,
     teamMode,
@@ -151,6 +152,7 @@ export default function PlayerGame() {
                 streakBonus={lastAnswer?.streakBonus || 0}
                 streak={streak}
                 totalScore={score}
+                explanation={explanation}
               />
             ) : (
               <AnswerOptions

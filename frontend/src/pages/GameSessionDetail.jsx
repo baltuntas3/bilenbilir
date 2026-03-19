@@ -4,7 +4,7 @@ import {
   Progress, SimpleGrid, Center, Loader, Button
 } from '@mantine/core';
 import {
-  IconTrophy, IconArrowLeft, IconClock, IconUsers, IconTarget, IconMedal
+  IconTrophy, IconArrowLeft, IconClock, IconUsers, IconTarget, IconMedal, IconPlayerPlay
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { statsService } from '../services/statsService';
@@ -151,6 +151,15 @@ export default function GameSessionDetail() {
               <Text size="sm" c="dimmed">PIN: {session.pin}</Text>
             </Group>
           </div>
+          <Button
+            component={Link}
+            to={`/stats/replay/${id}`}
+            variant="light"
+            leftSection={<IconPlayerPlay size={16} />}
+            disabled={!session.answers || session.answers.length === 0}
+          >
+            Replay
+          </Button>
         </Group>
 
         {/* Game Info Cards */}

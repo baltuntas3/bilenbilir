@@ -12,8 +12,9 @@ import {
   SimpleGrid,
   Progress,
   ThemeIcon,
+  Alert,
 } from '@mantine/core';
-import { IconDoorExit, IconEye, IconPlayerPause, IconUsers } from '@tabler/icons-react';
+import { IconDoorExit, IconEye, IconPlayerPause, IconUsers, IconInfoCircle } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
@@ -41,6 +42,7 @@ export default function SpectatorGame() {
     correctAnswerIndex,
     answerDistribution,
     answeredCount,
+    explanation,
     leaveRoom,
     teamMode,
     teamLeaderboard,
@@ -170,6 +172,17 @@ export default function SpectatorGame() {
               totalPlayers={players.length || answeredCount}
               options={currentQuestion?.options}
             />
+
+            {explanation && (
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+                title="Explanation"
+              >
+                {explanation}
+              </Alert>
+            )}
           </Stack>
         );
 

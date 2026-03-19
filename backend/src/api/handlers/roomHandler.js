@@ -298,6 +298,32 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
     }
   });
 
+  // ==================== LIGHTNING ROUND ====================
+
+  // Host sets lightning round configuration
+  socket.on('set_lightning_round', async (data) => {
+    try {
+      if (!checkRateLimit('set_lightning_round')) return;
+      requireAuth();
+
+      const { pin, enabled, questionCount } = data || {};
+
+      await roomUseCases.setLightningRound({
+        pin,
+        enabled: !!enabled,
+        questionCount: questionCount ? parseInt(questionCount, 10) : 3,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('lightning_round_updated', {
+        enabled: !!enabled,
+        questionCount: questionCount ? parseInt(questionCount, 10) : 3
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
   // ==================== KICK/BAN EVENTS ====================
 
   // Host kicks a player

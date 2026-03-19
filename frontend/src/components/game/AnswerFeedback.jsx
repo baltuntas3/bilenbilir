@@ -1,7 +1,7 @@
-import { Paper, Stack, Text, ThemeIcon, Group, Badge, Center } from '@mantine/core';
-import { IconCheck, IconX, IconFlame } from '@tabler/icons-react';
+import { Paper, Stack, Text, ThemeIcon, Group, Badge, Center, Alert } from '@mantine/core';
+import { IconCheck, IconX, IconFlame, IconInfoCircle } from '@tabler/icons-react';
 
-export default function AnswerFeedback({ isCorrect, score, streakBonus, streak, totalScore }) {
+export default function AnswerFeedback({ isCorrect, score, streakBonus, streak, totalScore, explanation }) {
   return (
     <Center style={{ minHeight: 200 }}>
       <Paper p="xl" radius="md" withBorder style={{ maxWidth: 400, width: '100%' }}>
@@ -51,6 +51,18 @@ export default function AnswerFeedback({ isCorrect, score, streakBonus, streak, 
           <Text c="dimmed" size="sm">
             Total Score: <strong>{totalScore.toLocaleString()}</strong>
           </Text>
+
+          {explanation && (
+            <Alert
+              icon={<IconInfoCircle size={16} />}
+              color="blue"
+              variant="light"
+              title="Explanation"
+              style={{ width: '100%' }}
+            >
+              {explanation}
+            </Alert>
+          )}
         </Stack>
       </Paper>
     </Center>

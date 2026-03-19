@@ -12,6 +12,11 @@ export const quizService = {
     return response.data;
   },
 
+  getBySlug: async (slug) => {
+    const response = await api.get(`/quizzes/share/${slug}`);
+    return response.data;
+  },
+
   update: async (id, data) => {
     const response = await api.put(`/quizzes/${id}`, data);
     return response.data;
@@ -82,6 +87,17 @@ export const quizService = {
 
   import: async (data, isPublic = false) => {
     const response = await api.post('/quizzes/import', { data, isPublic });
+    return response.data;
+  },
+
+  // Rating
+  rateQuiz: async (quizId, rating) => {
+    const response = await api.post(`/quizzes/${quizId}/rate`, { rating });
+    return response.data;
+  },
+
+  getQuizRating: async (quizId) => {
+    const response = await api.get(`/quizzes/${quizId}/rating`);
     return response.data;
   },
 };

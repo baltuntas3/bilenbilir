@@ -15,7 +15,7 @@ const MIN_POINTS = 100;
 const VALID_QUESTION_TYPES = Object.values(QuestionType);
 
 class Question {
-  constructor({ id, text, type = QuestionType.MULTIPLE_CHOICE, options, correctAnswerIndex, timeLimit = 30, points = 1000, imageUrl = null }) {
+  constructor({ id, text, type = QuestionType.MULTIPLE_CHOICE, options, correctAnswerIndex, timeLimit = 30, points = 1000, imageUrl = null, explanation = '' }) {
     this.id = id;
     this.text = text;
     // Validate and set type
@@ -28,8 +28,32 @@ class Question {
     this.timeLimit = timeLimit;
     this.points = points;
     this.imageUrl = this._sanitizeImageUrl(imageUrl);
+    this.explanation = this._sanitizeExplanation(explanation);
 
     this.validate();
+  }
+
+  /**
+   * Sanitize explanation text
+   * @private
+   */
+  _sanitizeExplanation(explanation) {
+    if (!explanation || typeof explanation !== 'string') {
+      return '';
+    }
+    const trimmed = explanation.trim();
+    if (trimmed.length > 500) {
+      throw new ValidationError('Explanation cannot exceed 500 characters');
+    }
+    return trimmed;
+  }
+
+  /**
+   * Update the explanation text
+   * @param {string} text - New explanation text
+   */
+  updateExplanation(text) {
+    this.explanation = this._sanitizeExplanation(text);
   }
 
   /**
@@ -155,7 +179,8 @@ class Question {
       correctAnswerIndex: this.correctAnswerIndex,
       timeLimit: this.timeLimit,
       points: this.points,
-      imageUrl: this.imageUrl
+      imageUrl: this.imageUrl,
+      explanation: this.explanation || ''
     };
   }
 
@@ -181,7 +206,8 @@ class Question {
       correctAnswerIndex: this.correctAnswerIndex,
       timeLimit: this.timeLimit,
       points: this.points,
-      imageUrl: this.imageUrl
+      imageUrl: this.imageUrl,
+      explanation: this.explanation
     });
 
     // Freeze the question object to prevent modifications

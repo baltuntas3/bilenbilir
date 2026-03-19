@@ -29,6 +29,7 @@ import SpectatorGame from '../pages/SpectatorGame';
 // Stats Pages
 import GameStats from '../pages/GameStats';
 import GameSessionDetail from '../pages/GameSessionDetail';
+import GameReplay from '../pages/GameReplay';
 
 export default function AppRoutes() {
   return (
@@ -41,6 +42,7 @@ export default function AppRoutes() {
 
       {/* Public Quiz Routes */}
       <Route path="/quizzes" element={<Quizzes />} />
+      <Route path="/quiz/share/:slug" element={<QuizDetail />} />
       <Route path="/quizzes/:id" element={<QuizDetail />} />
 
       {/* Protected Routes */}
@@ -53,6 +55,7 @@ export default function AppRoutes() {
       {/* Stats Routes */}
       <Route path="/stats" element={<ProtectedRoute><GameStats /></ProtectedRoute>} />
       <Route path="/stats/session/:id" element={<ProtectedRoute><GameSessionDetail /></ProtectedRoute>} />
+      <Route path="/stats/replay/:id" element={<ProtectedRoute><GameReplay /></ProtectedRoute>} />
 
       {/* Game Routes */}
       <Route path="/join" element={<JoinGame />} />

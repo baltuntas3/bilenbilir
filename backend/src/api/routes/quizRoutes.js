@@ -1,6 +1,7 @@
 const express = require('express');
 const { QuizUseCases } = require('../../application/use-cases');
 const { mongoQuizRepository } = require('../../infrastructure/repositories/MongoQuizRepository');
+const { quizRatingRepository } = require('../../infrastructure/repositories/QuizRatingRepository');
 const { authenticate, optionalAuthenticate } = require('../middlewares/authMiddleware');
 const { ForbiddenError } = require('../../shared/errors');
 const { quizCreationLimiter, searchLimiter } = require('../middlewares/rateLimiter');
@@ -96,6 +97,20 @@ router.get('/search', searchLimiter, async (req, res, next) => {
 
     const result = await mongoQuizRepository.searchPublic(q.trim(), { page, limit });
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/quizzes/share/:slug
+ * Get quiz by share slug (public endpoint, no auth needed)
+ */
+router.get('/share/:slug', async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    const result = await quizUseCases.getQuizBySlug({ slug });
+    res.json(result.quiz);
   } catch (error) {
     next(error);
   }
@@ -304,6 +319,63 @@ router.delete('/:id/questions/:questionId', authenticate, async (req, res, next)
     });
 
     res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== RATING ENDPOINTS ====================
+
+/**
+ * POST /api/quizzes/:id/rate
+ * Rate a quiz (requires auth)
+ * Body: { rating: 1-5 }
+ */
+router.post('/:id/rate', authenticate, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { rating } = req.body;
+
+    if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+      throw new ValidationError('Rating must be an integer between 1 and 5');
+    }
+
+    // Verify quiz exists
+    const quizResult = await quizUseCases.getQuiz({ quizId: id });
+    if (!quizResult.quiz) {
+      throw new ValidationError('Quiz not found');
+    }
+
+    const result = await quizRatingRepository.rate(id, req.user.id, rating);
+
+    res.json({
+      rating: result.rating,
+      message: 'Rating submitted'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/quizzes/:id/rating
+ * Get quiz rating + user's own rating (if authenticated)
+ */
+router.get('/:id/rating', optionalAuthenticate, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { average, count } = await quizRatingRepository.getAverageRating(id);
+
+    let userRating = null;
+    if (req.user) {
+      userRating = await quizRatingRepository.getUserRating(id, req.user.id);
+    }
+
+    res.json({
+      average,
+      count,
+      userRating
+    });
   } catch (error) {
     next(error);
   }

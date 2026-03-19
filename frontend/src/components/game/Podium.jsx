@@ -1,5 +1,6 @@
 import { Stack, Group, Paper, Text, ThemeIcon, Title, Center, Box, ColorSwatch, Divider } from '@mantine/core';
 import { IconTrophy, IconMedal } from '@tabler/icons-react';
+import PlayerAvatar from './PlayerAvatar';
 
 const PODIUM_CONFIG = {
   1: {
@@ -32,6 +33,7 @@ function PodiumPlace({ player, rank }) {
   return (
     <Box style={{ order: config.order, flex: 1 }}>
       <Stack align="center" gap="xs">
+        <PlayerAvatar nickname={player.nickname} size={rank === 1 ? 'lg' : 'md'} />
         <ThemeIcon
           variant="light"
           color={config.color}

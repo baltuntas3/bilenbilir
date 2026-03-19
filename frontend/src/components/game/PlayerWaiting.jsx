@@ -1,11 +1,14 @@
 import { Stack, Text, Title, Paper, Center, Loader, Badge, Group } from '@mantine/core';
 import { IconUser } from '@tabler/icons-react';
+import PlayerAvatar from './PlayerAvatar';
 
 export default function PlayerWaiting({ nickname, playerCount }) {
   return (
     <Center style={{ minHeight: '50vh' }}>
       <Paper shadow="md" p="xl" radius="md" withBorder style={{ maxWidth: 400, width: '100%' }}>
         <Stack align="center" gap="lg">
+          <PlayerAvatar nickname={nickname} size="xl" />
+
           <Loader size="lg" type="dots" />
 
           <Stack align="center" gap="xs">

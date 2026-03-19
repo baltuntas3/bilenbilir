@@ -73,6 +73,26 @@ router.get('/sessions/:id', authenticate, async (req, res, next) => {
 
     const session = result.session;
 
+    // Optionally load quiz questions for replay
+    let quizQuestions = null;
+    if (session.quiz && session.quiz.id) {
+      try {
+        const { mongoQuizRepository } = require('../../infrastructure/repositories');
+        const fullQuiz = await mongoQuizRepository.findById(session.quiz.id);
+        if (fullQuiz) {
+          quizQuestions = fullQuiz.questions.map(q => ({
+            text: q.text,
+            options: q.options,
+            correctAnswerIndex: q.correctAnswerIndex,
+            timeLimit: q.timeLimit,
+            points: q.points
+          }));
+        }
+      } catch {
+        // Quiz may have been deleted, quizQuestions stays null
+      }
+    }
+
     res.json({
       id: session.id,
       pin: session.pin,
@@ -81,6 +101,7 @@ router.get('/sessions/:id', authenticate, async (req, res, next) => {
         title: session.quiz.title,
         description: session.quiz.description
       } : null,
+      quizQuestions,
       host: session.host ? {
         id: session.host.id,
         username: session.host.username

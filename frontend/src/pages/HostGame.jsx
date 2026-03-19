@@ -12,11 +12,13 @@ import {
   Progress,
   Center,
   SimpleGrid,
+  Alert,
 } from '@mantine/core';
 import {
   IconPlayerPlay,
   IconPlayerSkipForward,
   IconChartBar,
+  IconInfoCircle,
   IconTrophy,
   IconUsers,
   IconPlayerPause,
@@ -47,6 +49,7 @@ export default function HostGame() {
     answerDistribution,
     correctAnswerIndex,
     answeredCount,
+    explanation,
     startAnswering,
     endAnswering,
     showLeaderboard,
@@ -229,6 +232,17 @@ export default function HostGame() {
               totalPlayers={players.length || answeredCount}
               options={currentQuestion?.options}
             />
+
+            {explanation && (
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                color="blue"
+                variant="light"
+                title="Explanation"
+              >
+                {explanation}
+              </Alert>
+            )}
 
             <Center>
               <Button

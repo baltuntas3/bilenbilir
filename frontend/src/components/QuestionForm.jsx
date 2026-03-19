@@ -22,6 +22,7 @@ export default function QuestionForm({ quizId, question, onSaved, onCancel }) {
       timeLimit: question?.timeLimit || 30,
       points: question?.points || 1000,
       imageUrl: question?.imageUrl || '',
+      explanation: question?.explanation || '',
     },
     validate: {
       text: questionTextValidation,
@@ -196,6 +197,14 @@ export default function QuestionForm({ quizId, question, onSaved, onCancel }) {
           label="Image URL (optional)"
           placeholder="https://example.com/image.jpg"
           {...form.getInputProps('imageUrl')}
+        />
+
+        <Textarea
+          label="Explanation (optional)"
+          placeholder="Explain why the correct answer is correct"
+          rows={2}
+          maxLength={500}
+          {...form.getInputProps('explanation')}
         />
 
         <Group justify="flex-end">

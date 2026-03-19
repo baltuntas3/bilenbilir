@@ -17,6 +17,14 @@ class QuizRepository {
     return this.quizzes.get(id) || null;
   }
 
+  async findBySlug(slug) {
+    if (!slug || typeof slug !== 'string') return null;
+    for (const quiz of this.quizzes.values()) {
+      if (quiz.slug === slug) return quiz;
+    }
+    return null;
+  }
+
   async findByCreator(createdBy, { page = 1, limit = 20 } = {}) {
     const allQuizzes = [];
     for (const quiz of this.quizzes.values()) {

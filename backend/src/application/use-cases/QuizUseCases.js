@@ -38,6 +38,7 @@ class QuizUseCases {
    * Create a new quiz
    */
   async createQuiz({ title, description, createdBy, isPublic = false, category, tags }) {
+    const slug = Quiz.generateSlug(title);
     const quiz = new Quiz({
       id: generateId(),
       title,
@@ -45,9 +46,21 @@ class QuizUseCases {
       createdBy,
       isPublic,
       category,
-      tags
+      tags,
+      slug
     });
-    const savedQuiz = await this.quizRepository.save(quiz);
+    let savedQuiz;
+    try {
+      savedQuiz = await this.quizRepository.save(quiz);
+    } catch (error) {
+      // Handle slug uniqueness conflict by retrying with a new slug
+      if (error.code === 11000 || (error.message && error.message.includes('duplicate'))) {
+        quiz.slug = Quiz.generateSlug(title);
+        savedQuiz = await this.quizRepository.save(quiz);
+      } else {
+        throw error;
+      }
+    }
     return { quiz: savedQuiz };
   }
 
@@ -88,6 +101,20 @@ class QuizUseCases {
    */
   async getQuiz({ quizId }) {
     const quiz = await this._getQuizOrThrow(quizId);
+    return { quiz };
+  }
+
+  /**
+   * Get quiz by slug (public access)
+   */
+  async getQuizBySlug({ slug }) {
+    if (!slug || typeof slug !== 'string') {
+      throw new ValidationError('Slug is required');
+    }
+    const quiz = await this.quizRepository.findBySlug(slug);
+    if (!quiz) {
+      throw new NotFoundError('Quiz not found');
+    }
     return { quiz };
   }
 
@@ -215,7 +242,8 @@ class QuizUseCases {
       correctAnswerIndex: 'correctAnswerIndex' in questionData ? questionData.correctAnswerIndex : existingQuestion.correctAnswerIndex,
       timeLimit: 'timeLimit' in questionData ? questionData.timeLimit : existingQuestion.timeLimit,
       points: 'points' in questionData ? questionData.points : existingQuestion.points,
-      imageUrl: 'imageUrl' in questionData ? questionData.imageUrl : existingQuestion.imageUrl
+      imageUrl: 'imageUrl' in questionData ? questionData.imageUrl : existingQuestion.imageUrl,
+      explanation: 'explanation' in questionData ? questionData.explanation : existingQuestion.explanation
     });
 
     quiz.questions[questionIndex] = updatedQuestion;
@@ -256,7 +284,8 @@ class QuizUseCases {
           correctAnswerIndex: q.correctAnswerIndex,
           timeLimit: q.timeLimit,
           points: q.points,
-          imageUrl: q.imageUrl || null
+          imageUrl: q.imageUrl || null,
+          explanation: q.explanation || ''
         }))
       }
     };
@@ -355,7 +384,8 @@ class QuizUseCases {
         correctAnswerIndex: qData.correctAnswerIndex,
         timeLimit: qData.timeLimit || 30,
         points: qData.points || 1000,
-        imageUrl: qData.imageUrl || null
+        imageUrl: qData.imageUrl || null,
+        explanation: qData.explanation || ''
       });
       quiz.addQuestion(question);
     }

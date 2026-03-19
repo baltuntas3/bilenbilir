@@ -102,6 +102,11 @@
     "timeLimit": "Süre Limiti",
     "points": "Puan",
     "seconds": "saniye",
+    "explanation": "Açıklama",
+    "explanationPlaceholder": "Doğru cevabın açıklaması (opsiyonel)",
+    "share": "Paylaş",
+    "shareLink": "Paylaşım Linki",
+    "linkCopied": "Link kopyalandı!",
     "importQuiz": "Quiz İçe Aktar",
     "exportQuiz": "Quiz Dışa Aktar",
     "enterTitle": "Quiz başlığını girin",
@@ -116,7 +121,11 @@
     "noCreatedQuizzes": "Henüz hiç quiz oluşturmadınız.",
     "createFirstQuiz": "İlk Quizinizi Oluşturun",
     "play": "Oyna",
-    "view": "Görüntüle"
+    "view": "Görüntüle",
+    "rate": "Puanla",
+    "rating": "Puan",
+    "ratings": "değerlendirme",
+    "ratingSubmitted": "Puanınız gönderildi"
   },
   "game": {
     "pin": "Oyun PIN",
@@ -154,7 +163,11 @@
     "continue": "Devam",
     "change": "Değiştir",
     "yourNickname": "Takma Adınız",
-    "or": "veya"
+    "or": "veya",
+    "lightningRound": "Yıldırım Turu",
+    "lightningRoundDesc": "Son sorular yarı sürede!",
+    "lightningQuestionCount": "Yıldırım soru sayısı",
+    "lightningActive": "⚡ Yıldırım Turu!"
   },
   "team": {
     "teamMode": "Takım Modu",
@@ -189,7 +202,20 @@
     "date": "Tarih",
     "status": "Durum",
     "completed": "Tamamlandı",
-    "interrupted": "Yarıda Kaldı"
+    "interrupted": "Yarıda Kaldı",
+    "replay": "Tekrar Oynat",
+    "replayTitle": "Oyun Tekrarı",
+    "speed": "Hız",
+    "questionN": "Soru {{n}}",
+    "autoPlay": "Otomatik Oynat",
+    "replayComplete": "Tekrar tamamlandı",
+    "playerAnswers": "Oyuncu Cevapları",
+    "answer": "Cevap",
+    "result": "Sonuç",
+    "responseTime": "Cevap Süresi",
+    "correctAnswers": "Doğru",
+    "correctLabel": "doğru",
+    "answered": "cevap"
   },
   "profile": {
     "title": "Profil Ayarları",

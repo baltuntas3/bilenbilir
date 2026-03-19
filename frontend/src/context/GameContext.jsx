@@ -54,9 +54,13 @@ const initialState = {
   teamMode: false,
   teamLeaderboard: [],
   teamPodium: [],
+  explanation: null,
   // Power-ups
   powerUps: { FIFTY_FIFTY: 1, DOUBLE_POINTS: 1, TIME_EXTENSION: 1 },
   eliminatedOptions: [],
+  // Lightning round
+  lightningRound: { enabled: false, questionCount: 3 },
+  isLightning: false,
 };
 
 // Session storage keys
@@ -305,6 +309,11 @@ export function GameProvider({ children }) {
       updateState({ teams });
     });
 
+    // Lightning round
+    socketService.on('lightning_round_updated', ({ enabled, questionCount }) => {
+      updateState({ lightningRound: { enabled, questionCount } });
+    });
+
     // Game flow events
     socketService.on('game_started', (data) => {
       const { totalQuestions, currentQuestion, questionIndex } = data || {};
@@ -333,15 +342,17 @@ export function GameProvider({ children }) {
         answeredCount: 0,
         answerDistribution: null,
         correctAnswerIndex: null,
+        explanation: null,
         eliminatedOptions: [],
       }));
     });
 
-    socketService.on('answering_started', ({ timeLimit, optionCount }) => {
+    socketService.on('answering_started', ({ timeLimit, optionCount, isLightning }) => {
       // Timer will be started by timer_started event from GameTimerService
       updateState({
         gameState: GAME_STATES.ANSWERING_PHASE,
         timeLimit,
+        isLightning: isLightning || false,
       });
     });
 
@@ -362,22 +373,24 @@ export function GameProvider({ children }) {
       // Host can proceed to end answering
     });
 
-    socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, totalPlayers }) => {
+    socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, totalPlayers, explanation }) => {
       stopTimer();
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
         answerDistribution: distribution,
         answeredCount: totalPlayers,
+        explanation: explanation || null,
       });
     });
 
     // Round ended - sent to players when host ends answering
-    socketService.on('round_ended', ({ correctAnswerIndex }) => {
+    socketService.on('round_ended', ({ correctAnswerIndex, explanation }) => {
       stopTimer();
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
+        explanation: explanation || null,
       });
     });
 
@@ -913,6 +926,9 @@ export function GameProvider({ children }) {
   // Assign player to team (host only)
   const assignTeam = useCallback((playerId, teamId) => hostEmit('assign_team', { playerId, teamId }), [hostEmit]);
 
+  // Lightning round (host only)
+  const setLightningRound = useCallback((enabled, questionCount) => hostEmit('set_lightning_round', { enabled, questionCount }), [hostEmit]);
+
   // ==================== TIMER & RESULTS ====================
 
   // Request timer sync
@@ -1061,6 +1077,8 @@ export function GameProvider({ children }) {
     addTeam,
     removeTeam,
     assignTeam,
+    // Lightning round
+    setLightningRound,
     // Timer & Results
     requestTimerSync,
     getResults,

@@ -1,24 +1,52 @@
 import { Link, useParams } from 'react-router-dom';
-import { Container, Title, Paper, Text, Group, Badge, Button, Stack, Card, Center, Loader } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { IconEdit, IconPlayerPlay, IconDownload } from '@tabler/icons-react';
+import { Container, Title, Paper, Text, Group, Badge, Button, Stack, Card, Center, Loader, TextInput, CopyButton, ActionIcon, Tooltip } from '@mantine/core';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { IconEdit, IconPlayerPlay, IconDownload, IconShare, IconCheck, IconCopy } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { quizService } from '../services/quizService';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../utils/toast';
+import StarRating from '../components/StarRating';
 
 export default function QuizDetail() {
-  const { id } = useParams();
+  const { id, slug } = useParams();
   const { user } = useAuth();
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  // Determine if loading by slug or by id
+  const isSlugMode = !!slug && !id;
+  const queryKey = isSlugMode ? ['quiz', 'slug', slug] : ['quiz', id];
 
   const { data: quiz, isLoading, error } = useQuery({
-    queryKey: ['quiz', id],
-    queryFn: () => quizService.getById(id),
+    queryKey,
+    queryFn: () => isSlugMode ? quizService.getBySlug(slug) : quizService.getById(id),
   });
 
+  const quizId = quiz?.id || quiz?._id || id;
+
   const { data: questions = [] } = useQuery({
-    queryKey: ['quiz', id, 'questions'],
-    queryFn: () => quizService.getQuestions(id),
-    enabled: !!quiz,
+    queryKey: ['quiz', quizId, 'questions'],
+    queryFn: () => quizService.getQuestions(quizId),
+    enabled: !!quizId && !!quiz,
+  });
+
+  const { data: ratingData } = useQuery({
+    queryKey: ['quiz', quizId, 'rating'],
+    queryFn: () => quizService.getQuizRating(quizId),
+    enabled: !!quizId && !!quiz,
+  });
+
+  const rateMutation = useMutation({
+    mutationFn: (rating) => quizService.rateQuiz(quizId, rating),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quiz', quizId, 'rating'] });
+      queryClient.invalidateQueries({ queryKey: queryKey });
+      showToast.success(t('quiz.ratingSubmitted', 'Rating submitted'));
+    },
+    onError: () => {
+      showToast.error(t('common.error'));
+    },
   });
 
   if (isLoading) {
@@ -41,10 +69,11 @@ export default function QuizDetail() {
   }
 
   const isOwner = user && quiz?.createdBy === user.id;
+  const shareUrl = quiz?.slug ? `${window.location.origin}/quiz/share/${quiz.slug}` : null;
 
   const handleExport = async () => {
     try {
-      const exportData = await quizService.export(id);
+      const exportData = await quizService.export(quizId);
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -58,6 +87,14 @@ export default function QuizDetail() {
     } catch {
       showToast.error('Failed to export quiz');
     }
+  };
+
+  const handleRate = (value) => {
+    if (!user) {
+      showToast.error(t('auth.loginRequired', 'Please login to rate'));
+      return;
+    }
+    rateMutation.mutate(value);
   };
 
   return (
@@ -85,6 +122,23 @@ export default function QuizDetail() {
             )}
           </div>
           <Group>
+            {shareUrl && (
+              <CopyButton value={shareUrl}>
+                {({ copied, copy }) => (
+                  <Button
+                    variant="light"
+                    color={copied ? 'teal' : 'blue'}
+                    leftSection={copied ? <IconCheck size={16} /> : <IconShare size={16} />}
+                    onClick={() => {
+                      copy();
+                      showToast.success(t('quiz.linkCopied', 'Link copied!'));
+                    }}
+                  >
+                    {copied ? t('quiz.linkCopied', 'Link copied!') : t('quiz.share', 'Share')}
+                  </Button>
+                )}
+              </CopyButton>
+            )}
             {isOwner && (
               <Button
                 variant="light"
@@ -98,7 +152,7 @@ export default function QuizDetail() {
             {isOwner && (
               <Button
                 component={Link}
-                to={`/quizzes/${id}/edit`}
+                to={`/quizzes/${quizId}/edit`}
                 variant="light"
                 leftSection={<IconEdit size={16} />}
               >
@@ -108,7 +162,7 @@ export default function QuizDetail() {
             {isOwner && (
               <Button
                 component={Link}
-                to={`/host/${id}`}
+                to={`/host/${quizId}`}
                 leftSection={<IconPlayerPlay size={16} />}
                 disabled={questions.length === 0}
               >
@@ -119,8 +173,64 @@ export default function QuizDetail() {
         </Group>
 
         {quiz.description && (
-          <Text c="dimmed">{quiz.description}</Text>
+          <Text c="dimmed" mb="md">{quiz.description}</Text>
         )}
+
+        {/* Share Link Section */}
+        {shareUrl && (
+          <Paper withBorder p="sm" radius="sm" mb="md">
+            <Text size="sm" fw={500} mb="xs">{t('quiz.shareLink', 'Share Link')}</Text>
+            <Group gap="xs">
+              <TextInput
+                value={shareUrl}
+                readOnly
+                style={{ flex: 1 }}
+                size="sm"
+              />
+              <CopyButton value={shareUrl}>
+                {({ copied, copy }) => (
+                  <Tooltip label={copied ? t('quiz.linkCopied', 'Link copied!') : t('common.copy', 'Copy')}>
+                    <ActionIcon
+                      color={copied ? 'teal' : 'gray'}
+                      variant="subtle"
+                      onClick={() => {
+                        copy();
+                        if (!copied) showToast.success(t('quiz.linkCopied', 'Link copied!'));
+                      }}
+                    >
+                      {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </CopyButton>
+            </Group>
+          </Paper>
+        )}
+
+        {/* Rating Section */}
+        <Paper withBorder p="sm" radius="sm">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <Text size="sm" fw={500}>{t('quiz.rating', 'Rating')}:</Text>
+              <StarRating
+                value={ratingData?.average || quiz.averageRating || 0}
+                count={ratingData?.count || quiz.ratingCount || 0}
+                readOnly
+                size="sm"
+              />
+            </Group>
+            {user && (
+              <Group gap="sm">
+                <Text size="sm" c="dimmed">{t('quiz.rate', 'Rate')}:</Text>
+                <StarRating
+                  value={ratingData?.userRating || 0}
+                  onChange={handleRate}
+                  size="sm"
+                />
+              </Group>
+            )}
+          </Group>
+        </Paper>
       </Paper>
 
       <Title order={3} mb="md">Questions</Title>
@@ -129,7 +239,7 @@ export default function QuizDetail() {
         <Paper withBorder p="xl" ta="center">
           <Text c="dimmed" mb="md">No questions yet.</Text>
           {isOwner && (
-            <Button component={Link} to={`/quizzes/${id}/edit`}>
+            <Button component={Link} to={`/quizzes/${quizId}/edit`}>
               Add Questions
             </Button>
           )}

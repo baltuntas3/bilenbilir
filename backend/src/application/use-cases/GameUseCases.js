@@ -198,10 +198,19 @@ class GameUseCases extends SharedUseCases {
 
     const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
 
+    let timeLimit = currentQuestion.timeLimit;
+    let isLightning = false;
+    const snapshot = room.getQuizSnapshot();
+    if (room.lightningRound.enabled && room.isLightningQuestion(room.currentQuestionIndex, snapshot.getTotalQuestions())) {
+      timeLimit = Math.max(5, Math.floor(timeLimit / 2)); // Half time, minimum 5 seconds
+      isLightning = true;
+    }
+
     return {
       room,
-      timeLimit: currentQuestion.timeLimit,
-      optionCount: currentQuestion.options.length
+      timeLimit,
+      optionCount: currentQuestion.options.length,
+      isLightning
     };
   }
 
@@ -367,7 +376,8 @@ class GameUseCases extends SharedUseCases {
       correctAnswerIndex: currentQuestion.correctAnswerIndex,
       distribution,
       correctCount,
-      totalPlayers: room.getConnectedPlayerCount()
+      totalPlayers: room.getConnectedPlayerCount(),
+      explanation: currentQuestion.explanation || null
     };
   }
 

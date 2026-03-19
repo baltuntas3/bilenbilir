@@ -5,11 +5,17 @@ export default function QuestionDisplay({
   questionIndex,
   totalQuestions,
   showImage = true,
+  isLightning = false,
 }) {
   if (!question) return null;
 
   return (
     <Stack gap="md">
+      {isLightning && (
+        <Badge size="lg" variant="filled" color="violet" style={{ alignSelf: 'center' }}>
+          {'\u26A1'} Yıldırım Turu!
+        </Badge>
+      )}
       <Group justify="space-between" align="center">
         <Badge size="lg" variant="light">
           Question {questionIndex + 1} of {totalQuestions}

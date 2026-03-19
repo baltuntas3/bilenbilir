@@ -40,9 +40,11 @@ import {
   IconUsersGroup,
   IconPlus,
   IconTrash,
+  IconBolt,
 } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import { showToast } from '../utils/toast';
+import PlayerAvatar from '../components/game/PlayerAvatar';
 
 export default function HostLobby() {
   const { quizId } = useParams();
@@ -69,6 +71,9 @@ export default function HostLobby() {
     addTeam,
     removeTeam,
     assignTeam,
+    // Lightning round
+    lightningRound,
+    setLightningRound,
   } = useGame();
 
   const [loading, setLoading] = useState(true);
@@ -78,6 +83,8 @@ export default function HostLobby() {
   const [randomEnabled, setRandomEnabled] = useState(false);
   const [questionCount, setQuestionCount] = useState(totalQuestions || 0);
   const [newTeamName, setNewTeamName] = useState('');
+  const [lightningEnabled, setLightningEnabled] = useState(lightningRound?.enabled || false);
+  const [lightningCount, setLightningCount] = useState(lightningRound?.questionCount || 3);
 
   // Sync questionCount default when totalQuestions loads
   useEffect(() => {
@@ -212,6 +219,26 @@ export default function HostLobby() {
       }
     } catch (error) {
       showToast.error(error.message || 'Failed to change team mode');
+    }
+  };
+
+  const handleToggleLightning = async (checked) => {
+    setLightningEnabled(checked);
+    try {
+      await setLightningRound(checked, lightningCount);
+    } catch (error) {
+      showToast.error(error.message || 'Failed to update lightning round');
+      setLightningEnabled(!checked);
+    }
+  };
+
+  const handleLightningCountChange = async (val) => {
+    const count = val || 3;
+    setLightningCount(count);
+    try {
+      await setLightningRound(lightningEnabled, count);
+    } catch (error) {
+      showToast.error(error.message || 'Failed to update lightning round');
     }
   };
 
@@ -444,6 +471,34 @@ export default function HostLobby() {
           </Paper>
         )}
 
+        {/* Lightning Round Toggle */}
+        <Paper p="md" radius="md" withBorder>
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Group gap="xs">
+                <IconBolt size={20} />
+                <Text fw={500}>Yıldırım Turu</Text>
+              </Group>
+              <Switch
+                checked={lightningEnabled}
+                onChange={(e) => handleToggleLightning(e.currentTarget.checked)}
+                label={lightningEnabled ? 'Aktif' : 'Kapalı'}
+              />
+            </Group>
+            {lightningEnabled && (
+              <NumberInput
+                label="Yıldırım soru sayısı"
+                description="Son sorular yarı sürede!"
+                value={lightningCount}
+                onChange={handleLightningCountChange}
+                min={1}
+                max={10}
+                leftSection={<IconBolt size={18} />}
+              />
+            )}
+          </Stack>
+        </Paper>
+
         {/* Players List */}
         <Stack gap="sm">
           <Title order={3}>Oyuncular ({players.length})</Title>
@@ -469,7 +524,7 @@ export default function HostLobby() {
                     <Stack gap={4}>
                       <Group justify="space-between" wrap="nowrap">
                         <Group gap="xs" wrap="nowrap" style={{ overflow: 'hidden' }}>
-                          <IconUser size={20} />
+                          <PlayerAvatar nickname={player.nickname} size="sm" />
                           <Text truncate fw={500}>
                             {player.nickname}
                           </Text>

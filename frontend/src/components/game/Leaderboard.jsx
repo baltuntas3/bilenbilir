@@ -1,5 +1,6 @@
 import { Paper, Stack, Group, Text, Badge, ThemeIcon, ScrollArea, Tabs, ColorSwatch } from '@mantine/core';
 import { IconTrophy, IconMedal, IconUser, IconUsersGroup } from '@tabler/icons-react';
+import PlayerAvatar from './PlayerAvatar';
 
 const RANK_COLORS = {
   1: 'yellow',
@@ -56,6 +57,7 @@ function PlayerLeaderboard({ players, currentPlayerId, maxHeight }) {
                       {rank}
                     </Badge>
                   )}
+                  <PlayerAvatar nickname={player.nickname} size="sm" />
                   <Text fw={isCurrentPlayer ? 700 : 500} truncate>
                     {player.nickname}
                     {isCurrentPlayer && ' (Sen)'}

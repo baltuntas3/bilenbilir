@@ -68,6 +68,8 @@ class Room {
     // Team mode
     this.teams = [];
     this.teamMode = false;
+    // Lightning round
+    this.lightningRound = { enabled: false, questionCount: 3 };
   }
 
   /**
@@ -826,6 +828,48 @@ class Room {
   getPauseDuration() {
     if (!this.pausedAt) return 0;
     return Date.now() - this.pausedAt.getTime();
+  }
+
+  // ==================== LIGHTNING ROUND METHODS ====================
+
+  /**
+   * Configure lightning round settings (host only, lobby phase only)
+   * @param {boolean} enabled - Whether lightning round is enabled
+   * @param {number} questionCount - Number of last questions to apply lightning round to (1-10)
+   */
+  setLightningRound(enabled, questionCount) {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Lightning round can only be configured in lobby');
+    }
+    if (typeof enabled !== 'boolean') {
+      throw new ValidationError('enabled must be a boolean');
+    }
+    if (enabled) {
+      if (typeof questionCount !== 'number' || !Number.isInteger(questionCount) || questionCount < 1 || questionCount > 10) {
+        throw new ValidationError('Lightning round question count must be between 1 and 10');
+      }
+    }
+    this.lightningRound = { enabled: !!enabled, questionCount: enabled ? questionCount : this.lightningRound.questionCount };
+  }
+
+  /**
+   * Check if a given question index falls in the lightning round
+   * @param {number} currentIndex - Current question index (0-based)
+   * @param {number} totalQuestions - Total number of questions
+   * @returns {boolean}
+   */
+  isLightningQuestion(currentIndex, totalQuestions) {
+    if (!this.lightningRound.enabled) return false;
+    const lightningStart = totalQuestions - this.lightningRound.questionCount;
+    return currentIndex >= lightningStart;
+  }
+
+  /**
+   * Get lightning round configuration
+   * @returns {{ enabled: boolean, questionCount: number }}
+   */
+  getLightningConfig() {
+    return { ...this.lightningRound };
   }
 
   // ==================== TEAM MODE METHODS ====================
