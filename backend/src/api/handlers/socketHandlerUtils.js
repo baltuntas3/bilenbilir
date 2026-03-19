@@ -58,4 +58,32 @@ const toPlayerQuestionDTO = (questionData) => {
   };
 };
 
-module.exports = { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO };
+/**
+ * Map endAnsweringPhase result to show_results event payload
+ * @param {Object} endResult - Result from gameUseCases.endAnsweringPhase
+ * @returns {Object} Payload for show_results emit
+ */
+const toShowResultsDTO = (endResult) => ({
+  correctAnswerIndex: endResult.correctAnswerIndex,
+  distribution: endResult.distribution,
+  correctCount: endResult.correctCount,
+  totalPlayers: endResult.totalPlayers,
+  explanation: endResult.explanation || null
+});
+
+/**
+ * Validate token format and emit error if invalid
+ * @param {Socket} socket - Socket.IO socket instance
+ * @param {*} token - Token value to validate
+ * @param {string} tokenName - Human-readable token name for error message
+ * @returns {boolean} true if token is valid, false if invalid (error already emitted)
+ */
+const validateToken = (socket, token, tokenName) => {
+  if (!token || typeof token !== 'string' || token.trim().length === 0) {
+    socket.emit('error', { error: `${tokenName} is required` });
+    return false;
+  }
+  return true;
+};
+
+module.exports = { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken };

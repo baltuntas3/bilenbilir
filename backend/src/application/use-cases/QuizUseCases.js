@@ -6,10 +6,11 @@ const { NotFoundError, ForbiddenError, ConflictError, ValidationError } = requir
 const EXPORT_VERSION = '1.0';
 
 class QuizUseCases {
-  constructor(quizRepository, roomRepository = null, gameSessionRepository = null) {
+  constructor(quizRepository, roomRepository = null, gameSessionRepository = null, quizRatingRepository = null) {
     this.quizRepository = quizRepository;
     this.roomRepository = roomRepository;
     this.gameSessionRepository = gameSessionRepository;
+    this.quizRatingRepository = quizRatingRepository;
   }
 
   /**
@@ -135,25 +136,6 @@ class QuizUseCases {
   }
 
   /**
-   * Get public quizzes by category
-   */
-  async getQuizzesByCategory({ category, page = 1, limit = 20 }) {
-    const result = await this.quizRepository.findByCategory(category, { page, limit });
-    return result;
-  }
-
-  /**
-   * Search public quizzes by tags
-   */
-  async searchByTags({ tags, page = 1, limit = 20 }) {
-    if (!Array.isArray(tags) || tags.length === 0) {
-      throw new ValidationError('At least one tag is required');
-    }
-    const result = await this.quizRepository.findByTags(tags, { page, limit });
-    return result;
-  }
-
-  /**
    * Update quiz details
    */
   async updateQuiz({ quizId, title, description, isPublic, category, tags, requesterId }) {
@@ -252,6 +234,64 @@ class QuizUseCases {
     // Get the saved question (with MongoDB _id)
     const savedQuestion = savedQuiz.questions[questionIndex];
     return { quiz: savedQuiz, question: savedQuestion };
+  }
+
+  // ==================== TAGS & SEARCH METHODS ====================
+
+  /**
+   * Get popular tags from public quizzes
+   * @param {number} limit - Max number of tags to return
+   * @returns {Promise<{tag: string, count: number}[]>}
+   */
+  async getPopularTags(limit) {
+    return this.quizRepository.getPopularTags(limit);
+  }
+
+  /**
+   * Search public quizzes by title or description
+   * @param {string} query - Search query
+   * @param {Object} options - Pagination options
+   * @returns {Promise<{quizzes: Quiz[], pagination: Object}>}
+   */
+  async searchPublicQuizzes(query, { page, limit } = {}) {
+    return this.quizRepository.searchPublic(query, { page, limit });
+  }
+
+  // ==================== RATING METHODS ====================
+
+  /**
+   * Rate a quiz
+   * @param {Object} params
+   * @param {string} params.quizId - Quiz ID
+   * @param {string} params.userId - User ID
+   * @param {number} params.rating - Rating value (1-5)
+   * @returns {Promise<{rating: number, isNew: boolean}>}
+   */
+  async rateQuiz({ quizId, userId, rating }) {
+    // Verify quiz exists
+    const quiz = await this._getQuizOrThrow(quizId);
+    if (!quiz) {
+      throw new NotFoundError('Quiz not found');
+    }
+    return this.quizRatingRepository.rate(quizId, userId, rating);
+  }
+
+  /**
+   * Get quiz rating and optionally the user's own rating
+   * @param {Object} params
+   * @param {string} params.quizId - Quiz ID
+   * @param {string|null} params.userId - User ID (null if unauthenticated)
+   * @returns {Promise<{average: number, count: number, userRating: number|null}>}
+   */
+  async getQuizRating({ quizId, userId }) {
+    const { average, count } = await this.quizRatingRepository.getAverageRating(quizId);
+
+    let userRating = null;
+    if (userId) {
+      userRating = await this.quizRatingRepository.getUserRating(quizId, userId);
+    }
+
+    return { average, count, userRating };
   }
 
   // ==================== IMPORT/EXPORT METHODS ====================

@@ -1,7 +1,7 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { ConflictError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
-const { createRateLimiter, createAuthChecker } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, validateToken } = require('./socketHandlerUtils');
 
 /**
  * Map team data for client consumption
@@ -187,10 +187,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       const { pin, hostToken } = data || {};
 
       // Early token format validation
-      if (!hostToken || typeof hostToken !== 'string' || hostToken.trim().length === 0) {
-        socket.emit('error', { error: 'Host token is required' });
-        return;
-      }
+      if (!validateToken(socket, hostToken, 'Host token')) return;
 
       const result = await roomUseCases.reconnectHost({
         pin,
@@ -222,10 +219,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       const { pin, playerToken } = data || {};
 
       // Early token format validation
-      if (!playerToken || typeof playerToken !== 'string' || playerToken.trim().length === 0) {
-        socket.emit('error', { error: 'Player token is required' });
-        return;
-      }
+      if (!validateToken(socket, playerToken, 'Player token')) return;
 
       const result = await roomUseCases.reconnectPlayer({
         pin,
@@ -505,10 +499,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       const { pin, spectatorToken } = data || {};
 
       // Early token format validation
-      if (!spectatorToken || typeof spectatorToken !== 'string' || spectatorToken.trim().length === 0) {
-        socket.emit('error', { error: 'Spectator token is required' });
-        return;
-      }
+      if (!validateToken(socket, spectatorToken, 'Spectator token')) return;
 
       const result = await roomUseCases.reconnectSpectator({
         pin,

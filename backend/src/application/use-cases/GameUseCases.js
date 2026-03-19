@@ -24,6 +24,23 @@ class GameUseCases extends SharedUseCases {
     return await this.roomRepository.exists(pin);
   }
 
+  /**
+   * Get the nickname for a socket in a room (player, host, or spectator)
+   * @param {string} pin - Room PIN
+   * @param {string} socketId - Socket ID to look up
+   * @returns {string|null} Nickname or null if not found
+   */
+  async getNicknameForSocket(pin, socketId) {
+    const room = await this.roomRepository.findByPin(pin);
+    if (!room) return null;
+    const player = room.getPlayer(socketId);
+    if (player) return player.nickname;
+    if (room.isHost(socketId)) return 'Host';
+    const spectator = room.getSpectator?.(socketId);
+    if (spectator) return spectator.nickname;
+    return null;
+  }
+
   async startGame({ pin, requesterId, questionCount }) {
     const room = await this._getRoomOrThrow(pin);
     const quiz = await this._getQuizOrThrow(room.quizId);
@@ -530,23 +547,6 @@ class GameUseCases extends SharedUseCases {
     }
 
     return { saved, failed };
-  }
-
-  async getInterruptedGames({ hostId, page = 1, limit = 20 }) {
-    if (!this.gameSessionRepository) {
-      return { sessions: [], pagination: { page, limit, total: 0, totalPages: 0, hasMore: false } };
-    }
-
-    const result = await this.gameSessionRepository.findByHost(hostId, { page, limit });
-
-    const interruptedSessions = result.sessions.filter(
-      session => session.status === 'interrupted'
-    );
-
-    return {
-      sessions: interruptedSessions,
-      pagination: result.pagination
-    };
   }
 
   async pauseGame({ pin, requesterId }) {

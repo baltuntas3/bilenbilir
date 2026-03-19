@@ -1,5 +1,5 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO } = require('./socketHandlerUtils');
 
 /**
  * Game WebSocket Handler
@@ -68,13 +68,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
           if (endResult) {
             io.to(pin).emit('time_expired');
-            io.to(pin).emit('show_results', {
-              correctAnswerIndex: endResult.correctAnswerIndex,
-              distribution: endResult.distribution,
-              correctCount: endResult.correctCount,
-              totalPlayers: endResult.totalPlayers,
-              explanation: endResult.explanation || null
-            });
+            io.to(pin).emit('show_results', toShowResultsDTO(endResult));
           }
         } catch (err) {
           // Ignore expected errors when room state has changed
@@ -145,13 +139,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           });
 
           if (endResult) {
-            io.to(pin).emit('show_results', {
-              correctAnswerIndex: endResult.correctAnswerIndex,
-              distribution: endResult.distribution,
-              correctCount: endResult.correctCount,
-              totalPlayers: endResult.totalPlayers,
-              explanation: endResult.explanation || null
-            });
+            io.to(pin).emit('show_results', toShowResultsDTO(endResult));
           }
         } catch (err) {
           // Log but don't fail - host can still manually end
@@ -179,13 +167,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         requesterId: socket.id
       });
 
-      socket.emit('show_results', {
-        correctAnswerIndex: result.correctAnswerIndex,
-        distribution: result.distribution,
-        correctCount: result.correctCount,
-        totalPlayers: result.totalPlayers,
-        explanation: result.explanation || null
-      });
+      socket.emit('show_results', toShowResultsDTO(result));
 
       socket.to(pin).emit('round_ended', {
         correctAnswerIndex: result.correctAnswerIndex,
@@ -427,20 +409,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Look up nickname from room (player, spectator, or host)
       let nickname = 'Anonymous';
       try {
-        const room = await gameUseCases.roomRepository.findByPin(pin);
-        if (room) {
-          const player = room.getPlayer(socket.id);
-          if (player) {
-            nickname = player.nickname;
-          } else if (room.isHost(socket.id)) {
-            nickname = 'Host';
-          } else {
-            // Check spectators
-            const spectator = room.getSpectator?.(socket.id);
-            if (spectator) {
-              nickname = spectator.nickname;
-            }
-          }
+        const resolved = await gameUseCases.getNicknameForSocket(pin, socket.id);
+        if (resolved) {
+          nickname = resolved;
         }
       } catch {
         // If lookup fails, use fallback nickname

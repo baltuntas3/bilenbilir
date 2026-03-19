@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticate } = require('../middlewares/authMiddleware');
 const { GameStatsUseCases } = require('../../application/use-cases');
 const { gameSessionRepository } = require('../../infrastructure/repositories');
+const { parsePagination } = require('../helpers/routeHelpers');
 
 const router = express.Router();
 const gameStatsUseCases = new GameStatsUseCases(gameSessionRepository);
@@ -29,8 +30,7 @@ router.get('/dashboard', authenticate, async (req, res, next) => {
  */
 router.get('/sessions', authenticate, async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
     const result = await gameStatsUseCases.getSessionsByHost({
       hostId: req.user.id,

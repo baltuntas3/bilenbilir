@@ -675,17 +675,6 @@ describe('GameUseCases', () => {
     });
   });
 
-  describe('getInterruptedGames', () => {
-    it('should return empty when no gameSessionRepository', async () => {
-      const useCasesWithoutRepo = new GameUseCases(roomRepository, quizRepository, null);
-
-      const result = await useCasesWithoutRepo.getInterruptedGames({ hostId: 'host-1' });
-
-      expect(result.sessions).toEqual([]);
-      expect(result.pagination.total).toBe(0);
-    });
-  });
-
   describe('startGame validation', () => {
     it('should throw error for quiz with no questions', async () => {
       // Create empty quiz

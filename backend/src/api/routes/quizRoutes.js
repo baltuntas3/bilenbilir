@@ -3,13 +3,13 @@ const { QuizUseCases } = require('../../application/use-cases');
 const { mongoQuizRepository } = require('../../infrastructure/repositories/MongoQuizRepository');
 const { quizRatingRepository } = require('../../infrastructure/repositories/QuizRatingRepository');
 const { authenticate, optionalAuthenticate } = require('../middlewares/authMiddleware');
-const { ForbiddenError } = require('../../shared/errors');
-const { quizCreationLimiter, searchLimiter } = require('../middlewares/rateLimiter');
 const { ValidationError } = require('../../shared/errors');
+const { quizCreationLimiter, searchLimiter } = require('../middlewares/rateLimiter');
 const { QUIZ_CATEGORIES } = require('../../infrastructure/db/models/Quiz');
+const { parsePagination, checkQuizAccess } = require('../helpers/routeHelpers');
 
 const router = express.Router();
-const quizUseCases = new QuizUseCases(mongoQuizRepository);
+const quizUseCases = new QuizUseCases(mongoQuizRepository, null, null, quizRatingRepository);
 
 /**
  * POST /api/quizzes
@@ -45,8 +45,7 @@ router.post('/', authenticate, quizCreationLimiter, async (req, res, next) => {
  */
 router.get('/', async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
     const { category } = req.query;
 
     const result = await quizUseCases.getPublicQuizzes({ page, limit, category: category || undefined });
@@ -71,8 +70,8 @@ router.get('/categories', (req, res) => {
  */
 router.get('/tags/popular', async (req, res, next) => {
   try {
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
-    const tags = await mongoQuizRepository.getPopularTags(limit);
+    const { limit } = parsePagination(req.query, { maxLimit: 50, defaultLimit: 20 });
+    const tags = await quizUseCases.getPopularTags(limit);
     res.json({ tags });
   } catch (error) {
     next(error);
@@ -92,10 +91,9 @@ router.get('/search', searchLimiter, async (req, res, next) => {
       throw new ValidationError('Search query must be at least 2 characters');
     }
 
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
-    const result = await mongoQuizRepository.searchPublic(q.trim(), { page, limit });
+    const result = await quizUseCases.searchPublicQuizzes(q.trim(), { page, limit });
     res.json(result);
   } catch (error) {
     next(error);
@@ -123,8 +121,7 @@ router.get('/share/:slug', async (req, res, next) => {
  */
 router.get('/my', authenticate, async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
     const result = await quizUseCases.getQuizzesByCreator({
       createdBy: req.user.id,
@@ -150,11 +147,7 @@ router.get('/:id', optionalAuthenticate, async (req, res, next) => {
     const quiz = result.quiz;
 
     // Check access for private quizzes
-    if (!quiz.isPublic) {
-      if (!req.user || req.user.id !== quiz.createdBy) {
-        throw new ForbiddenError('Access denied to private quiz');
-      }
-    }
+    checkQuizAccess(quiz, req.user?.id);
 
     res.json(quiz);
   } catch (error) {
@@ -218,11 +211,7 @@ router.get('/:id/questions', optionalAuthenticate, async (req, res, next) => {
     const quizResult = await quizUseCases.getQuiz({ quizId: id });
     const quiz = quizResult.quiz;
 
-    if (!quiz.isPublic) {
-      if (!req.user || req.user.id !== quiz.createdBy) {
-        throw new ForbiddenError('Access denied to private quiz');
-      }
-    }
+    checkQuizAccess(quiz, req.user?.id);
 
     const result = await quizUseCases.getQuestions({ quizId: id });
     res.json(result.questions);
@@ -340,13 +329,7 @@ router.post('/:id/rate', authenticate, async (req, res, next) => {
       throw new ValidationError('Rating must be an integer between 1 and 5');
     }
 
-    // Verify quiz exists
-    const quizResult = await quizUseCases.getQuiz({ quizId: id });
-    if (!quizResult.quiz) {
-      throw new ValidationError('Quiz not found');
-    }
-
-    const result = await quizRatingRepository.rate(id, req.user.id, rating);
+    const result = await quizUseCases.rateQuiz({ quizId: id, userId: req.user.id, rating });
 
     res.json({
       rating: result.rating,
@@ -364,17 +347,12 @@ router.post('/:id/rate', authenticate, async (req, res, next) => {
 router.get('/:id/rating', optionalAuthenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { average, count } = await quizRatingRepository.getAverageRating(id);
-
-    let userRating = null;
-    if (req.user) {
-      userRating = await quizRatingRepository.getUserRating(id, req.user.id);
-    }
+    const result = await quizUseCases.getQuizRating({ quizId: id, userId: req.user?.id || null });
 
     res.json({
-      average,
-      count,
-      userRating
+      average: result.average,
+      count: result.count,
+      userRating: result.userRating
     });
   } catch (error) {
     next(error);

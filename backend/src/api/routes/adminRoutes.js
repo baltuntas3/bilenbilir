@@ -6,6 +6,7 @@ const { roomRepository } = require('../../infrastructure/repositories/RoomReposi
 const { gameSessionRepository } = require('../../infrastructure/repositories/GameSessionRepository');
 const { auditLogRepository } = require('../../infrastructure/repositories/AuditLogRepository');
 const { authenticate, requireAdmin } = require('../middlewares/authMiddleware');
+const { parsePagination } = require('../helpers/routeHelpers');
 
 const router = express.Router();
 
@@ -47,8 +48,7 @@ router.get('/stats', async (req, res, next) => {
  */
 router.get('/users', async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
     const result = await adminUseCases.getAllUsers({
       requesterId: req.user.id,
@@ -139,8 +139,7 @@ router.delete('/users/:id', async (req, res, next) => {
  */
 router.get('/quizzes', async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
     const result = await adminUseCases.getAllQuizzes({
       requesterId: req.user.id,
@@ -210,8 +209,7 @@ router.delete('/rooms/:pin', async (req, res, next) => {
  */
 router.get('/sessions', async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
     const result = await adminUseCases.getAllSessions({
       requesterId: req.user.id,

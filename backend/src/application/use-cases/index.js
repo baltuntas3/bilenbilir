@@ -4,6 +4,7 @@ const { GameUseCases } = require('./GameUseCases');
 const { QuizUseCases } = require('./QuizUseCases');
 const { AdminUseCases } = require('./AdminUseCases');
 const { GameStatsUseCases } = require('./GameStatsUseCases');
+const { AuthUseCases } = require('./AuthUseCases');
 
 module.exports = {
   SharedUseCases,
@@ -11,5 +12,6 @@ module.exports = {
   GameUseCases,
   QuizUseCases,
   AdminUseCases,
-  GameStatsUseCases
+  GameStatsUseCases,
+  AuthUseCases
 };

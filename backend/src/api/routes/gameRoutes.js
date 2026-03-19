@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticate } = require('../middlewares/authMiddleware');
 const { gameSessionRepository } = require('../../infrastructure/repositories');
 const { NotFoundError } = require('../../shared/errors');
+const { parsePagination } = require('../helpers/routeHelpers');
 
 const router = express.Router();
 
@@ -12,8 +13,7 @@ const router = express.Router();
  */
 router.get('/history', authenticate, async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
     const result = await gameSessionRepository.findByHost(req.user.id, { page, limit });
 
@@ -47,8 +47,7 @@ router.get('/history', authenticate, async (req, res, next) => {
 router.get('/quiz/:quizId/history', authenticate, async (req, res, next) => {
   try {
     const { quizId } = req.params;
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { page, limit } = parsePagination(req.query);
 
     // Use findByQuizAndHost for proper authorization and correct pagination
     const result = await gameSessionRepository.findByQuizAndHost(quizId, req.user.id, { page, limit });
