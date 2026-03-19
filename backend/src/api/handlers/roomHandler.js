@@ -1,40 +1,28 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { ConflictError, UnauthorizedError } = require('../../shared/errors');
+const { ConflictError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
-const { socketRateLimiter } = require('../middlewares/socketRateLimiter');
+const { createRateLimiter, createAuthChecker } = require('./socketHandlerUtils');
+
+/**
+ * Map team data for client consumption
+ * @param {Team} team - Team entity
+ * @returns {Object} Sanitized team data
+ */
+const toTeamDTO = (team) => ({
+  id: team.id,
+  name: team.name,
+  color: team.color,
+  playerIds: [...team.playerIds],
+  playerCount: team.getPlayerCount()
+});
 
 /**
  * Room WebSocket Handler
  * Handles room creation, joining, and leaving
  */
 const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
-  /**
-   * Rate limit check helper
-   * @private
-   */
-  const checkRateLimit = (eventName) => {
-    const result = socketRateLimiter.checkLimit(socket.id, eventName);
-    if (!result.allowed) {
-      socket.emit('error', {
-        error: 'Too many requests',
-        retryAfter: result.retryAfter
-      });
-      return false;
-    }
-    return true;
-  };
-
-  /**
-   * Ensure socket is authenticated (has valid JWT)
-   * Required for host operations
-   * @private
-   */
-  const requireAuth = () => {
-    if (!socket.isAuthenticated || !socket.user) {
-      throw new UnauthorizedError('Authentication required for this action');
-    }
-    return socket.user;
-  };
+  const checkRateLimit = createRateLimiter(socket);
+  const requireAuth = createAuthChecker(socket);
 
   /**
    * Ensure socket is not already in a room
@@ -535,6 +523,119 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
           id: s.id,
           nickname: s.nickname
         }))
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // ==================== TEAM MODE EVENTS ====================
+
+  // Host enables team mode
+  socket.on('enable_team_mode', async (data) => {
+    try {
+      if (!checkRateLimit('enable_team_mode')) return;
+      requireAuth();
+
+      const { pin } = data || {};
+
+      const result = await roomUseCases.enableTeamMode({
+        pin,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('team_mode_updated', {
+        teamMode: true,
+        teams: result.room.getAllTeams().map(toTeamDTO)
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Host disables team mode
+  socket.on('disable_team_mode', async (data) => {
+    try {
+      if (!checkRateLimit('disable_team_mode')) return;
+      requireAuth();
+
+      const { pin } = data || {};
+
+      await roomUseCases.disableTeamMode({
+        pin,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('team_mode_updated', {
+        teamMode: false,
+        teams: []
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Host adds a team
+  socket.on('add_team', async (data) => {
+    try {
+      if (!checkRateLimit('add_team')) return;
+      requireAuth();
+
+      const { pin, name } = sanitizeObject(data || {});
+
+      const result = await roomUseCases.addTeam({
+        pin,
+        name,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('teams_updated', {
+        teams: result.room.getAllTeams().map(toTeamDTO)
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Host removes a team
+  socket.on('remove_team', async (data) => {
+    try {
+      if (!checkRateLimit('remove_team')) return;
+      requireAuth();
+
+      const { pin, teamId } = data || {};
+
+      const result = await roomUseCases.removeTeam({
+        pin,
+        teamId,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('teams_updated', {
+        teams: result.room.getAllTeams().map(toTeamDTO)
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // Assign player to team
+  socket.on('assign_team', async (data) => {
+    try {
+      if (!checkRateLimit('assign_team')) return;
+      requireAuth();
+
+      const { pin, playerId, teamId } = data || {};
+
+      const result = await roomUseCases.assignPlayerToTeam({
+        pin,
+        playerId,
+        teamId,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('teams_updated', {
+        teams: result.room.getAllTeams().map(toTeamDTO)
       });
     } catch (error) {
       handleSocketError(socket, error);

@@ -1,9 +1,10 @@
 import { Link, useParams } from 'react-router-dom';
 import { Container, Title, Paper, Text, Group, Badge, Button, Stack, Card, Center, Loader } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { IconEdit, IconPlayerPlay } from '@tabler/icons-react';
+import { IconEdit, IconPlayerPlay, IconDownload } from '@tabler/icons-react';
 import { quizService } from '../services/quizService';
 import { useAuth } from '../context/AuthContext';
+import { showToast } from '../utils/toast';
 
 export default function QuizDetail() {
   const { id } = useParams();
@@ -41,6 +42,24 @@ export default function QuizDetail() {
 
   const isOwner = user && quiz?.createdBy === user.id;
 
+  const handleExport = async () => {
+    try {
+      const exportData = await quizService.export(id);
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${quiz.title.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast.success('Quiz exported');
+    } catch {
+      showToast.error('Failed to export quiz');
+    }
+  };
+
   return (
     <Container size="lg" my={40}>
       <Paper withBorder shadow="md" p={30} radius="md" mb="lg">
@@ -51,11 +70,31 @@ export default function QuizDetail() {
               <Badge color={quiz.isPublic ? 'green' : 'gray'}>
                 {quiz.isPublic ? 'Public' : 'Private'}
               </Badge>
+              {quiz.category && quiz.category !== 'Diğer' && (
+                <Badge color="violet" variant="light">{quiz.category}</Badge>
+              )}
               <Badge color="blue">{questions.length} questions</Badge>
               <Text size="sm" c="dimmed">Played {quiz.playCount || 0} times</Text>
             </Group>
+            {quiz.tags && quiz.tags.length > 0 && (
+              <Group gap={4} mt="xs">
+                {quiz.tags.map((tag) => (
+                  <Badge key={tag} size="sm" variant="outline" color="gray">{tag}</Badge>
+                ))}
+              </Group>
+            )}
           </div>
           <Group>
+            {isOwner && (
+              <Button
+                variant="light"
+                color="gray"
+                leftSection={<IconDownload size={16} />}
+                onClick={handleExport}
+              >
+                Export
+              </Button>
+            )}
             {isOwner && (
               <Button
                 component={Link}

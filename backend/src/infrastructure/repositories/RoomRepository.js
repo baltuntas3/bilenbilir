@@ -139,13 +139,6 @@ class RoomRepository {
     return this.rooms.get(pin) || null;
   }
 
-  async findById(id) {
-    for (const room of this.rooms.values()) {
-      if (room.id === id) return room;
-    }
-    return null;
-  }
-
   /**
    * Find room by host token - O(1) lookup
    * Automatically cleans up stale index entries

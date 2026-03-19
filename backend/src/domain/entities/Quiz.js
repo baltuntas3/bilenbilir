@@ -1,11 +1,32 @@
 const { ValidationError, NotFoundError } = require('../../shared/errors');
 
 const MAX_QUESTIONS = 50;
+const MAX_TAGS = 5;
+const MIN_TAG_LENGTH = 2;
+const MAX_TAG_LENGTH = 30;
+const TAG_PATTERN = /^[a-zA-ZÀ-ÿĞğÜüŞşİıÖöÇç0-9\s]+$/;
+
+const VALID_CATEGORIES = [
+  'Genel Kültür',
+  'Bilim',
+  'Tarih',
+  'Coğrafya',
+  'Spor',
+  'Sanat',
+  'Teknoloji',
+  'Eğlence',
+  'Müzik',
+  'Film & TV',
+  'Edebiyat',
+  'Diğer'
+];
 
 class Quiz {
   static MAX_QUESTIONS = MAX_QUESTIONS;
+  static MAX_TAGS = MAX_TAGS;
+  static VALID_CATEGORIES = VALID_CATEGORIES;
 
-  constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, playCount = 0, createdAt = new Date() }) {
+  constructor({ id, title, description = '', createdBy, questions = [], isPublic = false, playCount = 0, createdAt = new Date(), category = 'Diğer', tags = [] }) {
     if (!id) {
       throw new ValidationError('Quiz id is required');
     }
@@ -24,6 +45,8 @@ class Quiz {
     this.isPublic = Boolean(isPublic);
     this.playCount = Math.max(0, playCount || 0);
     this.createdAt = createdAt;
+    this.category = VALID_CATEGORIES.includes(category) ? category : 'Diğer';
+    this.tags = Array.isArray(tags) ? this._validateAndCleanTags(tags) : [];
 
     if (this.questions.length > MAX_QUESTIONS) {
       throw new ValidationError(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
@@ -35,6 +58,18 @@ class Quiz {
         throw new ValidationError(`Question at index ${i} is null or undefined`);
       }
     }
+  }
+
+  /**
+   * Validate and clean tags array
+   * @private
+   */
+  _validateAndCleanTags(tags) {
+    const cleaned = tags
+      .map(t => (typeof t === 'string' ? t.trim().toLowerCase() : ''))
+      .filter(t => t.length >= MIN_TAG_LENGTH && t.length <= MAX_TAG_LENGTH && TAG_PATTERN.test(t));
+    // Remove duplicates and limit to MAX_TAGS
+    return [...new Set(cleaned)].slice(0, MAX_TAGS);
   }
 
   updateTitle(newTitle) {
@@ -50,6 +85,44 @@ class Quiz {
 
   setPublic(isPublic) {
     this.isPublic = Boolean(isPublic);
+  }
+
+  updateCategory(category) {
+    if (!VALID_CATEGORIES.includes(category)) {
+      throw new ValidationError(`Invalid category: ${category}. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+    }
+    this.category = category;
+  }
+
+  addTag(tag) {
+    if (typeof tag !== 'string') {
+      throw new ValidationError('Tag must be a string');
+    }
+    const cleaned = tag.trim().toLowerCase();
+    if (cleaned.length < MIN_TAG_LENGTH || cleaned.length > MAX_TAG_LENGTH) {
+      throw new ValidationError(`Tag must be between ${MIN_TAG_LENGTH} and ${MAX_TAG_LENGTH} characters`);
+    }
+    if (!TAG_PATTERN.test(cleaned)) {
+      throw new ValidationError('Tag can only contain letters, numbers, and spaces');
+    }
+    if (this.tags.length >= MAX_TAGS) {
+      throw new ValidationError(`Quiz cannot have more than ${MAX_TAGS} tags`);
+    }
+    if (!this.tags.includes(cleaned)) {
+      this.tags.push(cleaned);
+    }
+  }
+
+  removeTag(tag) {
+    const cleaned = typeof tag === 'string' ? tag.trim().toLowerCase() : '';
+    this.tags = this.tags.filter(t => t !== cleaned);
+  }
+
+  setTags(tags) {
+    if (!Array.isArray(tags)) {
+      throw new ValidationError('Tags must be an array');
+    }
+    this.tags = this._validateAndCleanTags(tags);
   }
 
   addQuestion(question) {
@@ -124,6 +197,52 @@ class Quiz {
   }
 
   /**
+   * Returns a new Quiz clone with `count` randomly selected questions.
+   * If count >= total questions, returns all questions shuffled.
+   * Uses Fisher-Yates shuffle algorithm.
+   * @param {number} count - Number of questions to select
+   * @returns {Quiz} A new frozen Quiz with randomly selected questions
+   */
+  getRandomSubset(count) {
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
+      throw new ValidationError('Question count must be a positive integer');
+    }
+
+    // Fisher-Yates shuffle on a copy
+    const shuffled = [...this.questions];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Take only `count` questions (or all if count >= total)
+    const selected = count >= shuffled.length ? shuffled : shuffled.slice(0, count);
+
+    // Clone and freeze each question
+    const clonedQuestions = selected.map(q => q.clone());
+    const frozenQuestions = Object.freeze(clonedQuestions);
+
+    const clonedCreatedAt = this.createdAt instanceof Date
+      ? new Date(this.createdAt.getTime())
+      : this.createdAt;
+
+    const subsetQuiz = new Quiz({
+      id: this.id,
+      title: this.title,
+      description: this.description,
+      createdBy: this.createdBy,
+      questions: frozenQuestions,
+      isPublic: this.isPublic,
+      playCount: this.playCount,
+      createdAt: clonedCreatedAt,
+      category: this.category,
+      tags: [...this.tags]
+    });
+
+    return Object.freeze(subsetQuiz);
+  }
+
+  /**
    * Create a deep clone of this quiz (immutable snapshot for game sessions)
    * This prevents mid-game modifications from affecting ongoing games
    *
@@ -166,7 +285,9 @@ class Quiz {
       questions: frozenQuestions,
       isPublic: this.isPublic,
       playCount: this.playCount,
-      createdAt: clonedCreatedAt
+      createdAt: clonedCreatedAt,
+      category: this.category,
+      tags: [...this.tags]
     });
 
     // Freeze the quiz object to prevent modifications

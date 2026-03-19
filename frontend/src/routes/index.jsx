@@ -26,6 +26,10 @@ import HostGame from '../pages/HostGame';
 import PlayerGame from '../pages/PlayerGame';
 import SpectatorGame from '../pages/SpectatorGame';
 
+// Stats Pages
+import GameStats from '../pages/GameStats';
+import GameSessionDetail from '../pages/GameSessionDetail';
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -45,6 +49,10 @@ export default function AppRoutes() {
       <Route path="/my-quizzes" element={<ProtectedRoute><MyQuizzes /></ProtectedRoute>} />
       <Route path="/quizzes/create" element={<ProtectedRoute><QuizCreate /></ProtectedRoute>} />
       <Route path="/quizzes/:id/edit" element={<ProtectedRoute><QuizEdit /></ProtectedRoute>} />
+
+      {/* Stats Routes */}
+      <Route path="/stats" element={<ProtectedRoute><GameStats /></ProtectedRoute>} />
+      <Route path="/stats/session/:id" element={<ProtectedRoute><GameSessionDetail /></ProtectedRoute>} />
 
       {/* Game Routes */}
       <Route path="/join" element={<JoinGame />} />

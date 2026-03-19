@@ -12,13 +12,13 @@ class Spectator extends BaseParticipant {
     super({ id, socketId, nickname, roomPin, token: spectatorToken, tokenCreatedAt, joinedAt });
   }
 
-  // Spectator-specific token property (maintains backward compatibility)
+  // Spectator-specific token property (backward compatibility, delegates to base)
   get spectatorToken() {
-    return this._token;
+    return this.token;
   }
 
   set spectatorToken(value) {
-    this._token = value;
+    this.token = value;
   }
 
   /**

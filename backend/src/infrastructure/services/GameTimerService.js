@@ -59,7 +59,8 @@ class GameTimerService {
       endTime,
       startTime,
       duration: durationMs,
-      stopped: false // Flag to prevent race conditions
+      stopped: false, // Flag to prevent race conditions
+      onExpire: onExpire || null // Store callback for timer extension
     };
 
     timerEntry.timerId = setTimeout(async () => {
@@ -169,6 +170,43 @@ class GameTimerService {
       return null;
     }
     return this._buildTimerSync(timer.endTime, timer.startTime, timer.duration);
+  }
+
+  /**
+   * Extend the active timer for a room by the given milliseconds
+   * @param {string} pin - Room PIN
+   * @param {number} extraMs - Milliseconds to add
+   */
+  extendTimer(pin, extraMs) {
+    const timer = this.activeTimers.get(pin);
+    if (!timer || timer.stopped) {
+      return; // No active timer to extend
+    }
+
+    // Extend the end time
+    timer.endTime += extraMs;
+    timer.duration += extraMs;
+
+    // Reschedule the main timeout with stored onExpire callback
+    if (timer.timerId) {
+      clearTimeout(timer.timerId);
+    }
+    const remainingMs = Math.max(0, timer.endTime - Date.now());
+    const onExpire = timer.onExpire;
+    timer.timerId = setTimeout(async () => {
+      this.stopTimer(pin);
+      if (onExpire) {
+        await onExpire();
+      }
+    }, remainingMs);
+
+    // Emit updated timer info so clients can re-sync
+    this.io.to(pin).emit('timer_started', {
+      duration: Math.ceil((timer.endTime - timer.startTime) / 1000),
+      durationMs: timer.endTime - timer.startTime,
+      serverTime: Date.now(),
+      endTime: timer.endTime
+    });
   }
 
   /**

@@ -78,7 +78,9 @@ class MongoQuizRepository {
       questions,
       isPublic: doc.isPublic,
       playCount: doc.playCount || 0,
-      createdAt: doc.createdAt
+      createdAt: doc.createdAt,
+      category: doc.category || 'Diğer',
+      tags: doc.tags || []
     });
   }
 
@@ -89,6 +91,8 @@ class MongoQuizRepository {
     return {
       title: quiz.title,
       description: quiz.description,
+      category: quiz.category || 'Diğer',
+      tags: quiz.tags || [],
       createdBy: quiz.createdBy,
       questions: quiz.questions.map(q => ({
         text: q.text,
@@ -166,15 +170,20 @@ class MongoQuizRepository {
     };
   }
 
-  async findPublic({ page = 1, limit = 20 } = {}) {
+  async findPublic({ page = 1, limit = 20, category } = {}) {
     // Validate pagination bounds to prevent DoS
     const safePage = Math.max(1, Math.min(Number(page) || 1, 1000)); // Max 1000 pages
     const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100)); // Max 100 per page
     const skip = (safePage - 1) * safeLimit;
 
+    const filter = { isPublic: true };
+    if (category) {
+      filter.category = category;
+    }
+
     const [docs, total] = await Promise.all([
-      QuizModel.find({ isPublic: true }).sort({ createdAt: -1 }).skip(skip).limit(safeLimit),
-      QuizModel.countDocuments({ isPublic: true })
+      QuizModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(safeLimit),
+      QuizModel.countDocuments(filter)
     ]);
     return {
       quizzes: docs.map(doc => this._toDomain(doc)),
@@ -301,7 +310,8 @@ class MongoQuizRepository {
       isPublic: true,
       $or: [
         { title: searchRegex },
-        { description: searchRegex }
+        { description: searchRegex },
+        { tags: searchRegex }
       ]
     };
 
@@ -320,6 +330,86 @@ class MongoQuizRepository {
         hasMore: safePage * safeLimit < total
       }
     };
+  }
+  /**
+   * Find public quizzes by category with pagination
+   * @param {string} category - Category to filter by
+   * @param {Object} options - Pagination options
+   * @returns {Promise<{quizzes: Quiz[], pagination: Object}>}
+   */
+  async findByCategory(category, { page = 1, limit = 20 } = {}) {
+    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000));
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
+    const skip = (safePage - 1) * safeLimit;
+
+    const filter = { isPublic: true, category };
+
+    const [docs, total] = await Promise.all([
+      QuizModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(safeLimit),
+      QuizModel.countDocuments(filter)
+    ]);
+
+    return {
+      quizzes: docs.map(doc => this._toDomain(doc)),
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+        hasMore: safePage * safeLimit < total
+      }
+    };
+  }
+
+  /**
+   * Find public quizzes by tags (any match) with pagination
+   * @param {string[]} tags - Tags to search for
+   * @param {Object} options - Pagination options
+   * @returns {Promise<{quizzes: Quiz[], pagination: Object}>}
+   */
+  async findByTags(tags, { page = 1, limit = 20 } = {}) {
+    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000));
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
+    const skip = (safePage - 1) * safeLimit;
+
+    const normalizedTags = tags.map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+    const filter = { isPublic: true, tags: { $in: normalizedTags } };
+
+    const [docs, total] = await Promise.all([
+      QuizModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(safeLimit),
+      QuizModel.countDocuments(filter)
+    ]);
+
+    return {
+      quizzes: docs.map(doc => this._toDomain(doc)),
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+        hasMore: safePage * safeLimit < total
+      }
+    };
+  }
+
+  /**
+   * Get popular tags from public quizzes
+   * @param {number} limit - Max number of tags to return
+   * @returns {Promise<{tag: string, count: number}[]>}
+   */
+  async getPopularTags(limit = 20) {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 50));
+
+    const result = await QuizModel.aggregate([
+      { $match: { isPublic: true, tags: { $exists: true, $ne: [] } } },
+      { $unwind: '$tags' },
+      { $group: { _id: '$tags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: safeLimit },
+      { $project: { _id: 0, tag: '$_id', count: 1 } }
+    ]);
+
+    return result;
   }
 }
 

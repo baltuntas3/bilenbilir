@@ -18,6 +18,12 @@ import {
   Center,
   Loader,
   Alert,
+  Switch,
+  NumberInput,
+  TextInput,
+  Select,
+  Divider,
+  ColorSwatch,
 } from '@mantine/core';
 import {
   IconCopy,
@@ -30,6 +36,10 @@ import {
   IconBan,
   IconAlertCircle,
   IconRefresh,
+  IconArrowsShuffle,
+  IconUsersGroup,
+  IconPlus,
+  IconTrash,
 } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import { showToast } from '../utils/toast';
@@ -51,12 +61,30 @@ export default function HostLobby() {
     startGame,
     kickPlayer,
     banPlayer,
+    // Team mode
+    teams,
+    teamMode,
+    enableTeamMode,
+    disableTeamMode,
+    addTeam,
+    removeTeam,
+    assignTeam,
   } = useGame();
 
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [existingRoom, setExistingRoom] = useState(null);
   const [closingExisting, setClosingExisting] = useState(false);
+  const [randomEnabled, setRandomEnabled] = useState(false);
+  const [questionCount, setQuestionCount] = useState(totalQuestions || 0);
+  const [newTeamName, setNewTeamName] = useState('');
+
+  // Sync questionCount default when totalQuestions loads
+  useEffect(() => {
+    if (totalQuestions > 0 && questionCount === 0) {
+      setQuestionCount(totalQuestions);
+    }
+  }, [totalQuestions, questionCount]);
 
   useEffect(() => {
     if (!quizId) {
@@ -140,7 +168,7 @@ export default function HostLobby() {
 
     setStarting(true);
     try {
-      await startGame();
+      await startGame(randomEnabled ? questionCount : undefined);
     } catch (error) {
       showToast.error(error.message || 'Failed to start game');
       setStarting(false);
@@ -172,6 +200,47 @@ export default function HostLobby() {
       showToast.success(`${nickname} has been banned`);
     } catch (error) {
       showToast.error(error.message || 'Failed to ban player');
+    }
+  };
+
+  const handleToggleTeamMode = async (checked) => {
+    try {
+      if (checked) {
+        await enableTeamMode();
+      } else {
+        await disableTeamMode();
+      }
+    } catch (error) {
+      showToast.error(error.message || 'Failed to change team mode');
+    }
+  };
+
+  const handleAddTeam = async () => {
+    if (!newTeamName.trim()) {
+      showToast.error('Takım adı gerekli');
+      return;
+    }
+    try {
+      await addTeam(newTeamName.trim());
+      setNewTeamName('');
+    } catch (error) {
+      showToast.error(error.message || 'Failed to add team');
+    }
+  };
+
+  const handleRemoveTeam = async (teamId) => {
+    try {
+      await removeTeam(teamId);
+    } catch (error) {
+      showToast.error(error.message || 'Failed to remove team');
+    }
+  };
+
+  const handleAssignTeam = async (playerId, teamId) => {
+    try {
+      await assignTeam(playerId, teamId);
+    } catch (error) {
+      showToast.error(error.message || 'Failed to assign player to team');
     }
   };
 
@@ -300,58 +369,182 @@ export default function HostLobby() {
           </Paper>
         )}
 
+        {/* Team Mode Toggle */}
+        <Paper p="md" radius="md" withBorder>
+          <Group justify="space-between">
+            <Group gap="xs">
+              <IconUsersGroup size={20} />
+              <Text fw={500}>Takım Modu</Text>
+            </Group>
+            <Switch
+              checked={teamMode}
+              onChange={(e) => handleToggleTeamMode(e.currentTarget.checked)}
+              label={teamMode ? 'Aktif' : 'Kapalı'}
+            />
+          </Group>
+        </Paper>
+
+        {/* Team Management (only visible when team mode is on) */}
+        {teamMode && (
+          <Paper p="md" radius="md" withBorder>
+            <Stack gap="md">
+              <Title order={4}>Takımlar ({teams.length})</Title>
+
+              {/* Add Team */}
+              <Group gap="sm">
+                <TextInput
+                  placeholder="Takım adı"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.currentTarget.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddTeam()}
+                  style={{ flex: 1 }}
+                  maxLength={20}
+                />
+                <Button
+                  leftSection={<IconPlus size={16} />}
+                  onClick={handleAddTeam}
+                  disabled={!newTeamName.trim() || teams.length >= 8}
+                  variant="light"
+                >
+                  Ekle
+                </Button>
+              </Group>
+
+              {/* Team List */}
+              {teams.length === 0 ? (
+                <Text c="dimmed" ta="center" size="sm">
+                  Henüz takım eklenmedi
+                </Text>
+              ) : (
+                <Stack gap="xs">
+                  {teams.map((team) => (
+                    <Paper key={team.id} p="sm" radius="md" withBorder>
+                      <Group justify="space-between" wrap="nowrap">
+                        <Group gap="xs" wrap="nowrap">
+                          <ColorSwatch color={team.color} size={18} />
+                          <Text fw={500}>{team.name}</Text>
+                          <Badge variant="light" size="sm">
+                            {team.playerCount} oyuncu
+                          </Badge>
+                        </Group>
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          size="sm"
+                          onClick={() => handleRemoveTeam(team.id)}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Paper>
+        )}
+
         {/* Players List */}
         <Stack gap="sm">
-          <Title order={3}>Players ({players.length})</Title>
+          <Title order={3}>Oyuncular ({players.length})</Title>
 
           {players.length === 0 ? (
             <Paper p="xl" radius="md" withBorder>
               <Center>
                 <Stack align="center" gap="xs">
                   <IconUser size={48} stroke={1} color="gray" />
-                  <Text c="dimmed">Waiting for players to join...</Text>
+                  <Text c="dimmed">Oyuncuların katılması bekleniyor...</Text>
                 </Stack>
               </Center>
             </Paper>
           ) : (
             <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="sm">
-              {players.map((player) => (
-                <Card key={player.id} padding="sm" radius="md" withBorder>
-                  <Group justify="space-between" wrap="nowrap">
-                    <Group gap="xs" wrap="nowrap" style={{ overflow: 'hidden' }}>
-                      <IconUser size={20} />
-                      <Text truncate fw={500}>
-                        {player.nickname}
-                      </Text>
-                    </Group>
-                    <Menu position="bottom-end" withArrow>
-                      <Menu.Target>
-                        <ActionIcon variant="subtle" size="sm">
-                          <IconDotsVertical size={16} />
-                        </ActionIcon>
-                      </Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Item
-                          leftSection={<IconUserMinus size={16} />}
-                          onClick={() => handleKickPlayer(player.id, player.nickname)}
-                        >
-                          Kick
-                        </Menu.Item>
-                        <Menu.Item
-                          leftSection={<IconBan size={16} />}
-                          color="red"
-                          onClick={() => handleBanPlayer(player.id, player.nickname)}
-                        >
-                          Ban
-                        </Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
-                  </Group>
-                </Card>
-              ))}
+              {players.map((player) => {
+                const playerTeam = teamMode
+                  ? teams.find((t) => t.playerIds?.includes(player.id))
+                  : null;
+
+                return (
+                  <Card key={player.id} padding="sm" radius="md" withBorder>
+                    <Stack gap={4}>
+                      <Group justify="space-between" wrap="nowrap">
+                        <Group gap="xs" wrap="nowrap" style={{ overflow: 'hidden' }}>
+                          <IconUser size={20} />
+                          <Text truncate fw={500}>
+                            {player.nickname}
+                          </Text>
+                        </Group>
+                        <Menu position="bottom-end" withArrow>
+                          <Menu.Target>
+                            <ActionIcon variant="subtle" size="sm">
+                              <IconDotsVertical size={16} />
+                            </ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              leftSection={<IconUserMinus size={16} />}
+                              onClick={() => handleKickPlayer(player.id, player.nickname)}
+                            >
+                              Kick
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={<IconBan size={16} />}
+                              color="red"
+                              onClick={() => handleBanPlayer(player.id, player.nickname)}
+                            >
+                              Ban
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
+                      </Group>
+
+                      {/* Team assignment dropdown */}
+                      {teamMode && teams.length > 0 && (
+                        <Select
+                          size="xs"
+                          placeholder="Takım seç"
+                          data={teams.map((t) => ({
+                            value: t.id,
+                            label: t.name,
+                          }))}
+                          value={playerTeam?.id || null}
+                          onChange={(teamId) => {
+                            if (teamId) handleAssignTeam(player.id, teamId);
+                          }}
+                          clearable={false}
+                        />
+                      )}
+                    </Stack>
+                  </Card>
+                );
+              })}
             </SimpleGrid>
           )}
         </Stack>
+
+        {/* Random Question Selection */}
+        {totalQuestions > 1 && (
+          <Paper p="md" radius="md" withBorder>
+            <Stack gap="sm">
+              <Switch
+                label="Rastgele soru secimi"
+                checked={randomEnabled}
+                onChange={(e) => setRandomEnabled(e.currentTarget.checked)}
+                size="md"
+              />
+              {randomEnabled && (
+                <NumberInput
+                  label="Soru Sayisi"
+                  value={questionCount}
+                  onChange={(val) => setQuestionCount(val || 1)}
+                  min={1}
+                  max={totalQuestions}
+                  leftSection={<IconArrowsShuffle size={18} />}
+                />
+              )}
+            </Stack>
+          </Paper>
+        )}
 
         {/* Action Buttons */}
         <Group justify="center" gap="md">

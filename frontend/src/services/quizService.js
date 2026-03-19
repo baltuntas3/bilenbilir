@@ -2,8 +2,8 @@ import api from './api';
 
 export const quizService = {
   // Quiz CRUD
-  create: async (title, description = '', isPublic = false) => {
-    const response = await api.post('/quizzes', { title, description, isPublic });
+  create: async (title, description = '', isPublic = false, category = 'Diğer', tags = []) => {
+    const response = await api.post('/quizzes', { title, description, isPublic, category, tags });
     return response.data;
   },
 
@@ -22,8 +22,20 @@ export const quizService = {
   },
 
   // Quiz Lists
-  getPublic: async (page = 1, limit = 20) => {
-    const response = await api.get('/quizzes', { params: { page, limit } });
+  getPublic: async (page = 1, limit = 20, category = null) => {
+    const params = { page, limit };
+    if (category) params.category = category;
+    const response = await api.get('/quizzes', { params });
+    return response.data;
+  },
+
+  getCategories: async () => {
+    const response = await api.get('/quizzes/categories');
+    return response.data;
+  },
+
+  getPopularTags: async (limit = 20) => {
+    const response = await api.get('/quizzes/tags/popular', { params: { limit } });
     return response.data;
   },
 

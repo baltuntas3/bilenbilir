@@ -41,14 +41,43 @@ class QuizRepository {
     };
   }
 
-  async findPublic({ page = 1, limit = 20 } = {}) {
+  async findPublic({ page = 1, limit = 20, category } = {}) {
     const allQuizzes = [];
     for (const quiz of this.quizzes.values()) {
       if (quiz.isPublic) {
+        if (category && quiz.category !== category) continue;
         allQuizzes.push(quiz);
       }
     }
     // Apply pagination
+    const total = allQuizzes.length;
+    const skip = (page - 1) * limit;
+    const quizzes = allQuizzes.slice(skip, skip + limit);
+
+    return {
+      quizzes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    };
+  }
+
+  async findByCategory(category, { page = 1, limit = 20 } = {}) {
+    return this.findPublic({ page, limit, category });
+  }
+
+  async findByTags(tags, { page = 1, limit = 20 } = {}) {
+    const normalizedTags = tags.map(t => t.trim().toLowerCase());
+    const allQuizzes = [];
+    for (const quiz of this.quizzes.values()) {
+      if (quiz.isPublic && quiz.tags && quiz.tags.some(t => normalizedTags.includes(t))) {
+        allQuizzes.push(quiz);
+      }
+    }
     const total = allQuizzes.length;
     const skip = (page - 1) * limit;
     const quizzes = allQuizzes.slice(skip, skip + limit);

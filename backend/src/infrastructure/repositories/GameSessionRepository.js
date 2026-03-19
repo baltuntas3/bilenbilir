@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { GameSession: GameSessionModel } = require('../db/models');
 const { GameSession } = require('../../domain/records');
 
@@ -247,6 +248,129 @@ class GameSessionRepository {
   async deleteByHost(hostId) {
     const result = await GameSessionModel.deleteMany({ host: hostId });
     return result.deletedCount || 0;
+  }
+
+  /**
+   * Get aggregated stats for a host
+   * @param {string} hostId - Host user ID
+   * @returns {Promise<Object>} Aggregated statistics
+   */
+  async getStatsByHost(hostId) {
+    const [stats] = await GameSessionModel.aggregate([
+      { $match: { host: new mongoose.Types.ObjectId(hostId) } },
+      {
+        $group: {
+          _id: null,
+          totalGames: { $sum: 1 },
+          totalPlayers: { $sum: '$playerCount' },
+          totalDuration: { $sum: '$durationSeconds' },
+          totalAnswers: { $sum: { $size: '$answers' } },
+          totalCorrectAnswers: {
+            $sum: {
+              $size: {
+                $filter: {
+                  input: '$answers',
+                  as: 'a',
+                  cond: { $eq: ['$$a.isCorrect', true] }
+                }
+              }
+            }
+          },
+          allPlayerNicknames: { $push: '$playerResults.nickname' }
+        }
+      }
+    ]);
+
+    if (!stats) {
+      return {
+        totalGames: 0,
+        totalPlayers: 0,
+        uniquePlayers: 0,
+        averagePlayersPerGame: 0,
+        accuracyRate: 0,
+        averageDuration: 0
+      };
+    }
+
+    // Flatten and count unique nicknames
+    const allNicknames = stats.allPlayerNicknames.flat();
+    const uniquePlayers = new Set(allNicknames).size;
+
+    return {
+      totalGames: stats.totalGames,
+      totalPlayers: stats.totalPlayers,
+      uniquePlayers,
+      averagePlayersPerGame: stats.totalGames > 0
+        ? Math.round((stats.totalPlayers / stats.totalGames) * 10) / 10
+        : 0,
+      accuracyRate: stats.totalAnswers > 0
+        ? Math.round((stats.totalCorrectAnswers / stats.totalAnswers) * 100)
+        : 0,
+      averageDuration: stats.totalGames > 0
+        ? Math.round(stats.totalDuration / stats.totalGames)
+        : 0
+    };
+  }
+
+  /**
+   * Get detailed session with all answers (populated)
+   * @param {string} sessionId - Session ID
+   * @returns {Promise<GameSession|null>}
+   */
+  async getDetailedSession(sessionId) {
+    try {
+      const doc = await GameSessionModel.findById(sessionId)
+        .populate('quiz')
+        .populate('host', '-password');
+      return this._toDomain(doc);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get per-question accuracy stats across all games for a host
+   * @param {string} hostId - Host user ID
+   * @returns {Promise<Array>} Per-question stats
+   */
+  async getQuestionStats(hostId) {
+    const stats = await GameSessionModel.aggregate([
+      { $match: { host: new mongoose.Types.ObjectId(hostId) } },
+      { $unwind: '$answers' },
+      {
+        $group: {
+          _id: {
+            quizId: '$quiz',
+            questionIndex: '$answers.questionIndex'
+          },
+          totalAnswers: { $sum: 1 },
+          correctAnswers: {
+            $sum: { $cond: ['$answers.isCorrect', 1, 0] }
+          },
+          averageResponseTime: { $avg: '$answers.responseTimeMs' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          quizId: '$_id.quizId',
+          questionIndex: '$_id.questionIndex',
+          totalAnswers: 1,
+          correctAnswers: 1,
+          accuracyRate: {
+            $cond: [
+              { $gt: ['$totalAnswers', 0] },
+              { $round: [{ $multiply: [{ $divide: ['$correctAnswers', '$totalAnswers'] }, 100] }, 0] },
+              0
+            ]
+          },
+          averageResponseTime: { $round: ['$averageResponseTime', 0] }
+        }
+      },
+      { $sort: { quizId: 1, questionIndex: 1 } }
+    ]);
+
+    return stats;
   }
 }
 

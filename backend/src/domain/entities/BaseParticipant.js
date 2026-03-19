@@ -103,6 +103,22 @@ class BaseParticipant {
   }
 
   /**
+   * Generic token getter - unified accessor for all participant types
+   * @returns {string|null}
+   */
+  get token() {
+    return this._token;
+  }
+
+  /**
+   * Generic token setter - unified accessor for all participant types
+   * @param {string} value
+   */
+  set token(value) {
+    this._token = value;
+  }
+
+  /**
    * Get the token (to be overridden by subclasses for proper property name)
    * @returns {string|null}
    */

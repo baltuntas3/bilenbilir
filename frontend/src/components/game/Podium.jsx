@@ -1,4 +1,4 @@
-import { Stack, Group, Paper, Text, ThemeIcon, Title, Center, Box } from '@mantine/core';
+import { Stack, Group, Paper, Text, ThemeIcon, Title, Center, Box, ColorSwatch, Divider } from '@mantine/core';
 import { IconTrophy, IconMedal } from '@tabler/icons-react';
 
 const PODIUM_CONFIG = {
@@ -67,7 +67,55 @@ function PodiumPlace({ player, rank }) {
   );
 }
 
-export default function Podium({ players, currentPlayerId }) {
+function TeamPodiumPlace({ team, rank }) {
+  const config = PODIUM_CONFIG[rank];
+  if (!team || !config) return null;
+
+  return (
+    <Box style={{ order: config.order, flex: 1 }}>
+      <Stack align="center" gap="xs">
+        <ThemeIcon
+          variant="light"
+          color={config.color}
+          size={rank === 1 ? 60 : 50}
+          radius="xl"
+        >
+          {config.icon}
+        </ThemeIcon>
+        <Group gap={6} justify="center" wrap="nowrap">
+          <ColorSwatch color={team.color} size={14} />
+          <Text fw={700} size={rank === 1 ? 'xl' : 'lg'} ta="center" truncate style={{ maxWidth: 120 }}>
+            {team.name}
+          </Text>
+        </Group>
+        <Text size="sm" c="dimmed">
+          {team.score.toLocaleString()} pts
+        </Text>
+        <Text size="xs" c="dimmed">
+          {team.playerCount} oyuncu
+        </Text>
+        <Paper
+          style={{
+            width: '100%',
+            height: config.height,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: 16,
+          }}
+          radius="md"
+          bg={config.color}
+        >
+          <Title order={2} c="white">
+            {config.label}
+          </Title>
+        </Paper>
+      </Stack>
+    </Box>
+  );
+}
+
+export default function Podium({ players, currentPlayerId, teamMode = false, teamPodium = [] }) {
   // Sort players by score and get top 3
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
   const top3 = sortedPlayers.slice(0, 3);
@@ -78,8 +126,26 @@ export default function Podium({ players, currentPlayerId }) {
 
   return (
     <Stack gap="xl">
+      {/* Team Podium (shown first if team mode) */}
+      {teamMode && teamPodium.length > 0 && (
+        <>
+          <Title order={2} ta="center">
+            Takım Sonuçları
+          </Title>
+
+          <Group justify="center" align="flex-end" gap="md" wrap="nowrap">
+            <TeamPodiumPlace team={teamPodium[1]} rank={2} />
+            <TeamPodiumPlace team={teamPodium[0]} rank={1} />
+            <TeamPodiumPlace team={teamPodium[2]} rank={3} />
+          </Group>
+
+          <Divider my="md" />
+        </>
+      )}
+
+      {/* Individual Podium */}
       <Title order={2} ta="center">
-        Final Results
+        {teamMode ? 'Bireysel Sonuçlar' : 'Final Sonuçları'}
       </Title>
 
       <Group justify="center" align="flex-end" gap="md" wrap="nowrap">
@@ -92,11 +158,11 @@ export default function Podium({ players, currentPlayerId }) {
         <Paper p="md" radius="md" withBorder>
           <Center>
             <Group gap="md">
-              <Text c="dimmed">Your ranking:</Text>
+              <Text c="dimmed">Sıralaman:</Text>
               <Text fw={700} size="xl">
                 #{currentPlayerRank}
               </Text>
-              <Text c="dimmed">with</Text>
+              <Text c="dimmed">puan:</Text>
               <Text fw={700} size="xl">
                 {currentPlayer.score.toLocaleString()} pts
               </Text>

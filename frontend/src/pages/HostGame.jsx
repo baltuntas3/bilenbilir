@@ -26,6 +26,8 @@ import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
 import Leaderboard from '../components/game/Leaderboard';
 import Podium from '../components/game/Podium';
+import ReactionOverlay from '../components/game/ReactionOverlay';
+import AnswerDistribution from '../components/game/AnswerDistribution';
 import { showToast } from '../utils/toast';
 
 export default function HostGame() {
@@ -52,6 +54,9 @@ export default function HostGame() {
     closeRoom,
     pauseGame,
     resumeGame,
+    teamMode,
+    teamLeaderboard,
+    teamPodium,
   } = useGame();
 
   // Redirect if not host
@@ -218,45 +223,12 @@ export default function HostGame() {
             />
 
             {/* Answer distribution */}
-            <SimpleGrid cols={2} spacing="md">
-              {currentQuestion?.options?.map((option, index) => {
-                const count = answerDistribution?.[index] || 0;
-                const percentage = connectedPlayers.length > 0
-                  ? Math.round((count / connectedPlayers.length) * 100)
-                  : 0;
-                const isCorrect = index === correctAnswerIndex;
-
-                return (
-                  <Paper
-                    key={index}
-                    p="md"
-                    radius="md"
-                    withBorder
-                    style={{
-                      borderColor: isCorrect ? 'var(--mantine-color-green-5)' : undefined,
-                      borderWidth: isCorrect ? 2 : 1,
-                    }}
-                  >
-                    <Stack gap="xs">
-                      <Group justify="space-between">
-                        <Group gap="sm">
-                          <Badge color={isCorrect ? 'green' : 'gray'}>
-                            {String.fromCharCode(65 + index)}
-                          </Badge>
-                          <Text size="sm">{option}</Text>
-                        </Group>
-                        <Badge variant="light">{count}</Badge>
-                      </Group>
-                      <Progress
-                        value={percentage}
-                        color={isCorrect ? 'green' : 'gray'}
-                        size="sm"
-                      />
-                    </Stack>
-                  </Paper>
-                );
-              })}
-            </SimpleGrid>
+            <AnswerDistribution
+              distribution={answerDistribution}
+              correctAnswerIndex={correctAnswerIndex}
+              totalPlayers={players.length || answeredCount}
+              options={currentQuestion?.options}
+            />
 
             <Center>
               <Button
@@ -275,7 +247,11 @@ export default function HostGame() {
           <Stack gap="xl">
             <Title order={2} ta="center">Leaderboard</Title>
 
-            <Leaderboard players={leaderboard.length > 0 ? leaderboard : players} />
+            <Leaderboard
+              players={leaderboard.length > 0 ? leaderboard : players}
+              teamMode={teamMode}
+              teamLeaderboard={teamLeaderboard}
+            />
 
             <Group justify="center" gap="md">
               <Button
@@ -314,7 +290,11 @@ export default function HostGame() {
               </Paper>
             </Center>
 
-            <Leaderboard players={leaderboard.length > 0 ? leaderboard : players} />
+            <Leaderboard
+              players={leaderboard.length > 0 ? leaderboard : players}
+              teamMode={teamMode}
+              teamLeaderboard={teamLeaderboard}
+            />
 
             <Center>
               <Button
@@ -332,7 +312,11 @@ export default function HostGame() {
       case GAME_STATES.PODIUM:
         return (
           <Stack gap="xl">
-            <Podium players={podium.length > 0 ? podium : players} />
+            <Podium
+              players={podium.length > 0 ? podium : players}
+              teamMode={teamMode}
+              teamPodium={teamPodium}
+            />
 
             <Center>
               <Button
@@ -356,26 +340,29 @@ export default function HostGame() {
   };
 
   return (
-    <Container size="md" py="xl">
-      <Stack gap="xl">
-        {/* Header */}
-        <Paper p="sm" radius="md" withBorder>
-          <Group justify="space-between">
-            <Group gap="md">
-              <Badge size="lg">PIN: {roomPin}</Badge>
-              <Badge size="lg" variant="light" color="blue">
-                {connectedPlayers.length} players
+    <>
+      <ReactionOverlay />
+      <Container size="md" py="xl">
+        <Stack gap="xl">
+          {/* Header */}
+          <Paper p="sm" radius="md" withBorder>
+            <Group justify="space-between">
+              <Group gap="md">
+                <Badge size="lg">PIN: {roomPin}</Badge>
+                <Badge size="lg" variant="light" color="blue">
+                  {connectedPlayers.length} players
+                </Badge>
+              </Group>
+              <Badge size="lg" variant="light">
+                Question {currentQuestionIndex + 1} / {totalQuestions}
               </Badge>
             </Group>
-            <Badge size="lg" variant="light">
-              Question {currentQuestionIndex + 1} / {totalQuestions}
-            </Badge>
-          </Group>
-        </Paper>
+          </Paper>
 
-        {/* Main content */}
-        {renderContent()}
-      </Stack>
-    </Container>
+          {/* Main content */}
+          {renderContent()}
+        </Stack>
+      </Container>
+    </>
   );
 }

@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { TextInput, Button, Stack, Title, Text, Paper, Container, Center, PinInput, Group, Divider } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconUsers, IconEye } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useGame } from '../context/GameContext';
 import { showToast } from '../utils/toast';
 
 export default function JoinGame() {
   const navigate = useNavigate();
   const { joinRoom, joinAsSpectator } = useGame();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [spectatorLoading, setSpectatorLoading] = useState(false);
   const [step, setStep] = useState('pin'); // 'pin' or 'nickname'
@@ -76,12 +78,12 @@ export default function JoinGame() {
         <Paper shadow="md" p="xl" radius="md" withBorder style={{ width: '100%', maxWidth: 400 }}>
           <Stack align="center" gap="lg">
             <IconUsers size={48} stroke={1.5} />
-            <Title order={2}>Join Game</Title>
+            <Title order={2}>{t('game.joinAsPlayer')}</Title>
 
             {step === 'pin' ? (
               <Stack align="center" gap="md" style={{ width: '100%' }}>
                 <Text c="dimmed" ta="center">
-                  Enter the 6-digit game PIN
+                  {t('game.enterPin')}
                 </Text>
                 <PinInput
                   length={6}
@@ -98,14 +100,14 @@ export default function JoinGame() {
                   onClick={handlePinSubmit}
                   disabled={pin.length !== 6}
                 >
-                  Continue
+                  {t('game.continue')}
                 </Button>
               </Stack>
             ) : (
               <form onSubmit={form.onSubmit(handleJoin)} style={{ width: '100%' }}>
                 <Stack gap="md">
                   <Group justify="center" gap="xs">
-                    <Text c="dimmed">Game PIN:</Text>
+                    <Text c="dimmed">{t('game.pin')}:</Text>
                     <Text fw={600}>{pin}</Text>
                     <Button
                       variant="subtle"
@@ -115,13 +117,13 @@ export default function JoinGame() {
                         setPin('');
                       }}
                     >
-                      Change
+                      {t('game.change')}
                     </Button>
                   </Group>
 
                   <TextInput
-                    label="Your Nickname"
-                    placeholder="Enter your nickname"
+                    label={t('game.yourNickname')}
+                    placeholder={t('game.enterNickname')}
                     size="md"
                     {...form.getInputProps('nickname')}
                     autoFocus
@@ -133,10 +135,10 @@ export default function JoinGame() {
                     size="md"
                     loading={loading}
                   >
-                    Join Game
+                    {t('game.joinAsPlayer')}
                   </Button>
 
-                  <Divider label="or" labelPosition="center" />
+                  <Divider label={t('game.or')} labelPosition="center" />
 
                   <Button
                     variant="light"
@@ -146,7 +148,7 @@ export default function JoinGame() {
                     leftSection={<IconEye size={18} />}
                     onClick={() => form.onSubmit(handleJoinAsSpectator)()}
                   >
-                    Watch as Spectator
+                    {t('game.joinAsSpectator')}
                   </Button>
                 </Stack>
               </form>

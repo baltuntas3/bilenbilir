@@ -1,7 +1,9 @@
-const { Room, RoomState, Player, Spectator } = require('../../domain/entities');
+const { SharedUseCases } = require('./SharedUseCases');
+const { LockManager } = require('../../shared/utils/LockManager');
+const { Room, RoomState, Player, Spectator, Team, TEAM_COLORS } = require('../../domain/entities');
 const { PIN, Nickname } = require('../../domain/value-objects');
 const { generateId } = require('../../shared/utils/generateId');
-const { NotFoundError, ForbiddenError, ValidationError, ConflictError } = require('../../shared/errors');
+const { ValidationError, ConflictError } = require('../../shared/errors');
 
 // Default grace period for player reconnection (2 minutes)
 const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
@@ -9,57 +11,14 @@ const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
 // Default grace period for host reconnection (5 minutes - longer since host is more critical)
 const DEFAULT_HOST_GRACE_PERIOD = 300000;
 
-// Lock TTL in milliseconds (60 seconds - allows for slow networks and retries)
-const JOIN_LOCK_TTL = 60000;
-
-class RoomUseCases {
+class RoomUseCases extends SharedUseCases {
   constructor(roomRepository, quizRepository, options = {}) {
-    this.roomRepository = roomRepository;
-    this.quizRepository = quizRepository;
+    super(roomRepository, quizRepository);
     this.playerGracePeriod = options.playerGracePeriod || DEFAULT_PLAYER_GRACE_PERIOD;
     this.hostGracePeriod = options.hostGracePeriod || DEFAULT_HOST_GRACE_PERIOD;
 
-    // Lock map to prevent nickname collision race conditions
-    // Key: "pin:nickname_lowercase", Value: timestamp when lock was acquired
-    this.joinLocks = new Map();
-  }
-
-  /**
-   * Acquire lock for joining room with nickname
-   * Uses Nickname VO for consistent normalization
-   * Locks expire after TTL to prevent permanent lockout
-   * @private
-   */
-  _acquireJoinLock(pin, nickname) {
-    // Validate nickname before acquiring lock to prevent lock leaks on validation errors
-    let normalizedNickname;
-    try {
-      normalizedNickname = new Nickname(nickname).normalized();
-    } catch (error) {
-      // Re-throw validation errors without acquiring lock
-      throw error;
-    }
-
-    const lockKey = `${pin}:${normalizedNickname}`;
-    const now = Date.now();
-
-    // Check if lock exists and is not expired
-    const existingLock = this.joinLocks.get(lockKey);
-    if (existingLock && (now - existingLock) < JOIN_LOCK_TTL) {
-      throw new ConflictError('Join in progress. Please try again.');
-    }
-
-    // Clean up expired lock if exists, then acquire new lock
-    this.joinLocks.set(lockKey, now);
-    return lockKey;
-  }
-
-  /**
-   * Release join lock
-   * @private
-   */
-  _releaseJoinLock(lockKey) {
-    this.joinLocks.delete(lockKey);
+    // Lock to prevent nickname collision race conditions (60s TTL)
+    this.joinLocks = new LockManager(60000);
   }
 
   /**
@@ -67,61 +26,10 @@ class RoomUseCases {
    * @returns {number} Number of expired locks removed
    */
   cleanupExpiredJoinLocks() {
-    const now = Date.now();
-    let removedCount = 0;
-
-    for (const [key, timestamp] of this.joinLocks.entries()) {
-      if ((now - timestamp) >= JOIN_LOCK_TTL) {
-        this.joinLocks.delete(key);
-        removedCount++;
-      }
-    }
-
-    return removedCount;
+    return this.joinLocks.cleanupExpired();
   }
 
-  /**
-   * Get room by PIN or throw NotFoundError
-   * @private
-   */
-  async _getRoomOrThrow(pin) {
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) {
-      throw new NotFoundError('Room not found');
-    }
-    return room;
-  }
-
-  /**
-   * Get quiz by ID or throw NotFoundError
-   * @private
-   */
-  async _getQuizOrThrow(quizId) {
-    const quiz = await this.quizRepository.findById(quizId);
-    if (!quiz) {
-      throw new NotFoundError('Quiz not found');
-    }
-    return quiz;
-  }
-
-  /**
-   * Validate that requester is host or throw ForbiddenError
-   * @private
-   */
-  _throwIfNotHost(room, requesterId) {
-    if (!room.isHost(requesterId)) {
-      throw new ForbiddenError('Only host can perform this action');
-    }
-  }
-
-  /**
-   * Create a new room for a quiz
-   * @param {string} hostId - Socket ID of the host
-   * @param {string} hostUserId - MongoDB User ID of the authenticated host (for archiving)
-   * @param {string} quizId - Quiz ID to use for the game
-   */
   async createRoom({ hostId, hostUserId, quizId }) {
-    // Check if host already has an active room
     const existingRoom = await this.roomRepository.findByHostUserId(hostUserId);
     if (existingRoom) {
       throw new ConflictError(`You already have an active room (PIN: ${existingRoom.pin}). Close it before creating a new one.`);
@@ -129,10 +37,9 @@ class RoomUseCases {
 
     const quiz = await this._getQuizOrThrow(quizId);
 
-    // Generate unique PIN with exponential backoff info
     let pin;
     let attempts = 0;
-    const maxAttempts = 50; // Supports up to ~980,000 active rooms with 99.9% success
+    const maxAttempts = 50;
 
     do {
       pin = PIN.generate();
@@ -146,9 +53,9 @@ class RoomUseCases {
 
     const room = new Room({
       id: generateId(),
-      pin, // Pass PIN Value Object directly
+      pin,
       hostId,
-      hostUserId, // Persistent user ID for game history
+      hostUserId,
       hostToken,
       quizId,
       state: RoomState.WAITING_PLAYERS
@@ -159,17 +66,18 @@ class RoomUseCases {
     return { room, quiz, hostToken };
   }
 
-  /**
-   * Join an existing room
-   * Uses lock to prevent race condition when two clients try to join with same nickname
-   */
   async joinRoom({ pin, nickname, socketId }) {
-    // Acquire lock to prevent race condition
-    const lockKey = this._acquireJoinLock(pin, nickname);
-
+    let normalizedNickname;
     try {
+      normalizedNickname = new Nickname(nickname).normalized();
+    } catch (error) {
+      throw error;
+    }
+
+    const lockKey = `${pin}:${normalizedNickname}`;
+    return this.joinLocks.withLock(lockKey, 'Join in progress. Please try again.', async () => {
       const room = await this._getRoomOrThrow(pin);
-      const playerToken = generateId(); // Token for player reconnection
+      const playerToken = generateId();
 
       const player = new Player({
         id: generateId(),
@@ -179,20 +87,14 @@ class RoomUseCases {
         playerToken
       });
 
-      room.addPlayer(player); // Entity validates state and nickname uniqueness
+      room.addPlayer(player);
 
       await this.roomRepository.save(room);
 
       return { room, player, playerToken };
-    } finally {
-      // Always release lock
-      this._releaseJoinLock(lockKey);
-    }
+    });
   }
 
-  /**
-   * Leave a room
-   */
   async leaveRoom({ pin, socketId }) {
     const room = await this._getRoomOrThrow(pin);
     room.removePlayer(socketId);
@@ -202,31 +104,20 @@ class RoomUseCases {
     return { room };
   }
 
-  /**
-   * Get room by PIN
-   */
   async getRoom({ pin }) {
     const room = await this._getRoomOrThrow(pin);
     return { room };
   }
 
-  /**
-   * Get players in a room
-   */
   async getPlayers({ pin }) {
     const room = await this._getRoomOrThrow(pin);
     return { players: room.getAllPlayers() };
   }
 
-  /**
-   * Close/delete a room (host only)
-   * Returns warning if game is in progress
-   */
   async closeRoom({ pin, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
     this._throwIfNotHost(room, requesterId);
 
-    // Track if game was in progress for response
     const wasGameInProgress = room.state !== RoomState.WAITING_PLAYERS &&
                               room.state !== RoomState.PODIUM;
     const playerCount = room.getPlayerCount();
@@ -242,13 +133,7 @@ class RoomUseCases {
     };
   }
 
-  /**
-   * Handle socket disconnect - mark as disconnected instead of removing
-   * Allows for reconnection during grace period
-   * Uses O(1) index lookup for performance
-   */
   async handleDisconnect({ socketId }) {
-    // Use O(1) index lookup instead of iterating all rooms
     const result = await this.roomRepository.findBySocketId(socketId);
 
     if (!result) {
@@ -258,19 +143,16 @@ class RoomUseCases {
     const { room, role, player, spectator } = result;
 
     if (role === 'host') {
-      // Mark host as disconnected instead of deleting room immediately
       room.setHostDisconnected();
       await this.roomRepository.save(room);
       return {
         type: 'host_disconnected',
         pin: room.pin,
-        gracePeriod: true // Host can reconnect
+        gracePeriod: true
       };
     }
 
     if (role === 'player' && player) {
-      // During lobby, remove player completely
-      // During game, mark as disconnected for potential reconnection
       if (room.state === RoomState.WAITING_PLAYERS) {
         room.removePlayer(socketId);
       } else {
@@ -287,7 +169,6 @@ class RoomUseCases {
     }
 
     if (role === 'spectator' && spectator) {
-      // Mark spectator as disconnected for potential reconnection
       room.setSpectatorDisconnected(socketId);
       await this.roomRepository.save(room);
       return {
@@ -302,10 +183,6 @@ class RoomUseCases {
     return { type: 'not_in_room' };
   }
 
-  /**
-   * Reconnect host to room using hostToken
-   * Validates grace period to prevent reconnection after timeout
-   */
   async reconnectHost({ pin, hostToken, newSocketId }) {
     const room = await this._getRoomOrThrow(pin);
     room.reconnectHost(newSocketId, hostToken, this.hostGracePeriod);
@@ -314,24 +191,14 @@ class RoomUseCases {
     return { room, quiz };
   }
 
-  /**
-   * Reconnect player to room using playerToken
-   * Rotates token on successful reconnect for security
-   */
   async reconnectPlayer({ pin, playerToken, newSocketId }) {
     const room = await this._getRoomOrThrow(pin);
-    // Generate new token for security (token rotation)
     const newPlayerToken = generateId();
     const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod, newPlayerToken);
     await this.roomRepository.save(room);
-    // Return new token so client can update stored token
     return { room, player, newPlayerToken };
   }
 
-  /**
-   * Find room by host token (for reconnection)
-   * Uses O(1) index lookup for performance
-   */
   async findRoomByHostToken({ hostToken }) {
     const room = await this.roomRepository.findByHostToken(hostToken);
 
@@ -342,26 +209,14 @@ class RoomUseCases {
     return { room };
   }
 
-  /**
-   * Find room by player token (for reconnection)
-   * Uses O(1) index lookup for performance
-   */
   async findRoomByPlayerToken({ playerToken }) {
     return await this.roomRepository.findByPlayerToken(playerToken);
   }
 
-  /**
-   * Find room by spectator token (for reconnection)
-   * Uses O(1) index lookup for performance
-   */
   async findRoomBySpectatorToken({ spectatorToken }) {
     return await this.roomRepository.findBySpectatorToken(spectatorToken);
   }
 
-  /**
-   * Get host's active room by user ID
-   * Returns room info if host has an active room, null otherwise
-   */
   async getHostRoom({ hostUserId }) {
     const room = await this.roomRepository.findByHostUserId(hostUserId);
 
@@ -382,10 +237,6 @@ class RoomUseCases {
     };
   }
 
-  /**
-   * Force close host's active room
-   * Used when host wants to close existing room to create a new one
-   */
   async forceCloseHostRoom({ hostUserId }) {
     const room = await this.roomRepository.findByHostUserId(hostUserId);
 
@@ -403,23 +254,12 @@ class RoomUseCases {
     };
   }
 
-  /**
-   * Find room where socket is participating (as host or player)
-   * Used to prevent same socket from joining multiple rooms
-   * Uses O(1) index lookup for performance
-   */
   async findRoomBySocketId({ socketId }) {
     return await this.roomRepository.findBySocketId(socketId);
   }
 
   // ==================== KICK/BAN METHODS ====================
 
-  /**
-   * Kick a player from the room (host only)
-   * @param {string} pin - Room PIN
-   * @param {string} playerId - Player ID to kick
-   * @param {string} requesterId - Socket ID of requester (host)
-   */
   async kickPlayer({ pin, playerId, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
     const player = room.kickPlayer(playerId, requesterId);
@@ -427,13 +267,6 @@ class RoomUseCases {
     return { room, player };
   }
 
-  /**
-   * Ban a player from the room (host only)
-   * Kicks the player and prevents them from rejoining with same nickname
-   * @param {string} pin - Room PIN
-   * @param {string} playerId - Player ID to ban
-   * @param {string} requesterId - Socket ID of requester (host)
-   */
   async banPlayer({ pin, playerId, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
     const player = room.banPlayer(playerId, requesterId);
@@ -441,12 +274,6 @@ class RoomUseCases {
     return { room, player };
   }
 
-  /**
-   * Unban a nickname (host only)
-   * @param {string} pin - Room PIN
-   * @param {string} nickname - Nickname to unban
-   * @param {string} requesterId - Socket ID of requester (host)
-   */
   async unbanNickname({ pin, nickname, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
     room.unbanNickname(nickname, requesterId);
@@ -454,10 +281,6 @@ class RoomUseCases {
     return { room };
   }
 
-  /**
-   * Get banned nicknames for a room
-   * @param {string} pin - Room PIN
-   */
   async getBannedNicknames({ pin }) {
     const room = await this._getRoomOrThrow(pin);
     return { bannedNicknames: room.getBannedNicknames() };
@@ -465,15 +288,9 @@ class RoomUseCases {
 
   // ==================== SPECTATOR METHODS ====================
 
-  /**
-   * Join a room as spectator
-   * @param {string} pin - Room PIN
-   * @param {string} nickname - Spectator nickname
-   * @param {string} socketId - Socket ID
-   */
   async joinAsSpectator({ pin, nickname, socketId }) {
     const room = await this._getRoomOrThrow(pin);
-    const spectatorToken = generateId(); // Token for spectator reconnection
+    const spectatorToken = generateId();
 
     const spectator = new Spectator({
       id: generateId(),
@@ -489,11 +306,6 @@ class RoomUseCases {
     return { room, spectator, spectatorToken };
   }
 
-  /**
-   * Leave a room as spectator
-   * @param {string} pin - Room PIN
-   * @param {string} socketId - Socket ID
-   */
   async leaveAsSpectator({ pin, socketId }) {
     const room = await this._getRoomOrThrow(pin);
     room.removeSpectator(socketId);
@@ -501,33 +313,84 @@ class RoomUseCases {
     return { room };
   }
 
-  /**
-   * Reconnect spectator to room using spectatorToken
-   * @param {string} pin - Room PIN
-   * @param {string} spectatorToken - Spectator token
-   * @param {string} newSocketId - New socket ID
-   */
   async reconnectSpectator({ pin, spectatorToken, newSocketId }) {
     const room = await this._getRoomOrThrow(pin);
-    // Generate new token for security (token rotation)
     const newSpectatorToken = generateId();
     const spectator = room.reconnectSpectator(
       spectatorToken,
       newSocketId,
-      this.playerGracePeriod, // Use same grace period as players
+      this.playerGracePeriod,
       newSpectatorToken
     );
     await this.roomRepository.save(room);
     return { room, spectator, newSpectatorToken };
   }
 
-  /**
-   * Get all spectators in a room
-   * @param {string} pin - Room PIN
-   */
   async getSpectators({ pin }) {
     const room = await this._getRoomOrThrow(pin);
     return { spectators: room.getAllSpectators() };
+  }
+
+  // ==================== TEAM MODE METHODS ====================
+
+  async enableTeamMode({ pin, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    room.enableTeamMode();
+    await this.roomRepository.save(room);
+
+    return { room };
+  }
+
+  async disableTeamMode({ pin, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    room.disableTeamMode();
+    await this.roomRepository.save(room);
+
+    return { room };
+  }
+
+  async addTeam({ pin, name, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    // Auto-assign color based on current team count
+    const colorIndex = room.getAllTeams().length % TEAM_COLORS.length;
+    const color = TEAM_COLORS[colorIndex];
+
+    const team = new Team({
+      id: generateId(),
+      name,
+      color
+    });
+
+    room.addTeam(team);
+    await this.roomRepository.save(room);
+
+    return { room, team };
+  }
+
+  async removeTeam({ pin, teamId, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    room.removeTeam(teamId);
+    await this.roomRepository.save(room);
+
+    return { room };
+  }
+
+  async assignPlayerToTeam({ pin, playerId, teamId, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    room.assignPlayerToTeam(playerId, teamId);
+    await this.roomRepository.save(room);
+
+    return { room };
   }
 }
 

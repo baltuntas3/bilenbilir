@@ -9,8 +9,6 @@ import {
   Badge,
   Center,
   Button,
-  SimpleGrid,
-  Progress,
   ThemeIcon,
 } from '@mantine/core';
 import { IconDoorExit, IconCheck, IconX, IconPlayerPause } from '@tabler/icons-react';
@@ -22,6 +20,10 @@ import AnswerFeedback from '../components/game/AnswerFeedback';
 import Leaderboard from '../components/game/Leaderboard';
 import Podium from '../components/game/Podium';
 import PlayerWaiting from '../components/game/PlayerWaiting';
+import ReactionOverlay from '../components/game/ReactionOverlay';
+import ReactionPicker from '../components/game/ReactionPicker';
+import PowerUpBar from '../components/game/PowerUpBar';
+import AnswerDistribution from '../components/game/AnswerDistribution';
 import { showToast } from '../utils/toast';
 
 export default function PlayerGame() {
@@ -49,6 +51,10 @@ export default function PlayerGame() {
     hasAnswered,
     submitAnswer,
     leaveRoom,
+    teamMode,
+    teamLeaderboard,
+    teamPodium,
+    eliminatedOptions,
   } = useGame();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -136,6 +142,8 @@ export default function PlayerGame() {
               totalQuestions={totalQuestions}
             />
 
+            {!hasAnswered && <PowerUpBar />}
+
             {hasAnswered ? (
               <AnswerFeedback
                 isCorrect={lastAnswer?.isCorrect}
@@ -150,13 +158,13 @@ export default function PlayerGame() {
                 onSelect={handleAnswerSelect}
                 disabled={submitting}
                 selectedIndex={selectedAnswer}
+                eliminatedOptions={eliminatedOptions}
               />
             )}
           </Stack>
         );
 
       case GAME_STATES.SHOW_RESULTS:
-        const totalPlayerCount = answeredCount || players.length;
         return (
           <Stack gap="xl">
             {/* Your result */}
@@ -190,53 +198,12 @@ export default function PlayerGame() {
             />
 
             {/* Answer distribution */}
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              {currentQuestion?.options?.map((option, index) => {
-                const count = answerDistribution?.[index] || 0;
-                const percentage = totalPlayerCount > 0
-                  ? Math.round((count / totalPlayerCount) * 100)
-                  : 0;
-                const isCorrect = index === correctAnswerIndex;
-                const wasSelected = selectedAnswer === index;
-
-                return (
-                  <Paper
-                    key={index}
-                    p="md"
-                    radius="md"
-                    withBorder
-                    style={{
-                      borderColor: isCorrect
-                        ? 'var(--mantine-color-green-5)'
-                        : wasSelected
-                          ? 'var(--mantine-color-red-5)'
-                          : undefined,
-                      borderWidth: isCorrect || wasSelected ? 2 : 1,
-                      backgroundColor: isCorrect ? 'var(--mantine-color-green-0)' : undefined,
-                    }}
-                  >
-                    <Stack gap="xs">
-                      <Group justify="space-between">
-                        <Group gap="sm">
-                          <Badge color={isCorrect ? 'green' : wasSelected ? 'red' : 'gray'}>
-                            {String.fromCharCode(65 + index)}
-                          </Badge>
-                          <Text size="sm">{option}</Text>
-                          {isCorrect && <IconCheck size={16} color="var(--mantine-color-green-6)" />}
-                          {wasSelected && !isCorrect && <IconX size={16} color="var(--mantine-color-red-6)" />}
-                        </Group>
-                        <Badge variant="light">{count} ({percentage}%)</Badge>
-                      </Group>
-                      <Progress
-                        value={percentage}
-                        color={isCorrect ? 'green' : 'gray'}
-                        size="sm"
-                      />
-                    </Stack>
-                  </Paper>
-                );
-              })}
-            </SimpleGrid>
+            <AnswerDistribution
+              distribution={answerDistribution}
+              correctAnswerIndex={correctAnswerIndex}
+              totalPlayers={players.length || answeredCount}
+              options={currentQuestion?.options}
+            />
           </Stack>
         );
 
@@ -255,6 +222,8 @@ export default function PlayerGame() {
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
               currentPlayerId={playerId}
+              teamMode={teamMode}
+              teamLeaderboard={teamLeaderboard}
             />
 
             <Center>
@@ -295,6 +264,8 @@ export default function PlayerGame() {
             <Podium
               players={podium.length > 0 ? podium : players}
               currentPlayerId={playerId}
+              teamMode={teamMode}
+              teamPodium={teamPodium}
             />
 
             <Center>
@@ -324,30 +295,34 @@ export default function PlayerGame() {
   }
 
   return (
-    <Container size="sm" py="xl">
-      <Stack gap="xl">
-        {/* Header */}
-        {gameState !== GAME_STATES.WAITING_PLAYERS && (
-          <Paper p="sm" radius="md" withBorder>
-            <Group justify="space-between">
-              <Group gap="xs">
-                <Badge size="lg" variant="light">
-                  {nickname}
-                </Badge>
-                <Badge size="lg" variant="light" color="blue">
-                  {score.toLocaleString()} pts
+    <>
+      <ReactionOverlay />
+      <Container size="sm" py="xl" pb={80}>
+        <Stack gap="xl">
+          {/* Header */}
+          {gameState !== GAME_STATES.WAITING_PLAYERS && (
+            <Paper p="sm" radius="md" withBorder>
+              <Group justify="space-between">
+                <Group gap="xs">
+                  <Badge size="lg" variant="light">
+                    {nickname}
+                  </Badge>
+                  <Badge size="lg" variant="light" color="blue">
+                    {score.toLocaleString()} pts
+                  </Badge>
+                </Group>
+                <Badge size="lg">
+                  {currentQuestionIndex + 1} / {totalQuestions}
                 </Badge>
               </Group>
-              <Badge size="lg">
-                {currentQuestionIndex + 1} / {totalQuestions}
-              </Badge>
-            </Group>
-          </Paper>
-        )}
+            </Paper>
+          )}
 
-        {/* Main content */}
-        {renderContent()}
-      </Stack>
-    </Container>
+          {/* Main content */}
+          {renderContent()}
+        </Stack>
+      </Container>
+      <ReactionPicker />
+    </>
   );
 }

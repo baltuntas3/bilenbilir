@@ -1,12 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { AppShell, Group, Button, Title, Container, Menu, ActionIcon, Avatar, Text } from '@mantine/core';
 import { IconHome, IconUser, IconLogout, IconSettings } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import ThemeToggle from './ThemeToggle';
+import LanguageSwitcher from './LanguageSwitcher';
 
 export default function Layout({ children }) {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handleLogout = () => {
     logout();
@@ -28,6 +31,7 @@ export default function Layout({ children }) {
             </Title>
 
             <Group gap="sm">
+              <LanguageSwitcher />
               <ThemeToggle />
 
               {isAuthenticated ? (
@@ -51,14 +55,14 @@ export default function Layout({ children }) {
                       to="/"
                       leftSection={<IconHome size={14} />}
                     >
-                      Home
+                      {t('nav.home')}
                     </Menu.Item>
                     <Menu.Item
                       component={Link}
                       to="/profile"
                       leftSection={<IconSettings size={14} />}
                     >
-                      Profile Settings
+                      {t('nav.profileSettings')}
                     </Menu.Item>
                     <Menu.Divider />
                     <Menu.Item
@@ -66,17 +70,17 @@ export default function Layout({ children }) {
                       leftSection={<IconLogout size={14} />}
                       onClick={handleLogout}
                     >
-                      Logout
+                      {t('auth.logout')}
                     </Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
               ) : (
                 <>
                   <Button variant="subtle" component={Link} to="/login" size="sm">
-                    Sign In
+                    {t('auth.signIn')}
                   </Button>
                   <Button component={Link} to="/register" size="sm">
-                    Sign Up
+                    {t('auth.signUp')}
                   </Button>
                 </>
               )}

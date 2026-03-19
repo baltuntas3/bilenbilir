@@ -48,6 +48,15 @@ const initialState = {
   hasAnswered: false,
   quiz: null,
   isReconnecting: false,
+  reactions: [],
+  // Team mode
+  teams: [],
+  teamMode: false,
+  teamLeaderboard: [],
+  teamPodium: [],
+  // Power-ups
+  powerUps: { FIFTY_FIFTY: 1, DOUBLE_POINTS: 1, TIME_EXTENSION: 1 },
+  eliminatedOptions: [],
 };
 
 // Session storage keys
@@ -101,6 +110,49 @@ export function GameProvider({ children }) {
   const updateState = useCallback((updates) => {
     setState((prev) => ({ ...prev, ...updates }));
   }, []);
+
+  /**
+   * Generic socket emit with response/error handling and timeout
+   * Eliminates duplicated promise+timeout+cleanup pattern
+   */
+  const emitWithResponse = useCallback((emitEvent, emitData, responseEvent, timeoutMs = 10000) => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socketService.off(responseEvent, onResponse);
+        socketService.off('error', onError);
+        reject(new Error(`${responseEvent} timed out`));
+      }, timeoutMs);
+
+      const onResponse = (response) => {
+        clearTimeout(timeout);
+        socketService.off(responseEvent, onResponse);
+        socketService.off('error', onError);
+        resolve(response);
+      };
+
+      const onError = ({ error }) => {
+        clearTimeout(timeout);
+        socketService.off(responseEvent, onResponse);
+        socketService.off('error', onError);
+        reject(new Error(error));
+      };
+
+      socketService.on(responseEvent, onResponse);
+      socketService.on('error', onError);
+      socketService.emit(emitEvent, emitData);
+    });
+  }, []);
+
+  /**
+   * Helper for host-only emit actions (no response expected)
+   */
+  const hostEmit = useCallback((event, extraData = {}) => {
+    if (!state.isHost || !state.roomPin) {
+      return Promise.reject(new Error('Not authorized'));
+    }
+    socketService.emit(event, { pin: state.roomPin, ...extraData });
+    return Promise.resolve();
+  }, [state.isHost, state.roomPin]);
 
   // Reset game state
   const resetGame = useCallback(() => {
@@ -244,6 +296,15 @@ export function GameProvider({ children }) {
       updateState({ bannedNicknames });
     });
 
+    // Team mode events
+    socketService.on('team_mode_updated', ({ teamMode, teams }) => {
+      updateState({ teamMode, teams });
+    });
+
+    socketService.on('teams_updated', ({ teams }) => {
+      updateState({ teams });
+    });
+
     // Game flow events
     socketService.on('game_started', (data) => {
       const { totalQuestions, currentQuestion, questionIndex } = data || {};
@@ -255,6 +316,8 @@ export function GameProvider({ children }) {
         currentQuestionIndex: questionIndex ?? 0,
         hasAnswered: false,
         lastAnswer: null,
+        powerUps: { FIFTY_FIFTY: 1, DOUBLE_POINTS: 1, TIME_EXTENSION: 1 },
+        eliminatedOptions: [],
       }));
     });
 
@@ -270,6 +333,7 @@ export function GameProvider({ children }) {
         answeredCount: 0,
         answerDistribution: null,
         correctAnswerIndex: null,
+        eliminatedOptions: [],
       }));
     });
 
@@ -317,25 +381,62 @@ export function GameProvider({ children }) {
       });
     });
 
-    socketService.on('leaderboard', ({ leaderboard }) => {
-      updateState({
+    socketService.on('leaderboard', ({ leaderboard, teamLeaderboard }) => {
+      const updates = {
         gameState: GAME_STATES.LEADERBOARD,
         leaderboard,
-      });
+      };
+      if (teamLeaderboard) {
+        updates.teamLeaderboard = teamLeaderboard;
+      }
+      updateState(updates);
     });
 
-    socketService.on('game_over', ({ podium }) => {
-      updateState({
+    socketService.on('game_over', ({ podium, teamPodium }) => {
+      const updates = {
         gameState: GAME_STATES.PODIUM,
         podium,
-      });
+      };
+      if (teamPodium) {
+        updates.teamPodium = teamPodium;
+      }
+      updateState(updates);
     });
 
-    socketService.on('final_results', ({ leaderboard, podium }) => {
-      updateState({
+    socketService.on('final_results', ({ leaderboard, podium, teamLeaderboard, teamPodium }) => {
+      const updates = {
         leaderboard,
         podium,
-      });
+      };
+      if (teamLeaderboard) {
+        updates.teamLeaderboard = teamLeaderboard;
+      }
+      if (teamPodium) {
+        updates.teamPodium = teamPodium;
+      }
+      updateState(updates);
+    });
+
+    // Power-up events
+    socketService.on('fifty_fifty_result', ({ eliminatedOptions }) => {
+      updateState({ eliminatedOptions });
+    });
+
+    socketService.on('power_up_activated', ({ type }) => {
+      const labels = { DOUBLE_POINTS: 'Çift Puan', TIME_EXTENSION: 'Süre Uzatma' };
+      showToast.success((labels[type] || type) + ' aktif!');
+    });
+
+    socketService.on('power_up_used', ({ nickname, powerUpType }) => {
+      const labels = { FIFTY_FIFTY: '50:50', DOUBLE_POINTS: 'Çift Puan', TIME_EXTENSION: 'Süre Uzatma' };
+      showToast.info(nickname + ' joker kullandı: ' + (labels[powerUpType] || powerUpType));
+    });
+
+    socketService.on('time_extended', ({ extraTimeMs }) => {
+      // Extend the local timer end time
+      if (endTimeRef.current) {
+        endTimeRef.current += extraTimeMs;
+      }
     });
 
     // Timer events
@@ -378,6 +479,19 @@ export function GameProvider({ children }) {
         previousState: null,
       }));
       showToast.info('Game resumed');
+    });
+
+    // Live reactions
+    socketService.on('reaction_received', ({ nickname, reaction, timestamp }) => {
+      const id = `${timestamp}-${Math.random().toString(36).slice(2, 7)}`;
+      setState((prev) => {
+        const newReactions = [...prev.reactions, { id, nickname, reaction, timestamp }];
+        // Keep max 20 visible reactions
+        return {
+          ...prev,
+          reactions: newReactions.length > 20 ? newReactions.slice(-20) : newReactions,
+        };
+      });
     });
 
     // Room closed
@@ -426,83 +540,61 @@ export function GameProvider({ children }) {
 
     await connectSocket(token);
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socketService.off('room_created', onRoomCreated);
-        reject(new Error('Room creation timed out'));
-      }, 10000);
+    const response = await emitWithResponse(
+      'create_room', { quizId },
+      'room_created'
+    );
 
-      const onRoomCreated = (response) => {
-        clearTimeout(timeout);
-        socketService.off('room_created', onRoomCreated);
-
-        // Save session for reconnection
-        saveSession({
-          pin: response.pin,
-          hostToken: response.hostToken,
-          role: 'host',
-        });
-
-        updateState({
-          roomPin: response.pin,
-          isHost: true,
-          hostToken: response.hostToken,
-          gameState: GAME_STATES.WAITING_PLAYERS,
-          totalQuestions: response.totalQuestions,
-          quiz: {
-            title: response.quizTitle,
-            questionCount: response.totalQuestions,
-          },
-          players: [],
-        });
-
-        resolve(response);
-      };
-
-      socketService.on('room_created', onRoomCreated);
-      socketService.emit('create_room', { quizId });
+    saveSession({
+      pin: response.pin,
+      hostToken: response.hostToken,
+      role: 'host',
     });
-  }, [getToken, connectSocket, updateState]);
+
+    updateState({
+      roomPin: response.pin,
+      isHost: true,
+      hostToken: response.hostToken,
+      gameState: GAME_STATES.WAITING_PLAYERS,
+      totalQuestions: response.totalQuestions,
+      quiz: {
+        title: response.quizTitle,
+        questionCount: response.totalQuestions,
+      },
+      players: [],
+    });
+
+    return response;
+  }, [getToken, connectSocket, updateState, emitWithResponse]);
 
   // Join room (player)
   const joinRoom = useCallback(async (pin, nickname) => {
-    await connectSocket(); // No token needed for players
+    await connectSocket();
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socketService.off('room_joined', onRoomJoined);
-        reject(new Error('Join room timed out'));
-      }, 10000);
+    const response = await emitWithResponse(
+      'join_room', { pin, nickname },
+      'room_joined'
+    );
 
-      const onRoomJoined = (response) => {
-        clearTimeout(timeout);
-        socketService.off('room_joined', onRoomJoined);
-
-        // Save session for reconnection
-        saveSession({
-          pin: response.pin,
-          playerToken: response.playerToken,
-          role: 'player',
-          nickname: response.nickname || nickname,
-        });
-
-        updateState({
-          roomPin: response.pin,
-          isHost: false,
-          playerId: response.playerId,
-          playerToken: response.playerToken,
-          nickname: response.nickname || nickname,
-          gameState: GAME_STATES.WAITING_PLAYERS,
-          players: [],
-        });
-
-        resolve(response);
-      };
-
-      socketService.on('room_joined', onRoomJoined);
-      socketService.emit('join_room', { pin, nickname });
+    saveSession({
+      pin: response.pin,
+      playerToken: response.playerToken,
+      role: 'player',
+      nickname: response.nickname || nickname,
     });
-  }, [connectSocket, updateState]);
+
+    updateState({
+      roomPin: response.pin,
+      isHost: false,
+      playerId: response.playerId,
+      playerToken: response.playerToken,
+      nickname: response.nickname || nickname,
+      gameState: GAME_STATES.WAITING_PLAYERS,
+      players: [],
+    });
+
+    return response;
+  }, [connectSocket, updateState, emitWithResponse]);
 
   // Leave room
   const leaveRoom = useCallback(() => {
@@ -531,80 +623,34 @@ export function GameProvider({ children }) {
   // Get host's existing room
   const getMyRoom = useCallback(async () => {
     const token = getToken();
-    if (!token) {
-      return null;
-    }
+    if (!token) return null;
 
     await connectSocket(token);
 
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        socketService.off('my_room', onMyRoom);
-        resolve(null);
-      }, 5000);
-
-      const onMyRoom = (room) => {
-        clearTimeout(timeout);
-        socketService.off('my_room', onMyRoom);
-        resolve(room);
-      };
-
-      socketService.on('my_room', onMyRoom);
-      socketService.emit('get_my_room');
-    });
-  }, [getToken, connectSocket]);
+    try {
+      return await emitWithResponse('get_my_room', {}, 'my_room', 5000);
+    } catch {
+      return null;
+    }
+  }, [getToken, connectSocket, emitWithResponse]);
 
   // Force close existing room (to create a new one)
   const forceCloseExistingRoom = useCallback(async () => {
     const token = getToken();
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
+    if (!token) throw new Error('Not authenticated');
 
     await connectSocket(token);
+    return emitWithResponse('force_close_room', {}, 'room_force_closed', 5000);
+  }, [getToken, connectSocket, emitWithResponse]);
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socketService.off('room_force_closed', onClosed);
-        reject(new Error('Force close timed out'));
-      }, 5000);
-
-      const onClosed = (result) => {
-        clearTimeout(timeout);
-        socketService.off('room_force_closed', onClosed);
-        resolve(result);
-      };
-
-      socketService.on('room_force_closed', onClosed);
-      socketService.emit('force_close_room');
-    });
-  }, [getToken, connectSocket]);
-
-  // Start game (host only)
-  const startGame = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('start_game', { pin: state.roomPin });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  // Start game (host only) - accepts optional questionCount
+  const startGame = useCallback((questionCount) => {
+    const extraData = questionCount ? { questionCount } : {};
+    return hostEmit('start_game', extraData);
+  }, [hostEmit]);
 
   // Start answering phase (host only)
-  const startAnswering = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('start_answering', { pin: state.roomPin });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  const startAnswering = useCallback(() => hostEmit('start_answering'), [hostEmit]);
 
   // Submit answer (player only)
   const submitAnswer = useCallback((answerIndex) => {
@@ -619,78 +665,48 @@ export function GameProvider({ children }) {
     });
   }, [state.isHost, state.roomPin, state.hasAnswered]);
 
-  // End answering (host only)
-  const endAnswering = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
+  // Use power-up (player only)
+  const usePowerUp = useCallback((type) => {
+    if (!state.roomPin || state.isHost || state.hasAnswered) return;
+    socketService.emit('use_power_up', { pin: state.roomPin, powerUpType: type });
+    // Optimistically decrement local power-up count
+    setState((prev) => ({
+      ...prev,
+      powerUps: {
+        ...prev.powerUps,
+        [type]: Math.max(0, (prev.powerUps[type] || 0) - 1),
+      },
+    }));
+  }, [state.roomPin, state.isHost, state.hasAnswered]);
 
-      socketService.emit('end_answering', { pin: state.roomPin });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  // End answering (host only)
+  const endAnswering = useCallback(() => hostEmit('end_answering'), [hostEmit]);
 
   // Show leaderboard (host only)
-  const showLeaderboard = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('show_leaderboard', { pin: state.roomPin });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  const showLeaderboard = useCallback(() => hostEmit('show_leaderboard'), [hostEmit]);
 
   // Next question (host only)
-  const nextQuestion = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('next_question', { pin: state.roomPin });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  const nextQuestion = useCallback(() => hostEmit('next_question'), [hostEmit]);
 
   // Kick player (host only)
   const kickPlayer = useCallback((playerId) => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('kick_player', { pin: state.roomPin, playerId });
-      setState((prev) => ({
-        ...prev,
-        players: prev.players.filter((p) => p.id !== playerId),
-      }));
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+    const result = hostEmit('kick_player', { playerId });
+    setState((prev) => ({
+      ...prev,
+      players: prev.players.filter((p) => p.id !== playerId),
+    }));
+    return result;
+  }, [hostEmit]);
 
   // Ban player (host only)
   const banPlayer = useCallback((playerId) => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('ban_player', { pin: state.roomPin, playerId });
-      setState((prev) => ({
-        ...prev,
-        players: prev.players.filter((p) => p.id !== playerId),
-      }));
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+    const result = hostEmit('ban_player', { playerId });
+    setState((prev) => ({
+      ...prev,
+      players: prev.players.filter((p) => p.id !== playerId),
+    }));
+    return result;
+  }, [hostEmit]);
 
   // Get players
   const getPlayers = useCallback(() => {
@@ -722,118 +738,58 @@ export function GameProvider({ children }) {
 
     await connectSocket(token);
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socketService.off('host_reconnected', onReconnected);
-        socketService.off('error', onError);
-        reject(new Error('Host reconnection timed out'));
-      }, 10000);
+    const response = await emitWithResponse(
+      'reconnect_host', { pin, hostToken },
+      'host_reconnected'
+    );
 
-      const onReconnected = (response) => {
-        clearTimeout(timeout);
-        socketService.off('host_reconnected', onReconnected);
-        socketService.off('error', onError);
-
-        updateState({
-          roomPin: response.pin,
-          isHost: true,
-          hostToken,
-          gameState: response.state,
-          currentQuestionIndex: response.currentQuestionIndex,
-        });
-
-        resolve(response);
-      };
-
-      const onError = ({ error }) => {
-        clearTimeout(timeout);
-        socketService.off('host_reconnected', onReconnected);
-        socketService.off('error', onError);
-        reject(new Error(error));
-      };
-
-      socketService.on('host_reconnected', onReconnected);
-      socketService.on('error', onError);
-      socketService.emit('reconnect_host', { pin, hostToken });
+    updateState({
+      roomPin: response.pin,
+      isHost: true,
+      hostToken,
+      gameState: response.state,
+      currentQuestionIndex: response.currentQuestionIndex,
     });
-  }, [getToken, connectSocket, updateState]);
+
+    return response;
+  }, [getToken, connectSocket, updateState, emitWithResponse]);
 
   // Reconnect as player
   const reconnectPlayer = useCallback(async (pin, playerToken) => {
     await connectSocket();
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socketService.off('player_reconnected', onReconnected);
-        socketService.off('error', onError);
-        reject(new Error('Player reconnection timed out'));
-      }, 10000);
+    const response = await emitWithResponse(
+      'reconnect_player', { pin, playerToken },
+      'player_reconnected'
+    );
 
-      const onReconnected = (response) => {
-        clearTimeout(timeout);
-        socketService.off('player_reconnected', onReconnected);
-        socketService.off('error', onError);
-
-        updateState({
-          roomPin: response.pin,
-          isHost: false,
-          playerId: response.playerId,
-          playerToken: response.playerToken,
-          nickname: response.nickname,
-          score: response.score,
-          gameState: response.state,
-          currentQuestionIndex: response.currentQuestionIndex,
-        });
-
-        // Handle timer sync if in answering phase
-        if (response.timerSync && response.state === GAME_STATES.ANSWERING_PHASE) {
-          const adjustedEndTime = response.timerSync.endTime + (Date.now() - response.timerSync.serverTime);
-          startTimer(response.timerSync.remaining, adjustedEndTime);
-        }
-
-        resolve(response);
-      };
-
-      const onError = ({ error }) => {
-        clearTimeout(timeout);
-        socketService.off('player_reconnected', onReconnected);
-        socketService.off('error', onError);
-        reject(new Error(error));
-      };
-
-      socketService.on('player_reconnected', onReconnected);
-      socketService.on('error', onError);
-      socketService.emit('reconnect_player', { pin, playerToken });
+    updateState({
+      roomPin: response.pin,
+      isHost: false,
+      playerId: response.playerId,
+      playerToken: response.playerToken,
+      nickname: response.nickname,
+      score: response.score,
+      gameState: response.state,
+      currentQuestionIndex: response.currentQuestionIndex,
     });
-  }, [connectSocket, updateState, startTimer]);
+
+    // Handle timer sync if in answering phase
+    if (response.timerSync && response.state === GAME_STATES.ANSWERING_PHASE) {
+      const adjustedEndTime = response.timerSync.endTime + (Date.now() - response.timerSync.serverTime);
+      startTimer(response.timerSync.remaining, adjustedEndTime);
+    }
+
+    return response;
+  }, [connectSocket, updateState, startTimer, emitWithResponse]);
 
   // ==================== PAUSE/RESUME ====================
 
   // Pause game (host only)
-  const pauseGame = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('pause_game', { pin: state.roomPin });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  const pauseGame = useCallback(() => hostEmit('pause_game'), [hostEmit]);
 
   // Resume game (host only)
-  const resumeGame = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('resume_game', { pin: state.roomPin });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  const resumeGame = useCallback(() => hostEmit('resume_game'), [hostEmit]);
 
   // ==================== SPECTATOR ====================
 
@@ -841,51 +797,30 @@ export function GameProvider({ children }) {
   const joinAsSpectator = useCallback(async (pin, nickname) => {
     await connectSocket();
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socketService.off('room_joined_spectator', onJoined);
-        socketService.off('error', onError);
-        reject(new Error('Join as spectator timed out'));
-      }, 10000);
+    const response = await emitWithResponse(
+      'join_as_spectator', { pin, nickname },
+      'room_joined_spectator'
+    );
 
-      const onJoined = (response) => {
-        clearTimeout(timeout);
-        socketService.off('room_joined_spectator', onJoined);
-        socketService.off('error', onError);
-
-        // Save session for reconnection
-        saveSession({
-          pin: response.pin,
-          spectatorToken: response.spectatorToken,
-          role: 'spectator',
-          nickname: response.nickname,
-        });
-
-        updateState({
-          roomPin: response.pin,
-          isHost: false,
-          isSpectator: true,
-          spectatorId: response.spectatorId,
-          spectatorToken: response.spectatorToken,
-          nickname: response.nickname,
-          gameState: response.state,
-        });
-
-        resolve(response);
-      };
-
-      const onError = ({ error }) => {
-        clearTimeout(timeout);
-        socketService.off('room_joined_spectator', onJoined);
-        socketService.off('error', onError);
-        reject(new Error(error));
-      };
-
-      socketService.on('room_joined_spectator', onJoined);
-      socketService.on('error', onError);
-      socketService.emit('join_as_spectator', { pin, nickname });
+    saveSession({
+      pin: response.pin,
+      spectatorToken: response.spectatorToken,
+      role: 'spectator',
+      nickname: response.nickname,
     });
-  }, [connectSocket, updateState]);
+
+    updateState({
+      roomPin: response.pin,
+      isHost: false,
+      isSpectator: true,
+      spectatorId: response.spectatorId,
+      spectatorToken: response.spectatorToken,
+      nickname: response.nickname,
+      gameState: response.state,
+    });
+
+    return response;
+  }, [connectSocket, updateState, emitWithResponse]);
 
   // Leave as spectator
   const leaveSpectator = useCallback(() => {
@@ -900,43 +835,23 @@ export function GameProvider({ children }) {
   const reconnectSpectator = useCallback(async (pin, spectatorToken) => {
     await connectSocket();
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socketService.off('spectator_reconnected', onReconnected);
-        socketService.off('error', onError);
-        reject(new Error('Spectator reconnection timed out'));
-      }, 10000);
+    const response = await emitWithResponse(
+      'reconnect_spectator', { pin, spectatorToken },
+      'spectator_reconnected'
+    );
 
-      const onReconnected = (response) => {
-        clearTimeout(timeout);
-        socketService.off('spectator_reconnected', onReconnected);
-        socketService.off('error', onError);
-
-        updateState({
-          roomPin: response.pin,
-          isHost: false,
-          isSpectator: true,
-          spectatorId: response.spectatorId,
-          spectatorToken: response.spectatorToken,
-          nickname: response.nickname,
-          gameState: response.state,
-        });
-
-        resolve(response);
-      };
-
-      const onError = ({ error }) => {
-        clearTimeout(timeout);
-        socketService.off('spectator_reconnected', onReconnected);
-        socketService.off('error', onError);
-        reject(new Error(error));
-      };
-
-      socketService.on('spectator_reconnected', onReconnected);
-      socketService.on('error', onError);
-      socketService.emit('reconnect_spectator', { pin, spectatorToken });
+    updateState({
+      roomPin: response.pin,
+      isHost: false,
+      isSpectator: true,
+      spectatorId: response.spectatorId,
+      spectatorToken: response.spectatorToken,
+      nickname: response.nickname,
+      gameState: response.state,
     });
-  }, [connectSocket, updateState]);
+
+    return response;
+  }, [connectSocket, updateState, emitWithResponse]);
 
   // Get spectators
   const getSpectators = useCallback(() => {
@@ -960,17 +875,7 @@ export function GameProvider({ children }) {
   // ==================== BAN MANAGEMENT ====================
 
   // Unban nickname (host only)
-  const unbanNickname = useCallback((nickname) => {
-    return new Promise((resolve, reject) => {
-      if (!state.isHost || !state.roomPin) {
-        reject(new Error('Not authorized'));
-        return;
-      }
-
-      socketService.emit('unban_nickname', { pin: state.roomPin, nickname });
-      resolve();
-    });
-  }, [state.isHost, state.roomPin]);
+  const unbanNickname = useCallback((nickname) => hostEmit('unban_nickname', { nickname }), [hostEmit]);
 
   // Get banned nicknames
   const getBannedNicknames = useCallback(() => {
@@ -990,6 +895,23 @@ export function GameProvider({ children }) {
       socketService.emit('get_banned_nicknames', { pin: state.roomPin });
     });
   }, [state.roomPin, updateState]);
+
+  // ==================== TEAM MODE ====================
+
+  // Enable team mode (host only)
+  const enableTeamMode = useCallback(() => hostEmit('enable_team_mode'), [hostEmit]);
+
+  // Disable team mode (host only)
+  const disableTeamMode = useCallback(() => hostEmit('disable_team_mode'), [hostEmit]);
+
+  // Add team (host only)
+  const addTeam = useCallback((name) => hostEmit('add_team', { name }), [hostEmit]);
+
+  // Remove team (host only)
+  const removeTeam = useCallback((teamId) => hostEmit('remove_team', { teamId }), [hostEmit]);
+
+  // Assign player to team (host only)
+  const assignTeam = useCallback((playerId, teamId) => hostEmit('assign_team', { playerId, teamId }), [hostEmit]);
 
   // ==================== TIMER & RESULTS ====================
 
@@ -1021,9 +943,30 @@ export function GameProvider({ children }) {
     });
   }, [state.roomPin, updateState]);
 
-  // Auto-reconnection logic
+  // Send reaction
+  const sendReaction = useCallback((reaction) => {
+    if (!state.roomPin) return;
+    socketService.emit('send_reaction', { pin: state.roomPin, reaction });
+  }, [state.roomPin]);
+
+  // Auto-cleanup: remove reactions older than 3 seconds
   useEffect(() => {
-    // Handle reconnection attempt
+    if (state.reactions.length === 0) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setState((prev) => {
+        const filtered = prev.reactions.filter(r => now - r.timestamp < 3000);
+        if (filtered.length === prev.reactions.length) return prev;
+        return { ...prev, reactions: filtered };
+      });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [state.reactions.length]);
+
+  // Auto-reconnection logic - reuses the reconnect functions above
+  useEffect(() => {
     const attemptReconnection = async () => {
       const session = getSession();
       if (!session) return;
@@ -1032,131 +975,18 @@ export function GameProvider({ children }) {
       showToast.info('Reconnecting...');
 
       try {
-        if (session.role === 'host' && session.hostToken) {
-          const token = getToken();
-          if (token) {
-            await connectSocket(token);
-            setupSocketListeners();
-
-            return new Promise((resolve, reject) => {
-              const timeout = setTimeout(() => {
-                socketService.off('host_reconnected', onReconnected);
-                socketService.off('error', onError);
-                reject(new Error('Reconnection timed out'));
-              }, 10000);
-
-              const onReconnected = (response) => {
-                clearTimeout(timeout);
-                socketService.off('host_reconnected', onReconnected);
-                socketService.off('error', onError);
-
-                updateState({
-                  roomPin: response.pin,
-                  isHost: true,
-                  hostToken: session.hostToken,
-                  gameState: response.state,
-                  currentQuestionIndex: response.currentQuestionIndex,
-                  isReconnecting: false,
-                });
-                showToast.success('Reconnected as host!');
-                resolve(response);
-              };
-
-              const onError = ({ error }) => {
-                clearTimeout(timeout);
-                socketService.off('host_reconnected', onReconnected);
-                socketService.off('error', onError);
-                reject(new Error(error));
-              };
-
-              socketService.on('host_reconnected', onReconnected);
-              socketService.on('error', onError);
-              socketService.emit('reconnect_host', { pin: session.pin, hostToken: session.hostToken });
-            });
-          }
+        if (session.role === 'host' && session.hostToken && getToken()) {
+          await reconnectHost(session.pin, session.hostToken);
+          updateState({ isReconnecting: false });
+          showToast.success('Reconnected as host!');
         } else if (session.role === 'player' && session.playerToken) {
-          await connectSocket();
-          setupSocketListeners();
-
-          return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              socketService.off('player_reconnected', onReconnected);
-              socketService.off('error', onError);
-              reject(new Error('Reconnection timed out'));
-            }, 10000);
-
-            const onReconnected = (response) => {
-              clearTimeout(timeout);
-              socketService.off('player_reconnected', onReconnected);
-              socketService.off('error', onError);
-
-              updateState({
-                roomPin: response.pin,
-                isHost: false,
-                playerId: response.playerId,
-                playerToken: response.playerToken,
-                nickname: response.nickname,
-                score: response.score,
-                gameState: response.state,
-                currentQuestionIndex: response.currentQuestionIndex,
-                isReconnecting: false,
-              });
-              showToast.success('Reconnected to game!');
-              resolve(response);
-            };
-
-            const onError = ({ error }) => {
-              clearTimeout(timeout);
-              socketService.off('player_reconnected', onReconnected);
-              socketService.off('error', onError);
-              reject(new Error(error));
-            };
-
-            socketService.on('player_reconnected', onReconnected);
-            socketService.on('error', onError);
-            socketService.emit('reconnect_player', { pin: session.pin, playerToken: session.playerToken });
-          });
+          await reconnectPlayer(session.pin, session.playerToken);
+          updateState({ isReconnecting: false });
+          showToast.success('Reconnected to game!');
         } else if (session.role === 'spectator' && session.spectatorToken) {
-          await connectSocket();
-          setupSocketListeners();
-
-          return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              socketService.off('spectator_reconnected', onReconnected);
-              socketService.off('error', onError);
-              reject(new Error('Reconnection timed out'));
-            }, 10000);
-
-            const onReconnected = (response) => {
-              clearTimeout(timeout);
-              socketService.off('spectator_reconnected', onReconnected);
-              socketService.off('error', onError);
-
-              updateState({
-                roomPin: response.pin,
-                isHost: false,
-                isSpectator: true,
-                spectatorId: response.spectatorId,
-                spectatorToken: response.spectatorToken,
-                nickname: response.nickname,
-                gameState: response.state,
-                isReconnecting: false,
-              });
-              showToast.success('Reconnected as spectator!');
-              resolve(response);
-            };
-
-            const onError = ({ error }) => {
-              clearTimeout(timeout);
-              socketService.off('spectator_reconnected', onReconnected);
-              socketService.off('error', onError);
-              reject(new Error(error));
-            };
-
-            socketService.on('spectator_reconnected', onReconnected);
-            socketService.on('error', onError);
-            socketService.emit('reconnect_spectator', { pin: session.pin, spectatorToken: session.spectatorToken });
-          });
+          await reconnectSpectator(session.pin, session.spectatorToken);
+          updateState({ isReconnecting: false });
+          showToast.success('Reconnected as spectator!');
         }
       } catch (error) {
         showToast.error('Failed to reconnect: ' + error.message);
@@ -1165,24 +995,21 @@ export function GameProvider({ children }) {
       }
     };
 
-    // Set up socket callbacks for auto-reconnection
     socketService.setReconnectCallback(() => {
       attemptReconnection();
     });
 
     socketService.setDisconnectCallback((reason) => {
-      // Only show disconnect message if we're in an active game
       if (state.roomPin && reason !== 'io client disconnect') {
         showToast.warning('Connection lost. Attempting to reconnect...');
       }
     });
 
-    // Try to reconnect on mount if we have a stored session
     const session = getSession();
     if (session && !state.roomPin) {
       attemptReconnection();
     }
-  }, [getToken, connectSocket, setupSocketListeners, updateState, state.roomPin]);
+  }, [getToken, reconnectHost, reconnectPlayer, reconnectSpectator, updateState, state.roomPin]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1206,6 +1033,7 @@ export function GameProvider({ children }) {
     startGame,
     startAnswering,
     submitAnswer,
+    usePowerUp,
     endAnswering,
     showLeaderboard,
     nextQuestion,
@@ -1227,9 +1055,17 @@ export function GameProvider({ children }) {
     // Ban management
     unbanNickname,
     getBannedNicknames,
+    // Team mode
+    enableTeamMode,
+    disableTeamMode,
+    addTeam,
+    removeTeam,
+    assignTeam,
     // Timer & Results
     requestTimerSync,
     getResults,
+    // Reactions
+    sendReaction,
     // Utils
     resetGame,
   };

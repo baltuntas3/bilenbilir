@@ -121,7 +121,7 @@ describe('GameUseCases', () => {
       await expect(gameUseCases.startAnsweringPhase({
         pin: roomPin,
         requesterId: 'player-socket-1'
-      })).rejects.toThrow('Only host can control game flow');
+      })).rejects.toThrow('Only host can perform this action');
     });
   });
 
@@ -553,13 +553,13 @@ describe('GameUseCases', () => {
     });
 
     it('should clean expired locks', async () => {
-      // Manually add an expired lock
-      gameUseCases.pendingAnswers.set('expired-key', Date.now() - 20000);
+      // Manually add an expired lock via internal map
+      gameUseCases.pendingAnswers.locks.set('expired-key', Date.now() - 20000);
 
       const result = gameUseCases.cleanupExpiredLocks();
 
       expect(result.pendingAnswers).toBe(1);
-      expect(gameUseCases.pendingAnswers.has('expired-key')).toBe(false);
+      expect(gameUseCases.pendingAnswers.locks.has('expired-key')).toBe(false);
     });
   });
 
@@ -755,9 +755,9 @@ describe('GameUseCases', () => {
     });
 
     it('should reject concurrent answer submissions from same player', async () => {
-      // Manually set a pending lock
+      // Manually set a pending lock via internal map
       const submissionKey = `${roomPin}:player-socket-1`;
-      gameUseCases.pendingAnswers.set(submissionKey, Date.now());
+      gameUseCases.pendingAnswers.locks.set(submissionKey, Date.now());
 
       await expect(gameUseCases.submitAnswer({
         pin: roomPin,
@@ -767,7 +767,7 @@ describe('GameUseCases', () => {
       })).rejects.toThrow('Answer submission in progress');
 
       // Cleanup
-      gameUseCases.pendingAnswers.delete(submissionKey);
+      gameUseCases.pendingAnswers.release(submissionKey);
     });
   });
 });

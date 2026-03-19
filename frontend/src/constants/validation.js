@@ -40,6 +40,36 @@ export const quizDescriptionValidation = (value) => {
   return null;
 };
 
+export const QUIZ_CATEGORIES = [
+  'Genel Kültür',
+  'Bilim',
+  'Tarih',
+  'Coğrafya',
+  'Spor',
+  'Sanat',
+  'Teknoloji',
+  'Eğlence',
+  'Müzik',
+  'Film & TV',
+  'Edebiyat',
+  'Diğer'
+];
+
+export const quizCategoryValidation = (value) => {
+  if (value && !QUIZ_CATEGORIES.includes(value)) return 'Invalid category';
+  return null;
+};
+
+export const quizTagsValidation = (value) => {
+  if (!value || !Array.isArray(value)) return null;
+  if (value.length > 5) return 'Maximum 5 tags allowed';
+  for (const tag of value) {
+    if (tag.length < 2) return 'Each tag must be at least 2 characters';
+    if (tag.length > 30) return 'Each tag must be at most 30 characters';
+  }
+  return null;
+};
+
 // Question validations
 export const questionTextValidation = (value) => {
   if (!value) return 'Question text is required';

@@ -13,6 +13,7 @@ export default function AnswerOptions({
   showResults,
   distribution,
   totalPlayers,
+  eliminatedOptions = [],
 }) {
   const getButtonVariant = (index) => {
     if (!showResults) {
@@ -63,15 +64,16 @@ export default function AnswerOptions({
       {options.map((option, index) => {
         const distInfo = getDistributionInfo(index);
         const isCorrect = index === correctIndex;
+        const isEliminated = eliminatedOptions.includes(index);
 
         return (
           <Button
             key={index}
             size="xl"
             variant={getButtonVariant(index)}
-            color={getButtonColor(index)}
+            color={isEliminated ? 'gray' : getButtonColor(index)}
             onClick={() => onSelect(index)}
-            disabled={disabled || selectedIndex !== null}
+            disabled={disabled || selectedIndex !== null || isEliminated}
             leftSection={
               <Text fw={700} size="lg">
                 {OPTION_LABELS[index]}
@@ -82,6 +84,7 @@ export default function AnswerOptions({
               root: {
                 height: 'auto',
                 padding: '1rem',
+                opacity: isEliminated ? 0.4 : 1,
               },
               inner: {
                 justifyContent: 'flex-start',
@@ -90,11 +93,12 @@ export default function AnswerOptions({
                 whiteSpace: 'normal',
                 textAlign: 'left',
                 flex: 1,
+                textDecoration: isEliminated ? 'line-through' : 'none',
               },
             }}
           >
             <Stack gap={4} style={{ width: '100%' }}>
-              <Text size="md" style={{ wordBreak: 'break-word' }}>
+              <Text size="md" style={{ wordBreak: 'break-word', textDecoration: isEliminated ? 'line-through' : 'none' }}>
                 {option}
               </Text>
               {distInfo && (

@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Container, Paper, Title, TextInput, PasswordInput, Button, Text, Anchor, Group, Stack } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { emailValidation, passwordValidation, usernameValidation, confirmPasswordValidation } from '../constants/validation';
@@ -9,6 +10,7 @@ import { emailValidation, passwordValidation, usernameValidation, confirmPasswor
 export default function Register() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const form = useForm({
     initialValues: {
@@ -35,45 +37,45 @@ export default function Register() {
 
   return (
     <Container size={420} my={40}>
-      <Title ta="center" mb="lg">Create Account</Title>
+      <Title ta="center" mb="lg">{t('auth.createAccount')}</Title>
 
       <Paper withBorder shadow="md" p={30} radius="md">
         <form onSubmit={form.onSubmit((values) => registerMutation.mutate(values))}>
           <Stack>
             <TextInput
-              label="Email"
+              label={t('auth.email')}
               placeholder="example@email.com"
               {...form.getInputProps('email')}
             />
 
             <TextInput
-              label="Username"
+              label={t('auth.username')}
               placeholder="username"
               {...form.getInputProps('username')}
             />
 
             <PasswordInput
-              label="Password"
+              label={t('auth.password')}
               placeholder="••••••••"
               {...form.getInputProps('password')}
             />
 
             <PasswordInput
-              label="Confirm Password"
+              label={t('auth.confirmPassword')}
               placeholder="••••••••"
               {...form.getInputProps('confirmPassword')}
             />
 
             <Button type="submit" fullWidth loading={registerMutation.isPending}>
-              Sign Up
+              {t('auth.signUp')}
             </Button>
           </Stack>
         </form>
 
         <Group justify="center" mt="md" gap="xs">
-          <Text size="sm">Already have an account?</Text>
+          <Text size="sm">{t('auth.hasAccount')}</Text>
           <Anchor component={Link} to="/login" size="sm">
-            Sign In
+            {t('auth.signIn')}
           </Anchor>
         </Group>
       </Paper>

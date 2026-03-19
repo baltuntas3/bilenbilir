@@ -1,38 +1,13 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { UnauthorizedError } = require('../../shared/errors');
-const { socketRateLimiter } = require('../middlewares/socketRateLimiter');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO } = require('./socketHandlerUtils');
 
 /**
  * Game WebSocket Handler
  * Handles game flow: start, questions, answers, results
  */
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
-  /**
-   * Rate limit check helper
-   * @private
-   */
-  const checkRateLimit = (eventName) => {
-    const result = socketRateLimiter.checkLimit(socket.id, eventName);
-    if (!result.allowed) {
-      socket.emit('error', {
-        error: 'Too many requests',
-        retryAfter: result.retryAfter
-      });
-      return false;
-    }
-    return true;
-  };
-  /**
-   * Ensure socket is authenticated (has valid JWT)
-   * Required for host operations
-   * @private
-   */
-  const requireAuth = () => {
-    if (!socket.isAuthenticated || !socket.user) {
-      throw new UnauthorizedError('Authentication required for this action');
-    }
-    return socket.user;
-  };
+  const checkRateLimit = createRateLimiter(socket);
+  const requireAuth = createAuthChecker(socket);
 
   // Host starts the game (requires authentication)
   socket.on('start_game', async (data) => {
@@ -41,11 +16,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       if (!checkRateLimit('start_game')) return;
 
       requireAuth(); // JWT required for host
-      const { pin } = data || {};
+      const { pin, questionCount } = data || {};
 
       const result = await gameUseCases.startGame({
         pin,
-        requesterId: socket.id
+        requesterId: socket.id,
+        questionCount: questionCount ? parseInt(questionCount, 10) : undefined
       });
 
       // Send to host with full question data
@@ -58,14 +34,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Send to players without answer
       socket.to(pin).emit('game_started', {
         totalQuestions: result.totalQuestions,
-        currentQuestion: result.currentQuestion ? {
-          text: result.currentQuestion.text,
-          type: result.currentQuestion.type,
-          options: result.currentQuestion.options,
-          timeLimit: result.currentQuestion.timeLimit,
-          points: result.currentQuestion.points,
-          imageUrl: result.currentQuestion.imageUrl
-        } : null,
+        currentQuestion: toPlayerQuestionDTO(result.currentQuestion),
         questionIndex: 0
       });
     } catch (error) {
@@ -135,32 +104,11 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Elapsed time MUST be calculated server-side to prevent manipulation
       // Client could send fake elapsedTimeMs to get maximum score
 
-      // Check if timer has expired (server-side validation)
-      if (timerService.isTimeExpired(pin)) {
-        socket.emit('error', { error: 'Time expired' });
-        return;
-      }
-
-      // Use server-side elapsed time (NEVER trust client-provided time)
-      let elapsedTimeMs = timerService.getElapsedTime(pin);
-
-      // Validate elapsed time - if null, timer doesn't exist
-      if (elapsedTimeMs === null) {
-        socket.emit('error', { error: 'No active timer for this room' });
-        return;
-      }
-
-      // Cap elapsed time at timer's configured duration to handle edge cases
-      // where submission comes in just as timer expires
-      const timerSync = timerService.getTimerSync(pin);
-      if (timerSync && timerSync.totalTimeMs) {
-        elapsedTimeMs = Math.min(elapsedTimeMs, timerSync.totalTimeMs);
-      }
-
-      // Re-check timer expiration just before submission to minimize race window
-      // This double-check reduces (but doesn't eliminate) the race condition window
-      if (timerService.isTimeExpired(pin)) {
-        socket.emit('error', { error: 'Time expired' });
+      let elapsedTimeMs;
+      try {
+        elapsedTimeMs = gameUseCases.getServerElapsedTime(timerService, pin);
+      } catch (err) {
+        socket.emit('error', { error: err.message });
         return;
       }
 
@@ -257,13 +205,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         requesterId: socket.id
       });
 
-      io.to(pin).emit('leaderboard', {
-        leaderboard: result.leaderboard.map(p => ({
-          id: p.id,
-          nickname: p.nickname,
-          score: p.score
-        }))
-      });
+      const leaderboardPayload = {
+        leaderboard: result.leaderboard.map(toPlayerDTO)
+      };
+      if (result.teamLeaderboard) {
+        leaderboardPayload.teamLeaderboard = result.teamLeaderboard;
+      }
+      io.to(pin).emit('leaderboard', leaderboardPayload);
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -284,13 +232,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       });
 
       if (result.isGameOver) {
-        io.to(pin).emit('game_over', {
-          podium: result.podium.map(p => ({
-            id: p.id,
-            nickname: p.nickname,
-            score: p.score
-          }))
-        });
+        const gameOverPayload = {
+          podium: result.podium.map(toPlayerDTO)
+        };
+        if (result.teamPodium) {
+          gameOverPayload.teamPodium = result.teamPodium;
+        }
+        io.to(pin).emit('game_over', gameOverPayload);
 
         try {
           await gameUseCases.archiveGame({ pin });
@@ -309,14 +257,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         socket.to(pin).emit('question_intro', {
           questionIndex: result.questionIndex,
           totalQuestions: result.totalQuestions,
-          currentQuestion: result.currentQuestion ? {
-            text: result.currentQuestion.text,
-            type: result.currentQuestion.type,
-            options: result.currentQuestion.options,
-            timeLimit: result.currentQuestion.timeLimit,
-            points: result.currentQuestion.points,
-            imageUrl: result.currentQuestion.imageUrl
-          } : null
+          currentQuestion: toPlayerQuestionDTO(result.currentQuestion)
         });
       }
     } catch (error) {
@@ -331,18 +272,17 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       const result = await gameUseCases.getResults({ pin });
 
-      socket.emit('final_results', {
-        leaderboard: result.leaderboard.map(p => ({
-          id: p.id,
-          nickname: p.nickname,
-          score: p.score
-        })),
-        podium: result.podium.map(p => ({
-          id: p.id,
-          nickname: p.nickname,
-          score: p.score
-        }))
-      });
+      const finalResultsPayload = {
+        leaderboard: result.leaderboard.map(toPlayerDTO),
+        podium: result.podium.map(toPlayerDTO)
+      };
+      if (result.teamLeaderboard) {
+        finalResultsPayload.teamLeaderboard = result.teamLeaderboard;
+      }
+      if (result.teamPodium) {
+        finalResultsPayload.teamPodium = result.teamPodium;
+      }
+      socket.emit('final_results', finalResultsPayload);
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -360,6 +300,42 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       } else {
         socket.emit('timer_sync', { active: false });
       }
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // ==================== POWER-UP EVENTS ====================
+
+  socket.on('use_power_up', async (data) => {
+    try {
+      if (!checkRateLimit('use_power_up')) return;
+
+      const { pin, powerUpType } = data || {};
+
+      const result = await gameUseCases.usePowerUp({
+        pin,
+        socketId: socket.id,
+        powerUpType
+      });
+
+      if (powerUpType === 'FIFTY_FIFTY') {
+        socket.emit('fifty_fifty_result', { eliminatedOptions: result.eliminatedOptions });
+      } else if (powerUpType === 'DOUBLE_POINTS') {
+        socket.emit('power_up_activated', { type: 'DOUBLE_POINTS' });
+      } else if (powerUpType === 'TIME_EXTENSION') {
+        // Extend time for the entire room
+        timerService.extendTimer(pin, 10000);
+        socket.emit('power_up_activated', { type: 'TIME_EXTENSION' });
+        // Notify all clients in the room about the time extension
+        io.to(pin).emit('time_extended', { extraTimeMs: 10000 });
+      }
+
+      // Broadcast to room that a player used a power-up
+      io.to(pin).emit('power_up_used', {
+        nickname: result.nickname,
+        powerUpType
+      });
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -407,6 +383,69 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       io.to(pin).emit('game_resumed', {
         state: result.resumedState,
         pauseDuration: result.pauseDuration
+      });
+    } catch (error) {
+      handleSocketError(socket, error);
+    }
+  });
+
+  // ==================== LIVE REACTIONS ====================
+
+  const ALLOWED_REACTIONS = ['\u{1F44F}', '\u{1F389}', '\u{1F62E}', '\u{1F602}', '\u{1F525}', '\u{2764}\u{FE0F}', '\u{1F44D}', '\u{1F4AF}'];
+
+  // Per-socket reaction rate limiter: max 3 per 5 seconds
+  const reactionTimestamps = [];
+
+  socket.on('send_reaction', async (data) => {
+    try {
+      const { pin, reaction } = data || {};
+
+      if (!pin || !reaction) return;
+      if (!ALLOWED_REACTIONS.includes(reaction)) return;
+
+      // Verify socket is in the room
+      const rooms = socket.rooms;
+      if (!rooms || !rooms.has(pin)) return;
+
+      // Rate limit: max 3 reactions per 5 seconds
+      const now = Date.now();
+      // Remove timestamps older than 5 seconds
+      while (reactionTimestamps.length > 0 && now - reactionTimestamps[0] > 5000) {
+        reactionTimestamps.shift();
+      }
+      if (reactionTimestamps.length >= 3) {
+        socket.emit('error', { error: 'Too many reactions, please wait' });
+        return;
+      }
+      reactionTimestamps.push(now);
+
+      // Look up nickname from room (player, spectator, or host)
+      let nickname = 'Anonymous';
+      try {
+        const room = await gameUseCases.roomRepository.findByPin(pin);
+        if (room) {
+          const player = room.getPlayer(socket.id);
+          if (player) {
+            nickname = player.nickname;
+          } else if (room.isHost(socket.id)) {
+            nickname = 'Host';
+          } else {
+            // Check spectators
+            const spectator = room.getSpectator?.(socket.id);
+            if (spectator) {
+              nickname = spectator.nickname;
+            }
+          }
+        }
+      } catch {
+        // If lookup fails, use fallback nickname
+      }
+
+      // Broadcast to entire room (including sender)
+      io.to(pin).emit('reaction_received', {
+        nickname,
+        reaction,
+        timestamp: now
       });
     } catch (error) {
       handleSocketError(socket, error);

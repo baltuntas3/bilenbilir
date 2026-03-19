@@ -42,6 +42,21 @@ const questionSchema = new mongoose.Schema({
   }
 }, { _id: true });
 
+const QUIZ_CATEGORIES = [
+  'Genel Kültür',
+  'Bilim',
+  'Tarih',
+  'Coğrafya',
+  'Spor',
+  'Sanat',
+  'Teknoloji',
+  'Eğlence',
+  'Müzik',
+  'Film & TV',
+  'Edebiyat',
+  'Diğer'
+];
+
 const quizSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -53,6 +68,21 @@ const quizSchema = new mongoose.Schema({
     type: String,
     default: '',
     maxlength: 500
+  },
+  category: {
+    type: String,
+    enum: QUIZ_CATEGORIES,
+    default: 'Diğer'
+  },
+  tags: {
+    type: [String],
+    default: [],
+    validate: {
+      validator: function(v) {
+        return v.length <= 5;
+      },
+      message: 'Quiz cannot have more than 5 tags'
+    }
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -85,6 +115,8 @@ const quizSchema = new mongoose.Schema({
 quizSchema.index({ createdBy: 1 });
 quizSchema.index({ isPublic: 1 });
 quizSchema.index({ createdAt: -1 });
+quizSchema.index({ category: 1 });
+quizSchema.index({ tags: 1 });
 
 // Virtual for question count
 quizSchema.virtual('questionCount').get(function() {
@@ -97,4 +129,4 @@ quizSchema.set('toObject', { virtuals: true });
 
 const Quiz = mongoose.model('Quiz', quizSchema);
 
-module.exports = { Quiz, quizSchema, questionSchema };
+module.exports = { Quiz, quizSchema, questionSchema, QUIZ_CATEGORIES };

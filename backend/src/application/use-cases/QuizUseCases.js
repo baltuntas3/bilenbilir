@@ -37,13 +37,15 @@ class QuizUseCases {
   /**
    * Create a new quiz
    */
-  async createQuiz({ title, description, createdBy, isPublic = false }) {
+  async createQuiz({ title, description, createdBy, isPublic = false, category, tags }) {
     const quiz = new Quiz({
       id: generateId(),
       title,
       description,
       createdBy,
-      isPublic
+      isPublic,
+      category,
+      tags
     });
     const savedQuiz = await this.quizRepository.save(quiz);
     return { quiz: savedQuiz };
@@ -98,23 +100,44 @@ class QuizUseCases {
   }
 
   /**
-   * Get all public quizzes with pagination
+   * Get all public quizzes with pagination, optionally filtered by category
    */
-  async getPublicQuizzes({ page = 1, limit = 20 } = {}) {
-    const result = await this.quizRepository.findPublic({ page, limit });
+  async getPublicQuizzes({ page = 1, limit = 20, category } = {}) {
+    const result = await this.quizRepository.findPublic({ page, limit, category });
+    return result;
+  }
+
+  /**
+   * Get public quizzes by category
+   */
+  async getQuizzesByCategory({ category, page = 1, limit = 20 }) {
+    const result = await this.quizRepository.findByCategory(category, { page, limit });
+    return result;
+  }
+
+  /**
+   * Search public quizzes by tags
+   */
+  async searchByTags({ tags, page = 1, limit = 20 }) {
+    if (!Array.isArray(tags) || tags.length === 0) {
+      throw new ValidationError('At least one tag is required');
+    }
+    const result = await this.quizRepository.findByTags(tags, { page, limit });
     return result;
   }
 
   /**
    * Update quiz details
    */
-  async updateQuiz({ quizId, title, description, isPublic, requesterId }) {
+  async updateQuiz({ quizId, title, description, isPublic, category, tags, requesterId }) {
     const quiz = await this._getQuizOrThrow(quizId);
     this._validateQuizOwnership(quiz, requesterId);
 
     if (title !== undefined) quiz.updateTitle(title);
     if (description !== undefined) quiz.updateDescription(description);
     if (isPublic !== undefined) quiz.setPublic(isPublic);
+    if (category !== undefined) quiz.updateCategory(category);
+    if (tags !== undefined) quiz.setTags(tags);
 
     const savedQuiz = await this.quizRepository.save(quiz);
     return { quiz: savedQuiz };
@@ -224,6 +247,8 @@ class QuizUseCases {
       quiz: {
         title: quiz.title,
         description: quiz.description || '',
+        category: quiz.category || 'Diğer',
+        tags: quiz.tags || [],
         questions: quiz.questions.map(q => ({
           text: q.text,
           type: q.type,
@@ -315,7 +340,9 @@ class QuizUseCases {
       title: quizData.title,
       description: quizData.description || '',
       createdBy: requesterId,
-      isPublic
+      isPublic,
+      category: quizData.category,
+      tags: quizData.tags
     });
 
     // Add questions

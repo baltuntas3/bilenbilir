@@ -1,5 +1,6 @@
 const { BaseParticipant, TOKEN_EXPIRATION_MS } = require('./BaseParticipant');
 const { Score } = require('../value-objects/Score');
+const { PowerUpType, DEFAULT_POWER_UPS } = require('../value-objects/PowerUp');
 const { ValidationError, ForbiddenError } = require('../../shared/errors');
 
 // Maximum streak to prevent overflow
@@ -21,15 +22,19 @@ class Player extends BaseParticipant {
     this.correctAnswers = correctAnswers;
     this.longestStreak = longestStreak;
     this.answerAttempt = null; // Current question's answer attempt
+
+    // Power-up state
+    this.powerUps = { ...DEFAULT_POWER_UPS };
+    this.activePowerUp = null; // Currently active power-up for current question
   }
 
-  // Player-specific token property (maintains backward compatibility)
+  // Player-specific token property (backward compatibility, delegates to base)
   get playerToken() {
-    return this._token;
+    return this.token;
   }
 
   set playerToken(value) {
-    this._token = value;
+    this.token = value;
   }
 
   get score() {
@@ -87,10 +92,66 @@ class Player extends BaseParticipant {
 
   clearAnswerAttempt() {
     this.answerAttempt = null;
+    this.clearActivePowerUp();
   }
 
   hasAnswered() {
     return this.answerAttempt !== null;
+  }
+
+  // ==================== POWER-UP METHODS ====================
+
+  /**
+   * Get remaining count for a power-up type
+   * @param {string} type - PowerUpType
+   * @returns {number}
+   */
+  getPowerUpCount(type) {
+    if (!PowerUpType[type]) {
+      throw new ValidationError(`Invalid power-up type: ${type}`);
+    }
+    return this.powerUps[type] || 0;
+  }
+
+  /**
+   * Get a copy of all power-ups
+   * @returns {Object}
+   */
+  getAllPowerUps() {
+    return { ...this.powerUps };
+  }
+
+  /**
+   * Use a power-up: validates, decrements count, sets as active
+   * @param {string} type - PowerUpType
+   * @returns {string} The power-up type used
+   */
+  usePowerUp(type) {
+    if (!PowerUpType[type]) {
+      throw new ValidationError(`Invalid power-up type: ${type}`);
+    }
+    if ((this.powerUps[type] || 0) <= 0) {
+      throw new ValidationError(`No ${type} power-up remaining`);
+    }
+    this.powerUps[type]--;
+    this.activePowerUp = type;
+    return type;
+  }
+
+  /**
+   * Check if a specific power-up type is currently active
+   * @param {string} type - PowerUpType
+   * @returns {boolean}
+   */
+  hasActivePowerUp(type) {
+    return this.activePowerUp === type;
+  }
+
+  /**
+   * Clear the active power-up
+   */
+  clearActivePowerUp() {
+    this.activePowerUp = null;
   }
 
   /**

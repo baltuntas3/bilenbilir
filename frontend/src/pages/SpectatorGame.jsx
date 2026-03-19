@@ -13,12 +13,15 @@ import {
   Progress,
   ThemeIcon,
 } from '@mantine/core';
-import { IconDoorExit, IconCheck, IconEye, IconPlayerPause, IconUsers } from '@tabler/icons-react';
+import { IconDoorExit, IconEye, IconPlayerPause, IconUsers } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
 import Leaderboard from '../components/game/Leaderboard';
 import Podium from '../components/game/Podium';
+import ReactionOverlay from '../components/game/ReactionOverlay';
+import ReactionPicker from '../components/game/ReactionPicker';
+import AnswerDistribution from '../components/game/AnswerDistribution';
 
 export default function SpectatorGame() {
   const navigate = useNavigate();
@@ -39,6 +42,9 @@ export default function SpectatorGame() {
     answerDistribution,
     answeredCount,
     leaveRoom,
+    teamMode,
+    teamLeaderboard,
+    teamPodium,
   } = useGame();
 
   // Redirect if not a spectator
@@ -149,7 +155,6 @@ export default function SpectatorGame() {
         );
 
       case GAME_STATES.SHOW_RESULTS:
-        const totalPlayerCount = answeredCount || connectedPlayers.length;
         return (
           <Stack gap="xl">
             <QuestionDisplay
@@ -159,47 +164,12 @@ export default function SpectatorGame() {
             />
 
             {/* Answer distribution */}
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              {currentQuestion?.options?.map((option, index) => {
-                const count = answerDistribution?.[index] || 0;
-                const percentage = totalPlayerCount > 0
-                  ? Math.round((count / totalPlayerCount) * 100)
-                  : 0;
-                const isCorrect = index === correctAnswerIndex;
-
-                return (
-                  <Paper
-                    key={index}
-                    p="md"
-                    radius="md"
-                    withBorder
-                    style={{
-                      borderColor: isCorrect ? 'var(--mantine-color-green-5)' : undefined,
-                      borderWidth: isCorrect ? 2 : 1,
-                      backgroundColor: isCorrect ? 'var(--mantine-color-green-0)' : undefined,
-                    }}
-                  >
-                    <Stack gap="xs">
-                      <Group justify="space-between">
-                        <Group gap="sm">
-                          <Badge color={isCorrect ? 'green' : 'gray'}>
-                            {String.fromCharCode(65 + index)}
-                          </Badge>
-                          <Text size="sm">{option}</Text>
-                          {isCorrect && <IconCheck size={16} color="var(--mantine-color-green-6)" />}
-                        </Group>
-                        <Badge variant="light">{count} ({percentage}%)</Badge>
-                      </Group>
-                      <Progress
-                        value={percentage}
-                        color={isCorrect ? 'green' : 'gray'}
-                        size="sm"
-                      />
-                    </Stack>
-                  </Paper>
-                );
-              })}
-            </SimpleGrid>
+            <AnswerDistribution
+              distribution={answerDistribution}
+              correctAnswerIndex={correctAnswerIndex}
+              totalPlayers={players.length || answeredCount}
+              options={currentQuestion?.options}
+            />
           </Stack>
         );
 
@@ -208,6 +178,8 @@ export default function SpectatorGame() {
           <Stack gap="xl">
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
+              teamMode={teamMode}
+              teamLeaderboard={teamLeaderboard}
             />
             <Center>
               <Text c="dimmed">Waiting for next question...</Text>
@@ -232,6 +204,8 @@ export default function SpectatorGame() {
 
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
+              teamMode={teamMode}
+              teamLeaderboard={teamLeaderboard}
             />
           </Stack>
         );
@@ -241,6 +215,8 @@ export default function SpectatorGame() {
           <Stack gap="xl">
             <Podium
               players={podium.length > 0 ? podium : players}
+              teamMode={teamMode}
+              teamPodium={teamPodium}
             />
 
             <Center>
@@ -270,30 +246,34 @@ export default function SpectatorGame() {
   }
 
   return (
-    <Container size="md" py="xl">
-      <Stack gap="xl">
-        {/* Header */}
-        <Paper p="sm" radius="md" withBorder>
-          <Group justify="space-between">
-            <Group gap="md">
-              <Badge size="lg" color="blue" variant="light" leftSection={<IconEye size={14} />}>
-                Spectator: {nickname}
-              </Badge>
-              <Badge size="lg" variant="light">
-                {connectedPlayers.length} players
-              </Badge>
+    <>
+      <ReactionOverlay />
+      <Container size="md" py="xl" pb={80}>
+        <Stack gap="xl">
+          {/* Header */}
+          <Paper p="sm" radius="md" withBorder>
+            <Group justify="space-between">
+              <Group gap="md">
+                <Badge size="lg" color="blue" variant="light" leftSection={<IconEye size={14} />}>
+                  Spectator: {nickname}
+                </Badge>
+                <Badge size="lg" variant="light">
+                  {connectedPlayers.length} players
+                </Badge>
+              </Group>
+              {gameState !== GAME_STATES.WAITING_PLAYERS && (
+                <Badge size="lg">
+                  {currentQuestionIndex + 1} / {totalQuestions}
+                </Badge>
+              )}
             </Group>
-            {gameState !== GAME_STATES.WAITING_PLAYERS && (
-              <Badge size="lg">
-                {currentQuestionIndex + 1} / {totalQuestions}
-              </Badge>
-            )}
-          </Group>
-        </Paper>
+          </Paper>
 
-        {/* Main content */}
-        {renderContent()}
-      </Stack>
-    </Container>
+          {/* Main content */}
+          {renderContent()}
+        </Stack>
+      </Container>
+      <ReactionPicker />
+    </>
   );
 }

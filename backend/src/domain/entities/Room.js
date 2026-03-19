@@ -7,6 +7,7 @@
 const { PIN } = require('../value-objects/PIN');
 const { Nickname } = require('../value-objects/Nickname');
 const { ValidationError, ForbiddenError, UnauthorizedError, ConflictError } = require('../../shared/errors');
+const { MAX_TEAMS } = require('./Team');
 
 const MAX_PLAYERS = 50;
 const MAX_SPECTATORS = 10;
@@ -64,6 +65,9 @@ class Room {
     // Pause state tracking
     this.pausedAt = null;
     this.pausedFromState = null;
+    // Team mode
+    this.teams = [];
+    this.teamMode = false;
   }
 
   /**
@@ -475,6 +479,41 @@ class Room {
     return [...this.answerHistory];
   }
 
+  // ==================== POWER-UP METHODS ====================
+
+  /**
+   * Get indices of 2 random wrong options for 50:50 power-up
+   * @param {string} socketId - Player socket ID
+   * @param {number} correctAnswerIndex - Index of the correct answer
+   * @param {number} optionCount - Total number of options
+   * @returns {number[]} Array of 2 eliminated option indices
+   */
+  getFiftyFiftyOptions(socketId, correctAnswerIndex, optionCount) {
+    const player = this.getPlayer(socketId);
+    if (!player) {
+      throw new ValidationError('Player not found');
+    }
+    if (player.hasAnswered()) {
+      throw new ValidationError('Cannot use power-up after answering');
+    }
+
+    // Build list of wrong option indices
+    const wrongIndices = [];
+    for (let i = 0; i < optionCount; i++) {
+      if (i !== correctAnswerIndex) {
+        wrongIndices.push(i);
+      }
+    }
+
+    // Shuffle and pick 2
+    for (let i = wrongIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [wrongIndices[i], wrongIndices[j]] = [wrongIndices[j], wrongIndices[i]];
+    }
+
+    return wrongIndices.slice(0, 2);
+  }
+
   // ==================== KICK/BAN METHODS ====================
 
   /**
@@ -787,6 +826,142 @@ class Room {
   getPauseDuration() {
     if (!this.pausedAt) return 0;
     return Date.now() - this.pausedAt.getTime();
+  }
+
+  // ==================== TEAM MODE METHODS ====================
+
+  /**
+   * Enable team mode (only in WAITING_PLAYERS state)
+   */
+  enableTeamMode() {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Team mode can only be changed in lobby');
+    }
+    this.teamMode = true;
+  }
+
+  /**
+   * Disable team mode (only in WAITING_PLAYERS state)
+   * Clears all teams and player assignments
+   */
+  disableTeamMode() {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Team mode can only be changed in lobby');
+    }
+    this.teamMode = false;
+    this.teams = [];
+  }
+
+  /**
+   * Check if team mode is active
+   * @returns {boolean}
+   */
+  isTeamMode() {
+    return this.teamMode;
+  }
+
+  /**
+   * Add a team to the room
+   * @param {Team} team - Team entity to add
+   */
+  addTeam(team) {
+    if (this.teams.length >= MAX_TEAMS) {
+      throw new ValidationError(`Maximum ${MAX_TEAMS} teams allowed`);
+    }
+
+    // Check for unique team name (case-insensitive)
+    const nameExists = this.teams.some(
+      t => t.name.toLowerCase() === team.name.toLowerCase()
+    );
+    if (nameExists) {
+      throw new ConflictError('Team name already exists');
+    }
+
+    this.teams.push(team);
+  }
+
+  /**
+   * Remove a team from the room and unassign its players
+   * @param {string} teamId - Team ID to remove
+   */
+  removeTeam(teamId) {
+    const team = this.teams.find(t => t.id === teamId);
+    if (!team) {
+      throw new ValidationError('Team not found');
+    }
+    this.teams = this.teams.filter(t => t.id !== teamId);
+  }
+
+  /**
+   * Assign a player to a team
+   * @param {string} playerId - Player ID
+   * @param {string} teamId - Team ID
+   */
+  assignPlayerToTeam(playerId, teamId) {
+    const player = this.getPlayerById(playerId);
+    if (!player) {
+      throw new ValidationError('Player not found');
+    }
+
+    const team = this.teams.find(t => t.id === teamId);
+    if (!team) {
+      throw new ValidationError('Team not found');
+    }
+
+    // Remove player from any current team
+    for (const t of this.teams) {
+      t.removePlayer(playerId);
+    }
+
+    // Add player to new team
+    team.addPlayer(playerId);
+  }
+
+  /**
+   * Get the team a player belongs to
+   * @param {string} playerId - Player ID
+   * @returns {Team|null}
+   */
+  getTeamForPlayer(playerId) {
+    return this.teams.find(t => t.hasPlayer(playerId)) || null;
+  }
+
+  /**
+   * Get team leaderboard - teams sorted by total score (sum of member scores)
+   * @returns {Array<{id: string, name: string, color: string, score: number, playerCount: number}>}
+   */
+  getTeamLeaderboard() {
+    return this.teams
+      .map(team => {
+        const teamScore = team.playerIds.reduce((sum, pid) => {
+          const player = this.getPlayerById(pid);
+          return sum + (player ? player.score : 0);
+        }, 0);
+        return {
+          id: team.id,
+          name: team.name,
+          color: team.color,
+          score: teamScore,
+          playerCount: team.getPlayerCount()
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  /**
+   * Get top 3 teams (team podium)
+   * @returns {Array}
+   */
+  getTeamPodium() {
+    return this.getTeamLeaderboard().slice(0, 3);
+  }
+
+  /**
+   * Get a copy of all teams
+   * @returns {Team[]}
+   */
+  getAllTeams() {
+    return [...this.teams];
   }
 }
 

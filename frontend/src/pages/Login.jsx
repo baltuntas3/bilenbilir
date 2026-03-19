@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Container, Paper, Title, TextInput, PasswordInput, Button, Text, Anchor, Group, Stack } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { emailValidation, requiredPasswordValidation } from '../constants/validation';
@@ -9,6 +10,7 @@ import { emailValidation, requiredPasswordValidation } from '../constants/valida
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const form = useForm({
     initialValues: {
@@ -31,36 +33,36 @@ export default function Login() {
 
   return (
     <Container size={420} my={40}>
-      <Title ta="center" mb="lg">Sign In</Title>
+      <Title ta="center" mb="lg">{t('auth.signIn')}</Title>
 
       <Paper withBorder shadow="md" p={30} radius="md">
         <form onSubmit={form.onSubmit((values) => loginMutation.mutate(values))}>
           <Stack>
             <TextInput
-              label="Email"
+              label={t('auth.email')}
               placeholder="example@email.com"
               {...form.getInputProps('email')}
             />
 
             <PasswordInput
-              label="Password"
+              label={t('auth.password')}
               placeholder="••••••••"
               {...form.getInputProps('password')}
             />
 
             <Button type="submit" fullWidth loading={loginMutation.isPending}>
-              Sign In
+              {t('auth.signIn')}
             </Button>
           </Stack>
         </form>
 
         <Group justify="center" mt="md" gap="xs">
           <Anchor component={Link} to="/forgot-password" size="sm">
-            Forgot Password
+            {t('auth.forgotPassword')}
           </Anchor>
           <Text size="sm">•</Text>
           <Anchor component={Link} to="/register" size="sm">
-            Create Account
+            {t('auth.createAccount')}
           </Anchor>
         </Group>
       </Paper>

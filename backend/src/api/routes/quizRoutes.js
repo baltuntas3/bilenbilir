@@ -5,6 +5,7 @@ const { authenticate, optionalAuthenticate } = require('../middlewares/authMiddl
 const { ForbiddenError } = require('../../shared/errors');
 const { quizCreationLimiter, searchLimiter } = require('../middlewares/rateLimiter');
 const { ValidationError } = require('../../shared/errors');
+const { QUIZ_CATEGORIES } = require('../../infrastructure/db/models/Quiz');
 
 const router = express.Router();
 const quizUseCases = new QuizUseCases(mongoQuizRepository);
@@ -15,7 +16,7 @@ const quizUseCases = new QuizUseCases(mongoQuizRepository);
  */
 router.post('/', authenticate, quizCreationLimiter, async (req, res, next) => {
   try {
-    const { title, description, isPublic } = req.body;
+    const { title, description, isPublic, category, tags } = req.body;
 
     if (!title) {
       throw new ValidationError('Title is required');
@@ -25,7 +26,9 @@ router.post('/', authenticate, quizCreationLimiter, async (req, res, next) => {
       title,
       description,
       createdBy: req.user.id,
-      isPublic
+      isPublic,
+      category,
+      tags
     });
 
     res.status(201).json(result.quiz);
@@ -43,9 +46,33 @@ router.get('/', async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const { category } = req.query;
 
-    const result = await quizUseCases.getPublicQuizzes({ page, limit });
+    const result = await quizUseCases.getPublicQuizzes({ page, limit, category: category || undefined });
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/quizzes/categories
+ * Get list of available quiz categories
+ */
+router.get('/categories', (req, res) => {
+  res.json({ categories: QUIZ_CATEGORIES });
+});
+
+/**
+ * GET /api/quizzes/tags/popular
+ * Get popular tags from public quizzes
+ * Query params: limit (default 20, max 50)
+ */
+router.get('/tags/popular', async (req, res, next) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+    const tags = await mongoQuizRepository.getPopularTags(limit);
+    res.json({ tags });
   } catch (error) {
     next(error);
   }
@@ -127,13 +154,15 @@ router.get('/:id', optionalAuthenticate, async (req, res, next) => {
 router.put('/:id', authenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, description, isPublic } = req.body;
+    const { title, description, isPublic, category, tags } = req.body;
 
     const result = await quizUseCases.updateQuiz({
       quizId: id,
       title,
       description,
       isPublic,
+      category,
+      tags,
       requesterId: req.user.id
     });
 

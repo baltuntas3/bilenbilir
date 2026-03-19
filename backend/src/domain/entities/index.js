@@ -5,6 +5,7 @@ const { Question, QuestionType } = require('./Question');
 const { User } = require('./User');
 const { Spectator } = require('./Spectator');
 const { BaseParticipant } = require('./BaseParticipant');
+const { Team, TEAM_COLORS, MAX_TEAMS } = require('./Team');
 
 // Re-export Records for backward compatibility
 // Prefer importing directly from 'domain/records' for new code
@@ -21,6 +22,9 @@ module.exports = {
   User,
   Spectator,
   BaseParticipant,
+  Team,
+  TEAM_COLORS,
+  MAX_TEAMS,
   // Records (re-exported for backward compatibility)
   GameSession,
   GameSessionStatus,

@@ -1,16 +1,18 @@
 import { Link } from 'react-router-dom';
 import { Container, Title, Text, Stack, SimpleGrid, Card, Group } from '@mantine/core';
-import { IconSearch, IconPlus, IconList, IconUsers } from '@tabler/icons-react';
+import { IconSearch, IconPlus, IconList, IconUsers, IconChartBar } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   return (
     <Container size="lg" my={40}>
       <Stack align="center" gap="md" mb="xl">
-        <Title>Welcome, {user?.username}!</Title>
-        <Text c="dimmed">What would you like to do?</Text>
+        <Title>{t('home.welcome', { username: user?.username })}</Title>
+        <Text c="dimmed">{t('home.subtitle')}</Text>
       </Stack>
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
@@ -18,8 +20,8 @@ export default function Home() {
           <Group>
             <IconUsers size={32} stroke={1.5} />
             <div>
-              <Text fw={500}>Join Game</Text>
-              <Text size="sm" c="dimmed">Enter a game PIN to join</Text>
+              <Text fw={500}>{t('home.joinGame')}</Text>
+              <Text size="sm" c="dimmed">{t('home.joinGameDesc')}</Text>
             </div>
           </Group>
         </Card>
@@ -28,8 +30,8 @@ export default function Home() {
           <Group>
             <IconSearch size={32} stroke={1.5} />
             <div>
-              <Text fw={500}>Explore Quizzes</Text>
-              <Text size="sm" c="dimmed">Discover and play public quizzes</Text>
+              <Text fw={500}>{t('home.exploreQuizzes')}</Text>
+              <Text size="sm" c="dimmed">{t('home.exploreQuizzesDesc')}</Text>
             </div>
           </Group>
         </Card>
@@ -38,8 +40,8 @@ export default function Home() {
           <Group>
             <IconList size={32} stroke={1.5} />
             <div>
-              <Text fw={500}>My Quizzes</Text>
-              <Text size="sm" c="dimmed">Manage your created quizzes</Text>
+              <Text fw={500}>{t('home.myQuizzes')}</Text>
+              <Text size="sm" c="dimmed">{t('home.myQuizzesDesc')}</Text>
             </div>
           </Group>
         </Card>
@@ -48,8 +50,18 @@ export default function Home() {
           <Group>
             <IconPlus size={32} stroke={1.5} />
             <div>
-              <Text fw={500}>Create Quiz</Text>
-              <Text size="sm" c="dimmed">Create a new quiz</Text>
+              <Text fw={500}>{t('home.createQuiz')}</Text>
+              <Text size="sm" c="dimmed">{t('home.createQuizDesc')}</Text>
+            </div>
+          </Group>
+        </Card>
+
+        <Card component={Link} to="/stats" withBorder shadow="sm" padding="lg" style={{ textDecoration: 'none' }}>
+          <Group>
+            <IconChartBar size={32} stroke={1.5} />
+            <div>
+              <Text fw={500}>{t('home.gameStats')}</Text>
+              <Text size="sm" c="dimmed">{t('home.gameStatsDesc')}</Text>
             </div>
           </Group>
         </Card>

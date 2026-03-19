@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Container, Paper, Title, TextInput, PasswordInput, Button, Text, Stack, Group } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { showToast } from '../utils/toast';
@@ -11,6 +12,7 @@ import { usernameValidation, passwordValidation, requiredPasswordValidation, con
 export default function Profile() {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Profile Form
@@ -72,22 +74,22 @@ export default function Profile() {
 
   return (
     <Container size={600} my={40}>
-      <Title mb="lg">Profile Settings</Title>
+      <Title mb="lg">{t('profile.title')}</Title>
 
       {/* Profile Info Section */}
       <Paper withBorder shadow="md" p={30} radius="md" mb="lg">
-        <Title order={3} mb="md">Profile Information</Title>
-        <Text c="dimmed" size="sm" mb="md">Email: {user?.email}</Text>
+        <Title order={3} mb="md">{t('auth.profileInfo')}</Title>
+        <Text c="dimmed" size="sm" mb="md">{t('auth.email')}: {user?.email}</Text>
 
         <form onSubmit={profileForm.onSubmit((values) => updateProfileMutation.mutate(values))}>
           <Stack>
             <TextInput
-              label="Username"
+              label={t('auth.username')}
               {...profileForm.getInputProps('username')}
             />
 
             <Button type="submit" loading={updateProfileMutation.isPending}>
-              Update Profile
+              {t('auth.updateProfile')}
             </Button>
           </Stack>
         </form>
@@ -95,27 +97,27 @@ export default function Profile() {
 
       {/* Password Change Section */}
       <Paper withBorder shadow="md" p={30} radius="md" mb="lg">
-        <Title order={3} mb="md">Change Password</Title>
+        <Title order={3} mb="md">{t('auth.changePassword')}</Title>
 
         <form onSubmit={passwordForm.onSubmit((values) => changePasswordMutation.mutate(values))}>
           <Stack>
             <PasswordInput
-              label="Current Password"
+              label={t('auth.currentPassword')}
               {...passwordForm.getInputProps('currentPassword')}
             />
 
             <PasswordInput
-              label="New Password"
+              label={t('auth.newPassword')}
               {...passwordForm.getInputProps('newPassword')}
             />
 
             <PasswordInput
-              label="Confirm New Password"
+              label={t('auth.confirmNewPassword')}
               {...passwordForm.getInputProps('confirmNewPassword')}
             />
 
             <Button type="submit" loading={changePasswordMutation.isPending}>
-              Change Password
+              {t('auth.changePassword')}
             </Button>
           </Stack>
         </form>
@@ -123,21 +125,21 @@ export default function Profile() {
 
       {/* Delete Account Section */}
       <Paper withBorder shadow="md" p={30} radius="md" style={{ borderColor: 'var(--mantine-color-red-6)' }}>
-        <Title order={3} mb="md" c="red">Danger Zone</Title>
+        <Title order={3} mb="md" c="red">{t('profile.dangerZone')}</Title>
         <Text c="dimmed" size="sm" mb="md">
-          When you delete your account, all your data will be permanently deleted. This action cannot be undone.
+          {t('profile.dangerZoneDesc')}
         </Text>
 
         {!showDeleteConfirm ? (
           <Button color="red" variant="outline" onClick={() => setShowDeleteConfirm(true)}>
-            Delete My Account
+            {t('profile.deleteMyAccount')}
           </Button>
         ) : (
           <form onSubmit={deleteForm.onSubmit((values) => deleteAccountMutation.mutate(values))}>
             <Stack>
               <PasswordInput
-                label="Enter your password to confirm"
-                placeholder="Enter your password"
+                label={t('auth.enterPasswordToConfirm')}
+                placeholder={t('auth.enterPassword')}
                 {...deleteForm.getInputProps('password')}
               />
 
@@ -149,10 +151,10 @@ export default function Profile() {
                     deleteForm.reset();
                   }}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button color="red" type="submit" loading={deleteAccountMutation.isPending}>
-                  Permanently Delete Account
+                  {t('profile.permanentlyDelete')}
                 </Button>
               </Group>
             </Stack>
