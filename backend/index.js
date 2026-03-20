@@ -12,6 +12,7 @@ const { sanitize } = require('./src/api/middlewares/sanitizeMiddleware');
 const { emailService } = require('./src/infrastructure/services');
 
 const app = express();
+app.set('trust proxy', true);
 const server = http.createServer(app);
 
 // MongoDB connection
