@@ -42,8 +42,11 @@ class SocketService {
       auth,
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      pingTimeout: 60000,
+      pingInterval: 25000,
     });
 
     this.connectionPromise = new Promise((resolve, reject) => {
@@ -74,6 +77,7 @@ class SocketService {
     });
 
     this.socket.on('disconnect', (reason) => {
+      console.warn('[Socket] Disconnected:', reason);
       this.connectionPromise = null;
       if (this.disconnectCallback) {
         this.disconnectCallback(reason);
