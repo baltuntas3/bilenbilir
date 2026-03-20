@@ -2,9 +2,7 @@ const { BaseParticipant, TOKEN_EXPIRATION_MS } = require('./BaseParticipant');
 const { Score } = require('../value-objects/Score');
 const { PowerUpType, DEFAULT_POWER_UPS } = require('../value-objects/PowerUp');
 const { ValidationError, ForbiddenError } = require('../../shared/errors');
-
-// Maximum streak to prevent overflow
-const MAX_STREAK = 1000;
+const { MAX_STREAK } = require('../../shared/config/constants');
 
 /**
  * Player Entity
@@ -14,8 +12,8 @@ const MAX_STREAK = 1000;
 class Player extends BaseParticipant {
   static TOKEN_EXPIRATION_MS = TOKEN_EXPIRATION_MS;
 
-  constructor({ id, socketId, nickname, roomPin, playerToken = null, tokenCreatedAt = null, score = 0, streak = 0, correctAnswers = 0, longestStreak = 0, joinedAt = new Date() }) {
-    super({ id, socketId, nickname, roomPin, token: playerToken, tokenCreatedAt, joinedAt });
+  constructor({ id, socketId, nickname, roomPin, token = null, playerToken = null, tokenCreatedAt = null, score = 0, streak = 0, correctAnswers = 0, longestStreak = 0, joinedAt = new Date() }) {
+    super({ id, socketId, nickname, roomPin, token: token || playerToken, tokenCreatedAt, joinedAt });
 
     this._score = score instanceof Score ? score : new Score(score);
     this.streak = streak;
@@ -28,7 +26,7 @@ class Player extends BaseParticipant {
     this.activePowerUp = null; // Currently active power-up for current question
   }
 
-  // Player-specific token property (backward compatibility, delegates to base)
+  // Backward-compatible alias for token
   get playerToken() {
     return this.token;
   }
@@ -152,13 +150,6 @@ class Player extends BaseParticipant {
    */
   clearActivePowerUp() {
     this.activePowerUp = null;
-  }
-
-  /**
-   * Override reconnect to update playerToken alias
-   */
-  reconnect(newSocketId, newToken = null) {
-    super.reconnect(newSocketId, newToken);
   }
 
   /**

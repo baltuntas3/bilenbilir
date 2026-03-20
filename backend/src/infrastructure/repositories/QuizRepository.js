@@ -3,6 +3,8 @@
  * Used ONLY for unit tests - provides fast, isolated testing without MongoDB.
  * Production code uses MongoQuizRepository instead.
  */
+const { paginateArray } = require('../../shared/utils/pagination');
+
 class QuizRepository {
   constructor() {
     this.quizzes = new Map(); // id -> Quiz
@@ -28,25 +30,10 @@ class QuizRepository {
   async findByCreator(createdBy, { page = 1, limit = 20 } = {}) {
     const allQuizzes = [];
     for (const quiz of this.quizzes.values()) {
-      if (quiz.createdBy === createdBy) {
-        allQuizzes.push(quiz);
-      }
+      if (quiz.createdBy === createdBy) allQuizzes.push(quiz);
     }
-    // Apply pagination
-    const total = allQuizzes.length;
-    const skip = (page - 1) * limit;
-    const quizzes = allQuizzes.slice(skip, skip + limit);
-
-    return {
-      quizzes,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
-    };
+    const { items, pagination } = paginateArray(allQuizzes, { page, limit });
+    return { quizzes: items, pagination };
   }
 
   async findPublic({ page = 1, limit = 20, category } = {}) {
@@ -57,21 +44,8 @@ class QuizRepository {
         allQuizzes.push(quiz);
       }
     }
-    // Apply pagination
-    const total = allQuizzes.length;
-    const skip = (page - 1) * limit;
-    const quizzes = allQuizzes.slice(skip, skip + limit);
-
-    return {
-      quizzes,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
-    };
+    const { items, pagination } = paginateArray(allQuizzes, { page, limit });
+    return { quizzes: items, pagination };
   }
 
   async findByCategory(category, { page = 1, limit = 20 } = {}) {
@@ -86,20 +60,8 @@ class QuizRepository {
         allQuizzes.push(quiz);
       }
     }
-    const total = allQuizzes.length;
-    const skip = (page - 1) * limit;
-    const quizzes = allQuizzes.slice(skip, skip + limit);
-
-    return {
-      quizzes,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
-    };
+    const { items, pagination } = paginateArray(allQuizzes, { page, limit });
+    return { quizzes: items, pagination };
   }
 
   async delete(id) {
@@ -108,20 +70,8 @@ class QuizRepository {
 
   async getAll({ page = 1, limit = 100 } = {}) {
     const allQuizzes = Array.from(this.quizzes.values());
-    const total = allQuizzes.length;
-    const skip = (page - 1) * limit;
-    const quizzes = allQuizzes.slice(skip, skip + limit);
-
-    return {
-      quizzes,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
-    };
+    const { items, pagination } = paginateArray(allQuizzes, { page, limit });
+    return { quizzes: items, pagination };
   }
 
   async clear() {

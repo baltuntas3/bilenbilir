@@ -72,8 +72,8 @@ class RoomRepository {
     // Index all player tokens and socket IDs (skip expired tokens)
     for (const player of room.getAllPlayers()) {
       // Only index non-expired tokens
-      if (player.playerToken && !player.isTokenExpired()) {
-        this.playerTokenIndex.set(player.playerToken, pin);
+      if (player.token && !player.isTokenExpired()) {
+        this.playerTokenIndex.set(player.token, pin);
       }
       // Safe index with race condition prevention
       this._safeIndexSocket(player.socketId, pin);
@@ -82,8 +82,8 @@ class RoomRepository {
     // Index all spectator tokens and socket IDs (skip expired tokens)
     for (const spectator of room.getAllSpectators()) {
       // Only index non-expired tokens
-      if (spectator.spectatorToken && !spectator.isTokenExpired()) {
-        this.spectatorTokenIndex.set(spectator.spectatorToken, pin);
+      if (spectator.token && !spectator.isTokenExpired()) {
+        this.spectatorTokenIndex.set(spectator.token, pin);
       }
       // Safe index with race condition prevention
       this._safeIndexSocket(spectator.socketId, pin);
@@ -110,8 +110,8 @@ class RoomRepository {
 
     // Remove all player indexes
     for (const player of room.getAllPlayers()) {
-      if (player.playerToken) {
-        this.playerTokenIndex.delete(player.playerToken);
+      if (player.token) {
+        this.playerTokenIndex.delete(player.token);
       }
       if (player.socketId) {
         this.socketIdIndex.delete(player.socketId);
@@ -120,8 +120,8 @@ class RoomRepository {
 
     // Remove all spectator indexes
     for (const spectator of room.getAllSpectators()) {
-      if (spectator.spectatorToken) {
-        this.spectatorTokenIndex.delete(spectator.spectatorToken);
+      if (spectator.token) {
+        this.spectatorTokenIndex.delete(spectator.token);
       }
       if (spectator.socketId) {
         this.socketIdIndex.delete(spectator.socketId);

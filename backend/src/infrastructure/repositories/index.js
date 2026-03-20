@@ -4,6 +4,8 @@ const { MongoQuizRepository, mongoQuizRepository } = require('./MongoQuizReposit
 const { MongoUserRepository, mongoUserRepository } = require('./MongoUserRepository');
 const { AuditLogRepository, auditLogRepository } = require('./AuditLogRepository');
 const { QuizRatingRepository, quizRatingRepository } = require('./QuizRatingRepository');
+const { TournamentRepository, tournamentRepository } = require('./TournamentRepository');
+const { ClassroomRepository, classroomRepository } = require('./ClassroomRepository');
 
 module.exports = {
   RoomRepository,
@@ -17,5 +19,9 @@ module.exports = {
   AuditLogRepository,
   auditLogRepository,
   QuizRatingRepository,
-  quizRatingRepository
+  quizRatingRepository,
+  TournamentRepository,
+  tournamentRepository,
+  ClassroomRepository,
+  classroomRepository
 };

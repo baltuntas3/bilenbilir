@@ -1,7 +1,7 @@
 const express = require('express');
 const { authenticate } = require('../middlewares/authMiddleware');
 const { GameStatsUseCases } = require('../../application/use-cases');
-const { gameSessionRepository } = require('../../infrastructure/repositories');
+const { gameSessionRepository, mongoQuizRepository } = require('../../infrastructure/repositories');
 const { parsePagination } = require('../helpers/routeHelpers');
 
 const router = express.Router();
@@ -77,7 +77,6 @@ router.get('/sessions/:id', authenticate, async (req, res, next) => {
     let quizQuestions = null;
     if (session.quiz && session.quiz.id) {
       try {
-        const { mongoQuizRepository } = require('../../infrastructure/repositories');
         const fullQuiz = await mongoQuizRepository.findById(session.quiz.id);
         if (fullQuiz) {
           quizQuestions = fullQuiz.questions.map(q => ({
@@ -115,6 +114,51 @@ router.get('/sessions/:id', authenticate, async (req, res, next) => {
       status: session.status,
       overallAccuracy: session.getOverallAccuracy()
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/stats/weak-topics
+ * Get weak topics (quizzes with lowest accuracy) for the authenticated host
+ */
+router.get('/weak-topics', authenticate, async (req, res, next) => {
+  try {
+    const result = await gameStatsUseCases.getWeakTopics({ hostId: req.user.id });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/stats/player/:nickname
+ * Get detailed analytics for a specific player
+ */
+router.get('/player/:nickname', authenticate, async (req, res, next) => {
+  try {
+    const result = await gameStatsUseCases.getPlayerAnalytics({
+      hostId: req.user.id,
+      nickname: decodeURIComponent(req.params.nickname)
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/stats/quiz/:quizId/questions
+ * Get per-question analytics for a specific quiz
+ */
+router.get('/quiz/:quizId/questions', authenticate, async (req, res, next) => {
+  try {
+    const result = await gameStatsUseCases.getQuestionAnalytics({
+      hostId: req.user.id,
+      quizId: req.params.quizId
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }

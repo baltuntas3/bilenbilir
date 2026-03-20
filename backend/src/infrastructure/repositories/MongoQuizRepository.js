@@ -1,5 +1,7 @@
 const { Quiz: QuizModel } = require('../db/models');
 const { Quiz, Question } = require('../../domain/entities');
+const { sanitizePagination, buildPaginationResult } = require('../../shared/utils/pagination');
+const { MAX_RAW_QUERY_LENGTH, MAX_ESCAPED_QUERY_LENGTH } = require('../../shared/config/constants');
 
 /**
  * MongoDB Quiz Repository
@@ -80,7 +82,7 @@ class MongoQuizRepository {
       isPublic: doc.isPublic,
       playCount: doc.playCount || 0,
       createdAt: doc.createdAt,
-      category: doc.category || 'Diğer',
+      category: doc.category || 'Di\u011fer',
       tags: doc.tags || [],
       slug: doc.slug || null,
       averageRating: doc.averageRating || 0,
@@ -95,7 +97,7 @@ class MongoQuizRepository {
     const doc = {
       title: quiz.title,
       description: quiz.description,
-      category: quiz.category || 'Diğer',
+      category: quiz.category || 'Di\u011fer',
       tags: quiz.tags || [],
       createdBy: quiz.createdBy,
       questions: quiz.questions.map(q => ({
@@ -171,10 +173,7 @@ class MongoQuizRepository {
   }
 
   async findByCreator(createdBy, { page = 1, limit = 20 } = {}) {
-    // Validate pagination bounds to prevent DoS
-    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000)); // Max 1000 pages
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100)); // Max 100 per page
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = sanitizePagination({ page, limit });
 
     const [docs, total] = await Promise.all([
       QuizModel.find({ createdBy }).sort({ createdAt: -1 }).skip(skip).limit(safeLimit),
@@ -182,21 +181,12 @@ class MongoQuizRepository {
     ]);
     return {
       quizzes: docs.map(doc => this._toDomain(doc)),
-      pagination: {
-        page: safePage,
-        limit: safeLimit,
-        total,
-        totalPages: Math.ceil(total / safeLimit),
-        hasMore: safePage * safeLimit < total
-      }
+      pagination: buildPaginationResult(total, safePage, safeLimit)
     };
   }
 
   async findPublic({ page = 1, limit = 20, category } = {}) {
-    // Validate pagination bounds to prevent DoS
-    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000)); // Max 1000 pages
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100)); // Max 100 per page
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = sanitizePagination({ page, limit });
 
     const filter = { isPublic: true };
     if (category) {
@@ -209,13 +199,7 @@ class MongoQuizRepository {
     ]);
     return {
       quizzes: docs.map(doc => this._toDomain(doc)),
-      pagination: {
-        page: safePage,
-        limit: safeLimit,
-        total,
-        totalPages: Math.ceil(total / safeLimit),
-        hasMore: safePage * safeLimit < total
-      }
+      pagination: buildPaginationResult(total, safePage, safeLimit)
     };
   }
 
@@ -243,10 +227,7 @@ class MongoQuizRepository {
   }
 
   async getAll({ page = 1, limit = 100 } = {}) {
-    // Validate pagination bounds to prevent DoS
-    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000)); // Max 1000 pages
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 100)); // Max 100 per page
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = sanitizePagination({ page, limit });
 
     const [docs, total] = await Promise.all([
       QuizModel.find().sort({ createdAt: -1 }).skip(skip).limit(safeLimit),
@@ -254,13 +235,7 @@ class MongoQuizRepository {
     ]);
     return {
       quizzes: docs.map(doc => this._toDomain(doc)),
-      pagination: {
-        page: safePage,
-        limit: safeLimit,
-        total,
-        totalPages: Math.ceil(total / safeLimit),
-        hasMore: safePage * safeLimit < total
-      }
+      pagination: buildPaginationResult(total, safePage, safeLimit)
     };
   }
 
@@ -304,7 +279,6 @@ class MongoQuizRepository {
     }
 
     // Limit raw query length first
-    const MAX_RAW_QUERY_LENGTH = 100;
     const trimmedQuery = query.trim().slice(0, MAX_RAW_QUERY_LENGTH);
 
     if (trimmedQuery.length === 0) {
@@ -312,19 +286,14 @@ class MongoQuizRepository {
     }
 
     // Escape special regex characters BEFORE any further processing
-    // This prevents ReDoS attacks by converting all special chars to literals
     const escapedQuery = this._escapeRegex(trimmedQuery);
 
     // Limit escaped query length as well (escaping can increase length)
-    const MAX_ESCAPED_QUERY_LENGTH = 200;
     if (escapedQuery.length > MAX_ESCAPED_QUERY_LENGTH) {
       return { quizzes: [], pagination: { page, limit, total: 0, totalPages: 0, hasMore: false } };
     }
 
-    // Validate pagination bounds
-    const safePage = Math.max(1, Math.min(page, 1000)); // Max 1000 pages
-    const safeLimit = Math.max(1, Math.min(limit, 100)); // Max 100 per page
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = sanitizePagination({ page, limit });
 
     const searchRegex = new RegExp(escapedQuery, 'i');
 
@@ -344,15 +313,10 @@ class MongoQuizRepository {
 
     return {
       quizzes: docs.map(doc => this._toDomain(doc)),
-      pagination: {
-        page: safePage,
-        limit: safeLimit,
-        total,
-        totalPages: Math.ceil(total / safeLimit),
-        hasMore: safePage * safeLimit < total
-      }
+      pagination: buildPaginationResult(total, safePage, safeLimit)
     };
   }
+
   /**
    * Find public quizzes by category with pagination
    * @param {string} category - Category to filter by
@@ -360,9 +324,7 @@ class MongoQuizRepository {
    * @returns {Promise<{quizzes: Quiz[], pagination: Object}>}
    */
   async findByCategory(category, { page = 1, limit = 20 } = {}) {
-    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000));
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = sanitizePagination({ page, limit });
 
     const filter = { isPublic: true, category };
 
@@ -373,13 +335,7 @@ class MongoQuizRepository {
 
     return {
       quizzes: docs.map(doc => this._toDomain(doc)),
-      pagination: {
-        page: safePage,
-        limit: safeLimit,
-        total,
-        totalPages: Math.ceil(total / safeLimit),
-        hasMore: safePage * safeLimit < total
-      }
+      pagination: buildPaginationResult(total, safePage, safeLimit)
     };
   }
 
@@ -390,9 +346,7 @@ class MongoQuizRepository {
    * @returns {Promise<{quizzes: Quiz[], pagination: Object}>}
    */
   async findByTags(tags, { page = 1, limit = 20 } = {}) {
-    const safePage = Math.max(1, Math.min(Number(page) || 1, 1000));
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
-    const skip = (safePage - 1) * safeLimit;
+    const { page: safePage, limit: safeLimit, skip } = sanitizePagination({ page, limit });
 
     const normalizedTags = tags.map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
     const filter = { isPublic: true, tags: { $in: normalizedTags } };
@@ -404,13 +358,7 @@ class MongoQuizRepository {
 
     return {
       quizzes: docs.map(doc => this._toDomain(doc)),
-      pagination: {
-        page: safePage,
-        limit: safeLimit,
-        total,
-        totalPages: Math.ceil(total / safeLimit),
-        hasMore: safePage * safeLimit < total
-      }
+      pagination: buildPaginationResult(total, safePage, safeLimit)
     };
   }
 

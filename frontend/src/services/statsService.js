@@ -20,4 +20,19 @@ export const statsService = {
     const response = await api.get(`/stats/quiz/${quizId}`);
     return response.data;
   },
+
+  getPlayerAnalytics: async (nickname) => {
+    const response = await api.get(`/stats/player/${encodeURIComponent(nickname)}`);
+    return response.data;
+  },
+
+  getQuestionAnalytics: async (quizId) => {
+    const response = await api.get(`/stats/quiz/${quizId}/questions`);
+    return response.data;
+  },
+
+  getWeakTopics: async () => {
+    const response = await api.get('/stats/weak-topics');
+    return response.data;
+  },
 };

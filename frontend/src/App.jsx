@@ -8,9 +8,12 @@ import '@mantine/notifications/styles.css';
 
 import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
+import { RoomProvider } from './context/RoomContext';
+import { TimerProvider } from './context/TimerContext';
 import { GameProvider } from './context/GameContext';
 import AppRoutes from './routes';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import { theme } from './theme';
 
 export default function App() {
@@ -20,11 +23,17 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
-            <GameProvider>
-              <Layout>
-                <AppRoutes />
-              </Layout>
-            </GameProvider>
+            <RoomProvider>
+              <TimerProvider>
+                <GameProvider>
+                  <ErrorBoundary>
+                    <Layout>
+                      <AppRoutes />
+                    </Layout>
+                  </ErrorBoundary>
+                </GameProvider>
+              </TimerProvider>
+            </RoomProvider>
           </AuthProvider>
         </BrowserRouter>
       </QueryClientProvider>

@@ -1,0 +1,63 @@
+import { createContext, useContext, useState, useCallback, useRef } from 'react';
+
+const TimerContext = createContext(null);
+
+export function TimerProvider({ children }) {
+  const [remainingTime, setRemainingTime] = useState(0);
+  const [timeLimit, setTimeLimit] = useState(30);
+  const timerRef = useRef(null);
+  const endTimeRef = useRef(null);
+
+  const startTimer = useCallback((duration, endTime) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    endTimeRef.current = endTime;
+    setRemainingTime(duration);
+    setTimeLimit(duration);
+
+    timerRef.current = setInterval(() => {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
+      setRemainingTime(remaining);
+      if (remaining <= 0) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }, 100);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const extendTimer = useCallback((extraTimeMs) => {
+    if (endTimeRef.current) {
+      endTimeRef.current += extraTimeMs;
+    }
+  }, []);
+
+  const resetTimer = useCallback(() => {
+    stopTimer();
+    setRemainingTime(0);
+    setTimeLimit(30);
+  }, [stopTimer]);
+
+  const value = {
+    remainingTime,
+    timeLimit,
+    startTimer,
+    stopTimer,
+    extendTimer,
+    resetTimer,
+  };
+
+  return <TimerContext.Provider value={value}>{children}</TimerContext.Provider>;
+}
+
+export function useTimer() {
+  const context = useContext(TimerContext);
+  if (!context) throw new Error('useTimer must be used within a TimerProvider');
+  return context;
+}

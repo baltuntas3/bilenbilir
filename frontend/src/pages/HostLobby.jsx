@@ -45,6 +45,7 @@ import {
 import { useGame, GAME_STATES } from '../context/GameContext';
 import { showToast } from '../utils/toast';
 import PlayerAvatar from '../components/game/PlayerAvatar';
+import ShareButton from '../components/game/ShareButton';
 
 export default function HostLobby() {
   const { quizId } = useParams();
@@ -376,6 +377,7 @@ export default function HostLobby() {
             <Text c="dimmed" size="sm">
               Players join at <strong>bilenbilir.com/join</strong>
             </Text>
+            <ShareButton pin={roomPin} />
           </Stack>
         </Paper>
 

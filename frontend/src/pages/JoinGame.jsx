@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { TextInput, Button, Stack, Title, Text, Paper, Container, Center, PinInput, Group, Divider } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconUsers, IconEye } from '@tabler/icons-react';
@@ -12,10 +12,26 @@ export default function JoinGame() {
   const navigate = useNavigate();
   const { joinRoom, joinAsSpectator } = useGame();
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [spectatorLoading, setSpectatorLoading] = useState(false);
   const [step, setStep] = useState('pin'); // 'pin' or 'nickname'
   const [pin, setPin] = useState('');
+  const [autoSpectate, setAutoSpectate] = useState(false);
+
+  // Handle PIN and spectate mode from URL search params (share link / QR code)
+  useEffect(() => {
+    const pinFromUrl = searchParams.get('pin');
+    const spectateFromUrl = searchParams.get('spectate');
+
+    if (pinFromUrl && pinFromUrl.length === 6 && /^\d{6}$/.test(pinFromUrl)) {
+      setPin(pinFromUrl);
+      setStep('nickname');
+      if (spectateFromUrl === 'true') {
+        setAutoSpectate(true);
+      }
+    }
+  }, [searchParams]);
 
   const form = useForm({
     initialValues: {

@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate } = require('../middlewares/authMiddleware');
-const { gameSessionRepository } = require('../../infrastructure/repositories');
+const { gameSessionRepository, roomRepository } = require('../../infrastructure/repositories');
 const { NotFoundError } = require('../../shared/errors');
 const { parsePagination } = require('../helpers/routeHelpers');
 
@@ -63,6 +63,32 @@ router.get('/quiz/:quizId/history', authenticate, async (req, res, next) => {
         status: session.status
       })),
       pagination: result.pagination
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/games/join/:pin
+ * Get basic room info for joining via share link (public, no auth)
+ */
+router.get('/join/:pin', async (req, res, next) => {
+  try {
+    const { pin } = req.params;
+    const room = roomRepository.findByPin(pin);
+
+    if (!room) {
+      throw new NotFoundError('Room not found');
+    }
+
+    res.json({
+      pin: room.pin,
+      playerCount: room.getPlayerCount(),
+      maxPlayers: require('../../shared/config/constants').MAX_PLAYERS,
+      state: room.state,
+      quizTitle: room.getQuizSnapshot()?.title || null,
+      canJoin: room.state === 'WAITING_PLAYERS'
     });
   } catch (error) {
     next(error);

@@ -3,6 +3,7 @@ const { Quiz, quizSchema, questionSchema } = require('./Quiz');
 const { GameSession, gameSessionSchema } = require('./GameSession');
 const { AuditLog, auditLogSchema } = require('./AuditLog');
 const { QuizRating } = require('./QuizRating');
+const { Classroom, classroomSchema } = require('./Classroom');
 
 module.exports = {
   User,
@@ -14,5 +15,7 @@ module.exports = {
   gameSessionSchema,
   AuditLog,
   auditLogSchema,
-  QuizRating
+  QuizRating,
+  Classroom,
+  classroomSchema
 };

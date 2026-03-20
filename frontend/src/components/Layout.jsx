@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { AppShell, Group, Button, Title, Container, Menu, ActionIcon, Avatar, Text } from '@mantine/core';
-import { IconHome, IconUser, IconLogout, IconSettings } from '@tabler/icons-react';
+import { IconHome, IconUser, IconLogout, IconSettings, IconTrophy, IconSchool, IconChartBar } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import ThemeToggle from './ThemeToggle';
@@ -63,6 +63,27 @@ export default function Layout({ children }) {
                       leftSection={<IconSettings size={14} />}
                     >
                       {t('nav.profileSettings')}
+                    </Menu.Item>
+                    <Menu.Item
+                      component={Link}
+                      to="/tournaments"
+                      leftSection={<IconTrophy size={14} />}
+                    >
+                      Turnuvalar
+                    </Menu.Item>
+                    <Menu.Item
+                      component={Link}
+                      to="/classrooms"
+                      leftSection={<IconSchool size={14} />}
+                    >
+                      Sınıflar
+                    </Menu.Item>
+                    <Menu.Item
+                      component={Link}
+                      to="/analytics"
+                      leftSection={<IconChartBar size={14} />}
+                    >
+                      Analitik
                     </Menu.Item>
                     <Menu.Divider />
                     <Menu.Item

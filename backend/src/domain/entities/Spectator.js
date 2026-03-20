@@ -8,24 +8,17 @@ const { BaseParticipant, TOKEN_EXPIRATION_MS } = require('./BaseParticipant');
 class Spectator extends BaseParticipant {
   static TOKEN_EXPIRATION_MS = TOKEN_EXPIRATION_MS;
 
-  constructor({ id, socketId, nickname, roomPin, spectatorToken = null, tokenCreatedAt = null, joinedAt = new Date() }) {
-    super({ id, socketId, nickname, roomPin, token: spectatorToken, tokenCreatedAt, joinedAt });
+  constructor({ id, socketId, nickname, roomPin, token = null, spectatorToken = null, tokenCreatedAt = null, joinedAt = new Date() }) {
+    super({ id, socketId, nickname, roomPin, token: token || spectatorToken, tokenCreatedAt, joinedAt });
   }
 
-  // Spectator-specific token property (backward compatibility, delegates to base)
+  // Backward-compatible alias for token
   get spectatorToken() {
     return this.token;
   }
 
   set spectatorToken(value) {
     this.token = value;
-  }
-
-  /**
-   * Override reconnect to update spectatorToken alias
-   */
-  reconnect(newSocketId, newToken = null) {
-    super.reconnect(newSocketId, newToken);
   }
 
   /**

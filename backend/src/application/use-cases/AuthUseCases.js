@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { generateToken } = require('../../api/middlewares/authMiddleware');
 const { sanitizeEmail } = require('../../shared/utils/sanitize');
+const { validatePassword, validateUsername, validateEmail, validateRequired } = require('../../shared/utils/validators');
+const { BCRYPT_SALT_ROUNDS, PASSWORD_RESET_EXPIRY_MS } = require('../../shared/config/constants');
 const {
   ValidationError,
   UnauthorizedError,
@@ -28,13 +30,9 @@ class AuthUseCases {
    * @returns {Promise<{message: string, user: Object, token: string}>}
    */
   async register({ email, password, username }) {
-    if (!email || !password || !username) {
-      throw new ValidationError('Email, password, and username are required');
-    }
-
-    if (password.length < 6) {
-      throw new ValidationError('Password must be at least 6 characters');
-    }
+    validateRequired({ email, password, username });
+    validateEmail(email);
+    validatePassword(password);
 
     // Check if user already exists
     const existingUser = await this.userRepository.findByEmailOrUsername(email, username);
@@ -47,7 +45,7 @@ class AuthUseCases {
     }
 
     // Hash password
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user - handle race condition with duplicate key error
@@ -164,13 +162,7 @@ class AuthUseCases {
    * @returns {Promise<{message: string, user: Object}>}
    */
   async updateProfile(userId, { username }) {
-    if (!username) {
-      throw new ValidationError('Username is required');
-    }
-
-    if (username.length < 2 || username.length > 30) {
-      throw new ValidationError('Username must be between 2 and 30 characters');
-    }
+    validateUsername(username);
 
     // Check if username is already taken by another user
     const existingUser = await this.userRepository.findByUsernameExcluding(username, userId);
@@ -204,13 +196,10 @@ class AuthUseCases {
    * @returns {Promise<{message: string, warning?: string}>}
    */
   async changePassword(userId, { currentPassword, newPassword }) {
-    if (!currentPassword || !newPassword) {
-      throw new ValidationError('Current password and new password are required');
+    if (!currentPassword) {
+      throw new ValidationError('Current password is required');
     }
-
-    if (newPassword.length < 6) {
-      throw new ValidationError('New password must be at least 6 characters');
-    }
+    validatePassword(newPassword, 'New password');
 
     const user = await this.userRepository.findById(userId, { includePassword: true });
     if (!user) {
@@ -224,7 +213,7 @@ class AuthUseCases {
     }
 
     // Hash new password
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     await this.userRepository.updateById(userId, { password: hashedPassword });
@@ -275,10 +264,10 @@ class AuthUseCases {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-    // Set token and expiration (1 hour)
+    // Set token and expiration
     await this.userRepository.updateById(user.id, {
       passwordResetToken: hashedToken,
-      passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000)
+      passwordResetExpires: new Date(Date.now() + PASSWORD_RESET_EXPIRY_MS)
     });
 
     // Send password reset email
@@ -305,13 +294,10 @@ class AuthUseCases {
    * @returns {Promise<{message: string}>}
    */
   async resetPassword({ token, newPassword }) {
-    if (!token || !newPassword) {
-      throw new ValidationError('Token and new password are required');
+    if (!token) {
+      throw new ValidationError('Token is required');
     }
-
-    if (newPassword.length < 6) {
-      throw new ValidationError('Password must be at least 6 characters');
-    }
+    validatePassword(newPassword);
 
     // Hash the provided token to compare with stored hash
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
@@ -323,7 +309,7 @@ class AuthUseCases {
     }
 
     // Hash new password
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     // Update password and clear reset token

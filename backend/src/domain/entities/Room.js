@@ -7,11 +7,10 @@
 const { PIN } = require('../value-objects/PIN');
 const { Nickname } = require('../value-objects/Nickname');
 const { ValidationError, ForbiddenError, UnauthorizedError, ConflictError } = require('../../shared/errors');
-const { MAX_TEAMS } = require('./Team');
-
-const MAX_PLAYERS = 50;
-const MAX_SPECTATORS = 10;
-const MAX_STREAK = 1000; // Same as Player.js for consistency
+const { MAX_PLAYERS, MAX_SPECTATORS, MAX_STREAK } = require('../../shared/config/constants');
+const { SpectatorManager } = require('./SpectatorManager');
+const { TeamManager } = require('./TeamManager');
+const { PauseManager } = require('./PauseManager');
 
 const RoomState = {
   WAITING_PLAYERS: 'WAITING_PLAYERS',
@@ -53,7 +52,6 @@ class Room {
     this.currentQuestionIndex = currentQuestionIndex;
     this.createdAt = createdAt;
     this.players = [];
-    this.spectators = [];
     this.bannedNicknames = [];
     this.hostDisconnectedAt = null;
     // Track all answers for archiving
@@ -62,15 +60,20 @@ class Room {
     this.quizSnapshot = null;
     // Track when game actually started (for accurate archiving)
     this.gameStartedAt = null;
-    // Pause state tracking
-    this.pausedAt = null;
-    this.pausedFromState = null;
-    // Team mode
-    this.teams = [];
-    this.teamMode = false;
+    // Managers for delegated concerns
+    this._spectatorManager = new SpectatorManager();
+    this._teamManager = new TeamManager();
+    this._pauseManager = new PauseManager();
     // Lightning round
     this.lightningRound = { enabled: false, questionCount: 3 };
   }
+
+  // Backward compatibility getters for managers' internal state
+  get spectators() { return this._spectatorManager.spectators; }
+  get teams() { return this._teamManager.teams; }
+  get teamMode() { return this._teamManager.teamMode; }
+  get pausedAt() { return this._pauseManager.pausedAt; }
+  get pausedFromState() { return this._pauseManager.pausedFromState; }
 
   /**
    * Set the quiz snapshot when game starts
@@ -207,7 +210,7 @@ class Room {
   }
 
   getPlayerByToken(playerToken) {
-    return this.players.find(p => p.playerToken === playerToken) || null;
+    return this.players.find(p => p.token === playerToken) || null;
   }
 
   reconnectPlayer(playerToken, newSocketId, gracePeriodMs = null, newToken = null) {
@@ -345,7 +348,7 @@ class Room {
   setState(newState) {
     const allowedTransitions = validTransitions[this.state];
     if (!allowedTransitions || !allowedTransitions.includes(newState)) {
-      throw new ValidationError(`Invalid state transition: ${this.state} → ${newState}`);
+      throw new ValidationError(`Invalid state transition: ${this.state} \u2192 ${newState}`);
     }
     this.state = newState;
   }
@@ -355,7 +358,7 @@ class Room {
    * Creates a snapshot of player answers to prevent race conditions during iteration
    * @param {number} optionCount - Number of options in the question
    * @param {Function} isCorrectFn - Function to check if answer index is correct
-   * @returns {{ distribution: number[], correctCount: number, skippedCount: number }} Distribution array, correct answer count, and count of invalid answers skipped
+   * @returns {{ distribution: number[], correctCount: number, skippedCount: number }}
    */
   getAnswerDistribution(optionCount, isCorrectFn) {
     // Validate optionCount
@@ -376,7 +379,6 @@ class Room {
     let skippedCount = 0;
 
     // Create a snapshot of player answers to prevent race conditions
-    // Capture answer data upfront before any processing
     const answerSnapshots = this.players
       .filter(player => player.hasAnswered() && player.answerAttempt)
       .map(player => ({
@@ -415,41 +417,27 @@ class Room {
   /**
    * Record an answer for archiving
    * Validates required fields to ensure data integrity
-   * @param {object} answerData - Answer data to record
-   * @param {string} answerData.playerId - Player ID
-   * @param {string} answerData.playerNickname - Player nickname
-   * @param {string} answerData.questionId - Question ID
-   * @param {number} answerData.answerIndex - Selected answer index
-   * @param {boolean} answerData.isCorrect - Whether answer was correct
-   * @param {number} answerData.elapsedTimeMs - Response time in milliseconds
-   * @param {number} answerData.score - Points earned
-   * @param {number} [answerData.streak] - Current streak (optional)
-   * @param {number} answerData.optionCount - Number of options in question (required for validation)
    */
   recordAnswer(answerData) {
     // Validate required fields
     if (!answerData || typeof answerData !== 'object') {
       throw new ValidationError('Answer data is required');
     }
-    // Validate playerId
     if (!answerData.playerId || typeof answerData.playerId !== 'string') {
       throw new ValidationError('Player ID is required and must be a string');
     }
     if (!answerData.playerNickname || typeof answerData.playerNickname !== 'string') {
       throw new ValidationError('Player nickname is required for answer record');
     }
-    // Validate questionId
     if (!answerData.questionId || typeof answerData.questionId !== 'string') {
       throw new ValidationError('Question ID is required and must be a string');
     }
     if (typeof answerData.answerIndex !== 'number' || !Number.isInteger(answerData.answerIndex) || answerData.answerIndex < 0) {
       throw new ValidationError('Valid answer index is required');
     }
-    // Validate optionCount is provided for bounds checking
     if (typeof answerData.optionCount !== 'number' || !Number.isInteger(answerData.optionCount) || answerData.optionCount < 2) {
       throw new ValidationError('optionCount is required and must be at least 2');
     }
-    // Validate answer index is within valid range
     if (answerData.answerIndex >= answerData.optionCount) {
       throw new ValidationError(`Answer index ${answerData.answerIndex} is out of range (0-${answerData.optionCount - 1})`);
     }
@@ -485,10 +473,6 @@ class Room {
 
   /**
    * Get indices of 2 random wrong options for 50:50 power-up
-   * @param {string} socketId - Player socket ID
-   * @param {number} correctAnswerIndex - Index of the correct answer
-   * @param {number} optionCount - Total number of options
-   * @returns {number[]} Array of 2 eliminated option indices
    */
   getFiftyFiftyOptions(socketId, correctAnswerIndex, optionCount) {
     const player = this.getPlayer(socketId);
@@ -518,21 +502,10 @@ class Room {
 
   // ==================== KICK/BAN METHODS ====================
 
-  /**
-   * Get player by ID
-   * @param {string} playerId - Player ID
-   * @returns {Player|null}
-   */
   getPlayerById(playerId) {
     return this.players.find(p => p.id === playerId) || null;
   }
 
-  /**
-   * Kick a player from the room (host only)
-   * @param {string} playerId - Player ID to kick
-   * @param {string} requesterId - Socket ID of requester
-   * @returns {Player} The kicked player
-   */
   kickPlayer(playerId, requesterId) {
     if (!this.isHost(requesterId)) {
       throw new ForbiddenError('Only host can kick players');
@@ -547,17 +520,9 @@ class Room {
     return player;
   }
 
-  /**
-   * Ban a player from the room (host only)
-   * Kicks the player and adds their nickname to ban list
-   * @param {string} playerId - Player ID to ban
-   * @param {string} requesterId - Socket ID of requester
-   * @returns {Player} The banned player
-   */
   banPlayer(playerId, requesterId) {
     const player = this.kickPlayer(playerId, requesterId);
 
-    // Add normalized nickname to ban list (using Player's VO method)
     const normalizedNickname = player.getNormalizedNickname();
     if (!this.bannedNicknames.includes(normalizedNickname)) {
       this.bannedNicknames.push(normalizedNickname);
@@ -566,11 +531,6 @@ class Room {
     return player;
   }
 
-  /**
-   * Normalize nickname for consistent comparisons
-   * Uses Nickname VO when valid, falls back to toLowerCase for edge cases
-   * @private
-   */
   _normalizeNickname(nickname) {
     if (!nickname || typeof nickname !== 'string') {
       return '';
@@ -578,18 +538,11 @@ class Room {
     try {
       return new Nickname(nickname).normalized();
     } catch {
-      // Fallback for invalid nicknames (shouldn't happen in normal flow)
       return nickname.toLowerCase().trim();
     }
   }
 
-  /**
-   * Check if a nickname is banned
-   * @param {string} nickname - Nickname to check
-   * @returns {boolean}
-   */
   isNicknameBanned(nickname) {
-    // Null/undefined check to prevent crash
     if (!nickname || typeof nickname !== 'string') {
       return false;
     }
@@ -597,17 +550,11 @@ class Room {
     return this.bannedNicknames.includes(normalizedNickname);
   }
 
-  /**
-   * Unban a nickname (host only)
-   * @param {string} nickname - Nickname to unban
-   * @param {string} requesterId - Socket ID of requester
-   */
   unbanNickname(nickname, requesterId) {
     if (!this.isHost(requesterId)) {
       throw new ForbiddenError('Only host can unban players');
     }
 
-    // Validate nickname
     if (!nickname || typeof nickname !== 'string') {
       throw new ValidationError('Valid nickname is required');
     }
@@ -616,227 +563,92 @@ class Room {
     this.bannedNicknames = this.bannedNicknames.filter(n => n !== normalizedNickname);
   }
 
-  /**
-   * Get list of banned nicknames
-   * @returns {string[]}
-   */
   getBannedNicknames() {
     return [...this.bannedNicknames];
   }
 
-  // ==================== SPECTATOR METHODS ====================
+  // ==================== SPECTATOR METHODS (delegated to SpectatorManager) ====================
 
-  /**
-   * Add a spectator to the room
-   * @param {Spectator} spectator - Spectator to add
-   */
   addSpectator(spectator) {
-    if (this.spectators.length >= MAX_SPECTATORS) {
-      throw new ValidationError(`Room is full (maximum ${MAX_SPECTATORS} spectators)`);
-    }
-
-    // Check if nickname is already taken by player or spectator (using VO methods)
-    const nicknameExistsPlayer = this.players.some(p => p.hasNickname(spectator.nickname));
-    const nicknameExistsSpectator = this.spectators.some(s => s.hasNickname(spectator.nickname));
-
-    if (nicknameExistsPlayer || nicknameExistsSpectator) {
-      throw new ConflictError('Nickname already taken');
-    }
-
-    this.spectators.push(spectator);
+    this._spectatorManager.add(spectator, this.players);
   }
 
-  /**
-   * Remove a spectator from the room
-   * @param {string} socketId - Socket ID of spectator to remove
-   */
   removeSpectator(socketId) {
-    this.spectators = this.spectators.filter(s => s.socketId !== socketId);
+    this._spectatorManager.remove(socketId);
   }
 
-  /**
-   * Get spectator by socket ID
-   * @param {string} socketId - Socket ID
-   * @returns {Spectator|null}
-   */
   getSpectator(socketId) {
-    return this.spectators.find(s => s.socketId === socketId) || null;
+    return this._spectatorManager.getBySocketId(socketId);
   }
 
-  /**
-   * Get spectator count
-   * @returns {number}
-   */
   getSpectatorCount() {
-    return this.spectators.length;
+    return this._spectatorManager.getCount();
   }
 
-  /**
-   * Get all spectators
-   * @returns {Spectator[]}
-   */
   getAllSpectators() {
-    return [...this.spectators];
+    return this._spectatorManager.getAll();
   }
 
-  /**
-   * Check if socket is a spectator
-   * @param {string} socketId - Socket ID
-   * @returns {boolean}
-   */
   isSpectator(socketId) {
-    return this.spectators.some(s => s.socketId === socketId);
+    return this._spectatorManager.isSpectator(socketId);
   }
 
-  /**
-   * Get spectator by token
-   * @param {string} spectatorToken - Spectator token
-   * @returns {Spectator|null}
-   */
   getSpectatorByToken(spectatorToken) {
-    return this.spectators.find(s => s.spectatorToken === spectatorToken) || null;
+    return this._spectatorManager.getByToken(spectatorToken);
   }
 
-  /**
-   * Mark spectator as disconnected
-   * @param {string} socketId - Socket ID
-   * @returns {Spectator|null} The disconnected spectator
-   */
   setSpectatorDisconnected(socketId) {
-    const spectator = this.getSpectator(socketId);
-    if (spectator) {
-      spectator.setDisconnected();
-    }
-    return spectator;
+    return this._spectatorManager.setDisconnected(socketId);
   }
 
-  /**
-   * Reconnect spectator with token validation
-   * @param {string} spectatorToken - Spectator token
-   * @param {string} newSocketId - New socket ID
-   * @param {number|null} gracePeriodMs - Grace period in ms (null to skip check)
-   * @param {string|null} newToken - New token for rotation
-   * @returns {Spectator} The reconnected spectator
-   */
   reconnectSpectator(spectatorToken, newSocketId, gracePeriodMs = null, newToken = null) {
-    const spectator = this.getSpectatorByToken(spectatorToken);
-    if (!spectator) {
-      throw new UnauthorizedError('Invalid spectator token');
-    }
-
-    // Check if token has expired
-    if (spectator.isTokenExpired()) {
-      throw new UnauthorizedError('Spectator token has expired');
-    }
-
-    // Check if spectator exceeded grace period
-    if (gracePeriodMs !== null && spectator.isDisconnected()) {
-      const disconnectedDuration = spectator.getDisconnectedDuration();
-      if (disconnectedDuration > gracePeriodMs) {
-        throw new ForbiddenError('Reconnection timeout expired');
-      }
-    }
-
-    // Rotate token on reconnect for security
-    spectator.reconnect(newSocketId, newToken);
-    return spectator;
+    return this._spectatorManager.reconnect(spectatorToken, newSocketId, gracePeriodMs, newToken);
   }
 
-  /**
-   * Remove spectators who have been disconnected longer than grace period
-   * @param {number} gracePeriodMs - Grace period in milliseconds
-   * @returns {Spectator[]} Removed spectators
-   */
   removeStaleDisconnectedSpectators(gracePeriodMs) {
-    const staleSpectators = this.spectators.filter(s =>
-      s.isDisconnected() && s.getDisconnectedDuration() > gracePeriodMs
-    );
-
-    this.spectators = this.spectators.filter(s =>
-      !s.isDisconnected() || s.getDisconnectedDuration() <= gracePeriodMs
-    );
-
-    return staleSpectators;
+    return this._spectatorManager.removeStaleDisconnected(gracePeriodMs);
   }
 
-  /**
-   * Get all disconnected spectators
-   * @returns {Spectator[]}
-   */
   getDisconnectedSpectators() {
-    return this.spectators.filter(s => s.isDisconnected());
+    return this._spectatorManager.getDisconnected();
   }
 
-  /**
-   * Get count of connected (non-disconnected) spectators
-   * @returns {number}
-   */
   getConnectedSpectatorCount() {
-    return this.spectators.filter(s => !s.isDisconnected()).length;
+    return this._spectatorManager.getConnectedCount();
   }
 
-  // ==================== PAUSE/RESUME METHODS ====================
+  // ==================== PAUSE/RESUME METHODS (delegated to PauseManager) ====================
 
-  /**
-   * Pause the game (host only, only from LEADERBOARD state)
-   * @param {string} requesterId - Socket ID of requester
-   */
   pause(requesterId) {
-    if (!this.isHost(requesterId)) {
-      throw new ForbiddenError('Only host can pause the game');
-    }
-
-    if (this.state !== RoomState.LEADERBOARD) {
-      throw new ValidationError('Game can only be paused from leaderboard');
-    }
-
-    this.pausedFromState = this.state;
-    this.pausedAt = new Date();
-    this.state = RoomState.PAUSED;
+    const newState = this._pauseManager.pause(
+      this.state,
+      this.isHost(requesterId),
+      RoomState.LEADERBOARD,
+      RoomState.PAUSED
+    );
+    this.state = newState;
   }
 
-  /**
-   * Resume the game (host only)
-   * @param {string} requesterId - Socket ID of requester
-   */
   resume(requesterId) {
-    if (!this.isHost(requesterId)) {
-      throw new ForbiddenError('Only host can resume the game');
-    }
-
-    if (this.state !== RoomState.PAUSED) {
-      throw new ValidationError('Game is not paused');
-    }
-
-    this.state = this.pausedFromState || RoomState.LEADERBOARD;
-    this.pausedAt = null;
-    this.pausedFromState = null;
+    const newState = this._pauseManager.resume(
+      this.state,
+      this.isHost(requesterId),
+      RoomState.PAUSED,
+      RoomState.LEADERBOARD
+    );
+    this.state = newState;
   }
 
-  /**
-   * Check if game is paused
-   * @returns {boolean}
-   */
   isPaused() {
-    return this.state === RoomState.PAUSED;
+    return this._pauseManager.isPaused(this.state, RoomState.PAUSED);
   }
 
-  /**
-   * Get pause duration in milliseconds
-   * @returns {number}
-   */
   getPauseDuration() {
-    if (!this.pausedAt) return 0;
-    return Date.now() - this.pausedAt.getTime();
+    return this._pauseManager.getDuration();
   }
 
   // ==================== LIGHTNING ROUND METHODS ====================
 
-  /**
-   * Configure lightning round settings (host only, lobby phase only)
-   * @param {boolean} enabled - Whether lightning round is enabled
-   * @param {number} questionCount - Number of last questions to apply lightning round to (1-10)
-   */
   setLightningRound(enabled, questionCount) {
     if (this.state !== RoomState.WAITING_PLAYERS) {
       throw new ValidationError('Lightning round can only be configured in lobby');
@@ -852,160 +664,62 @@ class Room {
     this.lightningRound = { enabled: !!enabled, questionCount: enabled ? questionCount : this.lightningRound.questionCount };
   }
 
-  /**
-   * Check if a given question index falls in the lightning round
-   * @param {number} currentIndex - Current question index (0-based)
-   * @param {number} totalQuestions - Total number of questions
-   * @returns {boolean}
-   */
   isLightningQuestion(currentIndex, totalQuestions) {
     if (!this.lightningRound.enabled) return false;
     const lightningStart = totalQuestions - this.lightningRound.questionCount;
     return currentIndex >= lightningStart;
   }
 
-  /**
-   * Get lightning round configuration
-   * @returns {{ enabled: boolean, questionCount: number }}
-   */
   getLightningConfig() {
     return { ...this.lightningRound };
   }
 
-  // ==================== TEAM MODE METHODS ====================
+  // ==================== TEAM MODE METHODS (delegated to TeamManager) ====================
 
-  /**
-   * Enable team mode (only in WAITING_PLAYERS state)
-   */
   enableTeamMode() {
     if (this.state !== RoomState.WAITING_PLAYERS) {
       throw new ValidationError('Team mode can only be changed in lobby');
     }
-    this.teamMode = true;
+    this._teamManager.enable();
   }
 
-  /**
-   * Disable team mode (only in WAITING_PLAYERS state)
-   * Clears all teams and player assignments
-   */
   disableTeamMode() {
     if (this.state !== RoomState.WAITING_PLAYERS) {
       throw new ValidationError('Team mode can only be changed in lobby');
     }
-    this.teamMode = false;
-    this.teams = [];
+    this._teamManager.disable();
   }
 
-  /**
-   * Check if team mode is active
-   * @returns {boolean}
-   */
   isTeamMode() {
-    return this.teamMode;
+    return this._teamManager.isEnabled();
   }
 
-  /**
-   * Add a team to the room
-   * @param {Team} team - Team entity to add
-   */
   addTeam(team) {
-    if (this.teams.length >= MAX_TEAMS) {
-      throw new ValidationError(`Maximum ${MAX_TEAMS} teams allowed`);
-    }
-
-    // Check for unique team name (case-insensitive)
-    const nameExists = this.teams.some(
-      t => t.name.toLowerCase() === team.name.toLowerCase()
-    );
-    if (nameExists) {
-      throw new ConflictError('Team name already exists');
-    }
-
-    this.teams.push(team);
+    this._teamManager.addTeam(team);
   }
 
-  /**
-   * Remove a team from the room and unassign its players
-   * @param {string} teamId - Team ID to remove
-   */
   removeTeam(teamId) {
-    const team = this.teams.find(t => t.id === teamId);
-    if (!team) {
-      throw new ValidationError('Team not found');
-    }
-    this.teams = this.teams.filter(t => t.id !== teamId);
+    this._teamManager.removeTeam(teamId);
   }
 
-  /**
-   * Assign a player to a team
-   * @param {string} playerId - Player ID
-   * @param {string} teamId - Team ID
-   */
   assignPlayerToTeam(playerId, teamId) {
-    const player = this.getPlayerById(playerId);
-    if (!player) {
-      throw new ValidationError('Player not found');
-    }
-
-    const team = this.teams.find(t => t.id === teamId);
-    if (!team) {
-      throw new ValidationError('Team not found');
-    }
-
-    // Remove player from any current team
-    for (const t of this.teams) {
-      t.removePlayer(playerId);
-    }
-
-    // Add player to new team
-    team.addPlayer(playerId);
+    this._teamManager.assignPlayer(playerId, teamId, (id) => this.getPlayerById(id));
   }
 
-  /**
-   * Get the team a player belongs to
-   * @param {string} playerId - Player ID
-   * @returns {Team|null}
-   */
   getTeamForPlayer(playerId) {
-    return this.teams.find(t => t.hasPlayer(playerId)) || null;
+    return this._teamManager.getTeamForPlayer(playerId);
   }
 
-  /**
-   * Get team leaderboard - teams sorted by total score (sum of member scores)
-   * @returns {Array<{id: string, name: string, color: string, score: number, playerCount: number}>}
-   */
   getTeamLeaderboard() {
-    return this.teams
-      .map(team => {
-        const teamScore = team.playerIds.reduce((sum, pid) => {
-          const player = this.getPlayerById(pid);
-          return sum + (player ? player.score : 0);
-        }, 0);
-        return {
-          id: team.id,
-          name: team.name,
-          color: team.color,
-          score: teamScore,
-          playerCount: team.getPlayerCount()
-        };
-      })
-      .sort((a, b) => b.score - a.score);
+    return this._teamManager.getLeaderboard((id) => this.getPlayerById(id));
   }
 
-  /**
-   * Get top 3 teams (team podium)
-   * @returns {Array}
-   */
   getTeamPodium() {
-    return this.getTeamLeaderboard().slice(0, 3);
+    return this._teamManager.getPodium((id) => this.getPlayerById(id));
   }
 
-  /**
-   * Get a copy of all teams
-   * @returns {Team[]}
-   */
   getAllTeams() {
-    return [...this.teams];
+    return this._teamManager.getAll();
   }
 }
 

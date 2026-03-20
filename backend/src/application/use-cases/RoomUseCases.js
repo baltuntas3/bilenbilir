@@ -84,7 +84,7 @@ class RoomUseCases extends SharedUseCases {
         socketId,
         nickname,
         roomPin: pin,
-        playerToken
+        token: playerToken
       });
 
       room.addPlayer(player);
@@ -309,7 +309,7 @@ class RoomUseCases extends SharedUseCases {
       socketId,
       nickname,
       roomPin: pin,
-      spectatorToken
+      token: spectatorToken
     });
 
     room.addSpectator(spectator);

@@ -30,6 +30,15 @@ import SpectatorGame from '../pages/SpectatorGame';
 import GameStats from '../pages/GameStats';
 import GameSessionDetail from '../pages/GameSessionDetail';
 import GameReplay from '../pages/GameReplay';
+import AnalyticsDashboard from '../pages/AnalyticsDashboard';
+
+// Tournament Pages
+import Tournaments from '../pages/Tournaments';
+import TournamentDetail from '../pages/TournamentDetail';
+
+// Classroom Pages
+import Classrooms from '../pages/Classrooms';
+import ClassroomDetail from '../pages/ClassroomDetail';
 
 export default function AppRoutes() {
   return (
@@ -56,6 +65,15 @@ export default function AppRoutes() {
       <Route path="/stats" element={<ProtectedRoute><GameStats /></ProtectedRoute>} />
       <Route path="/stats/session/:id" element={<ProtectedRoute><GameSessionDetail /></ProtectedRoute>} />
       <Route path="/stats/replay/:id" element={<ProtectedRoute><GameReplay /></ProtectedRoute>} />
+      <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
+
+      {/* Tournament Routes */}
+      <Route path="/tournaments" element={<ProtectedRoute><Tournaments /></ProtectedRoute>} />
+      <Route path="/tournaments/:id" element={<ProtectedRoute><TournamentDetail /></ProtectedRoute>} />
+
+      {/* Classroom Routes */}
+      <Route path="/classrooms" element={<ProtectedRoute><Classrooms /></ProtectedRoute>} />
+      <Route path="/classrooms/:id" element={<ProtectedRoute><ClassroomDetail /></ProtectedRoute>} />
 
       {/* Game Routes */}
       <Route path="/join" element={<JoinGame />} />

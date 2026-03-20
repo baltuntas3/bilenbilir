@@ -6,6 +6,10 @@ const { User } = require('./User');
 const { Spectator } = require('./Spectator');
 const { BaseParticipant } = require('./BaseParticipant');
 const { Team, TEAM_COLORS, MAX_TEAMS } = require('./Team');
+const { SpectatorManager } = require('./SpectatorManager');
+const { TeamManager } = require('./TeamManager');
+const { PauseManager } = require('./PauseManager');
+const { Tournament, TournamentState, MAX_ROUNDS } = require('./Tournament');
 
 // Re-export Records for backward compatibility
 // Prefer importing directly from 'domain/records' for new code
@@ -25,6 +29,14 @@ module.exports = {
   Team,
   TEAM_COLORS,
   MAX_TEAMS,
+  // Tournament
+  Tournament,
+  TournamentState,
+  MAX_ROUNDS,
+  // Managers
+  SpectatorManager,
+  TeamManager,
+  PauseManager,
   // Records (re-exported for backward compatibility)
   GameSession,
   GameSessionStatus,

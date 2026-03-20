@@ -1,0 +1,81 @@
+module.exports = {
+  // Player/Room limits
+  MAX_PLAYERS: 50,
+  MAX_SPECTATORS: 10,
+  MAX_TEAMS: 8,
+  MAX_STREAK: 1000,
+
+  // Grace periods (ms)
+  HOST_GRACE_PERIOD_MS: 5 * 60 * 1000,      // 5 minutes
+  PLAYER_GRACE_PERIOD_MS: 2 * 60 * 1000,     // 2 minutes
+  SPECTATOR_GRACE_PERIOD_MS: 2 * 60 * 1000,  // 2 minutes
+
+  // Token
+  TOKEN_EXPIRATION_MS: 24 * 60 * 60 * 1000,  // 24 hours
+
+  // Timers
+  MIN_QUESTION_TIME: 5,
+  MAX_QUESTION_TIME: 120,
+  DEFAULT_QUESTION_TIME: 30,
+  LOCK_TIMEOUT_MS: 10000,
+
+  // Power-ups
+  TIME_EXTENSION_MS: 10000,                   // 10 seconds
+
+  // Pagination
+  DEFAULT_PAGE: 1,
+  DEFAULT_LIMIT: 20,
+  MAX_LIMIT: 100,
+  MAX_PAGES: 1000,
+
+  // Scores
+  MAX_SCORE: 10000000,
+  MIN_POINTS: 100,
+  MAX_POINTS: 10000,
+  DEFAULT_POINTS: 1000,
+
+  // Quiz limits
+  MAX_QUESTIONS: 50,
+  MAX_TAGS: 20,
+  MAX_OPTIONS: 6,
+  MIN_OPTIONS: 2,
+
+  // Lightning round
+  MIN_LIGHTNING_QUESTIONS: 1,
+  MAX_LIGHTNING_QUESTIONS: 10,
+  DEFAULT_LIGHTNING_QUESTIONS: 3,
+
+  // Password
+  MIN_PASSWORD_LENGTH: 6,
+  BCRYPT_SALT_ROUNDS: 10,
+  PASSWORD_RESET_EXPIRY_MS: 60 * 60 * 1000,  // 1 hour
+
+  // PIN
+  PIN_GENERATION_MAX_ATTEMPTS: 50,
+
+  // Cleanup
+  ROOM_CLEANUP_INTERVAL_MS: 30 * 1000,       // 30 seconds
+
+  // Socket
+  EMIT_TIMEOUT_MS: 10000,
+
+  // Username
+  MIN_USERNAME_LENGTH: 2,
+  MAX_USERNAME_LENGTH: 30,
+
+  // Search
+  MAX_RAW_QUERY_LENGTH: 100,
+  MAX_ESCAPED_QUERY_LENGTH: 200,
+
+  // Reactions
+  MAX_VISIBLE_REACTIONS: 20,
+  REACTION_LIFETIME_MS: 3000,
+
+  // Analytics
+  ANALYTICS_MAX_SESSIONS: 1000,
+
+  // Tournament
+  MAX_ROUNDS: 10,
+  MAX_TOURNAMENT_NAME_LENGTH: 100,
+  MIN_TOURNAMENT_ROUNDS: 2,
+};
