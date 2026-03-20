@@ -47,7 +47,7 @@ gcloud run deploy $FRONTEND_SERVICE \
   --memory=128Mi \
   --cpu=1 \
   --port=8080 \
-  --build-env-vars="VITE_API_URL=${BACKEND_URL}/api"
+  --set-build-env-vars="VITE_API_URL=${BACKEND_URL}/api"
 
 FRONTEND_URL=$(gcloud run services describe $FRONTEND_SERVICE --project $PROJECT_ID --region $REGION --format='value(status.url)')
 
