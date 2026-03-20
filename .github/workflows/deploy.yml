@@ -25,8 +25,34 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Get Frontend URL
+        id: frontend-url
+        run: |
+          # Try to get existing frontend URL, fallback to expected URL
+          FRONTEND_URL=$(gcloud run services describe $FRONTEND_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --format='value(status.url)' 2>/dev/null || echo "")
+          if [ -z "$FRONTEND_URL" ]; then
+            echo "Frontend not yet deployed, will update CORS after frontend deploy"
+          fi
+          echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+
       - name: Deploy Backend
         run: |
+          ENV_VARS="NODE_ENV=production"
+          ENV_VARS="${ENV_VARS},MONGODB_URI=${{ secrets.MONGODB_URI }}"
+          ENV_VARS="${ENV_VARS},JWT_SECRET=${{ secrets.JWT_SECRET }}"
+          ENV_VARS="${ENV_VARS},JWT_EXPIRES_IN=7d"
+          ENV_VARS="${ENV_VARS},SMTP_HOST=${{ secrets.SMTP_HOST }}"
+          ENV_VARS="${ENV_VARS},SMTP_PORT=${{ secrets.SMTP_PORT }}"
+          ENV_VARS="${ENV_VARS},SMTP_USER=${{ secrets.SMTP_USER }}"
+          ENV_VARS="${ENV_VARS},SMTP_PASS=${{ secrets.SMTP_PASS }}"
+          ENV_VARS="${ENV_VARS},EMAIL_FROM=${{ secrets.EMAIL_FROM }}"
+          ENV_VARS="${ENV_VARS},EMAIL_FROM_NAME=BilenBilir"
+          if [ -n "${{ steps.frontend-url.outputs.url }}" ]; then
+            ENV_VARS="${ENV_VARS},CLIENT_URL=${{ steps.frontend-url.outputs.url }}"
+          fi
+
           gcloud run deploy $BACKEND_SERVICE \
             --source ./backend \
             --project $PROJECT_ID \
@@ -38,17 +64,7 @@ jobs:
             --max-instances=2 \
             --memory=256Mi \
             --cpu=1 \
-            --set-env-vars="\
-          NODE_ENV=production,\
-          MONGODB_URI=${{ secrets.MONGODB_URI }},\
-          JWT_SECRET=${{ secrets.JWT_SECRET }},\
-          JWT_EXPIRES_IN=7d,\
-          SMTP_HOST=${{ secrets.SMTP_HOST }},\
-          SMTP_PORT=${{ secrets.SMTP_PORT }},\
-          SMTP_USER=${{ secrets.SMTP_USER }},\
-          SMTP_PASS=${{ secrets.SMTP_PASS }},\
-          EMAIL_FROM=${{ secrets.EMAIL_FROM }},\
-          EMAIL_FROM_NAME=BilenBilir"
+            --set-env-vars="$ENV_VARS"
 
       - name: Build and Deploy Frontend
         run: |
@@ -73,9 +89,24 @@ jobs:
             - '${IMAGE}'
           EOF
 
-          gcloud builds submit . \
+          BUILD_ID=$(gcloud builds submit . \
             --config=cloudbuild.yaml \
-            --project $PROJECT_ID
+            --project $PROJECT_ID \
+            --async \
+            --format='value(id)')
+
+          echo "Waiting for build ${BUILD_ID}..."
+          while true; do
+            STATUS=$(gcloud builds describe $BUILD_ID --project $PROJECT_ID --format='value(status)')
+            if [ "$STATUS" = "SUCCESS" ]; then
+              echo "Build succeeded"
+              break
+            elif [ "$STATUS" = "FAILURE" ] || [ "$STATUS" = "TIMEOUT" ] || [ "$STATUS" = "CANCELLED" ]; then
+              echo "Build failed with status: $STATUS"
+              exit 1
+            fi
+            sleep 10
+          done
 
           gcloud run deploy $FRONTEND_SERVICE \
             --image $IMAGE \
