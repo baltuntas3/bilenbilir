@@ -1,0 +1,90 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: europe-west1
+  BACKEND_SERVICE: bilenbilir-api
+  FRONTEND_SERVICE: bilenbilir-web
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Backend
+        run: |
+          gcloud run deploy $BACKEND_SERVICE \
+            --source ./backend \
+            --project $PROJECT_ID \
+            --region $REGION \
+            --allow-unauthenticated \
+            --session-affinity \
+            --timeout=3600 \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=256Mi \
+            --cpu=1 \
+            --set-env-vars="\
+          NODE_ENV=production,\
+          MONGODB_URI=${{ secrets.MONGODB_URI }},\
+          JWT_SECRET=${{ secrets.JWT_SECRET }},\
+          JWT_EXPIRES_IN=7d,\
+          SMTP_HOST=${{ secrets.SMTP_HOST }},\
+          SMTP_PORT=${{ secrets.SMTP_PORT }},\
+          SMTP_USER=${{ secrets.SMTP_USER }},\
+          SMTP_PASS=${{ secrets.SMTP_PASS }},\
+          EMAIL_FROM=${{ secrets.EMAIL_FROM }},\
+          EMAIL_FROM_NAME=BilenBilir"
+
+      - name: Deploy Frontend
+        run: |
+          BACKEND_URL=$(gcloud run services describe $BACKEND_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --format='value(status.url)')
+
+          gcloud run deploy $FRONTEND_SERVICE \
+            --source ./frontend \
+            --project $PROJECT_ID \
+            --region $REGION \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=128Mi \
+            --cpu=1 \
+            --port=8080 \
+            --build-env-vars="VITE_API_URL=${BACKEND_URL}/api"
+
+      - name: Update Backend CORS
+        run: |
+          FRONTEND_URL=$(gcloud run services describe $FRONTEND_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --format='value(status.url)')
+
+          gcloud run services update $BACKEND_SERVICE \
+            --project $PROJECT_ID \
+            --region $REGION \
+            --update-env-vars="CLIENT_URL=${FRONTEND_URL}"
+
+      - name: Show URLs
+        run: |
+          BACKEND_URL=$(gcloud run services describe $BACKEND_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --format='value(status.url)')
+          FRONTEND_URL=$(gcloud run services describe $FRONTEND_SERVICE \
+            --project $PROJECT_ID --region $REGION \
+            --format='value(status.url)')
+          echo "Backend:  $BACKEND_URL"
+          echo "Frontend: $FRONTEND_URL"
