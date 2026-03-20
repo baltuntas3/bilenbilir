@@ -36,9 +36,32 @@ gcloud run deploy $BACKEND_SERVICE \
 
 BACKEND_URL=$(gcloud run services describe $BACKEND_SERVICE --project $PROJECT_ID --region $REGION --format='value(status.url)')
 
-echo ">>> Frontend deploy ediliyor..."
+echo ">>> Frontend build & deploy ediliyor..."
+IMAGE="europe-west1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${FRONTEND_SERVICE}:latest"
+
+cd frontend
+cat > cloudbuild.yaml << EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'VITE_API_URL=${BACKEND_URL}/api'
+      - '-t'
+      - '${IMAGE}'
+      - '.'
+images:
+  - '${IMAGE}'
+EOF
+
+gcloud builds submit . \
+  --config=cloudbuild.yaml \
+  --project $PROJECT_ID
+
+cd ..
+
 gcloud run deploy $FRONTEND_SERVICE \
-  --source ./frontend \
+  --image $IMAGE \
   --project $PROJECT_ID \
   --region $REGION \
   --allow-unauthenticated \
@@ -46,8 +69,7 @@ gcloud run deploy $FRONTEND_SERVICE \
   --max-instances=2 \
   --memory=128Mi \
   --cpu=1 \
-  --port=8080 \
-  --set-build-env-vars="VITE_API_URL=${BACKEND_URL}/api"
+  --port=8080
 
 FRONTEND_URL=$(gcloud run services describe $FRONTEND_SERVICE --project $PROJECT_ID --region $REGION --format='value(status.url)')
 
