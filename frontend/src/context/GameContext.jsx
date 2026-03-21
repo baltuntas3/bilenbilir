@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { socketService } from '../services/socketService';
 import { useRoom } from './RoomContext';
 import { useTimer } from './TimerContext';
@@ -47,6 +47,9 @@ export function GameProvider({ children }) {
   const [state, setState] = useState(initialGameState);
   const listenersSetupRef = useRef(false);
   const lastSocketIdRef = useRef(null);
+  const timerRef = useRef(timer);
+
+  timerRef.current = timer;
 
   const updateState = useCallback((updates) => {
     setState((prev) => ({ ...prev, ...updates }));
@@ -326,14 +329,15 @@ export function GameProvider({ children }) {
     return () => clearInterval(interval);
   }, [state.reactions.length]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount only
   useEffect(() => {
     return () => {
-      timer.stopTimer();
+      timerRef.current.stopTimer();
       socketService.removeAllListeners();
       socketService.disconnect();
     };
-  }, [timer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = {
     // Spread room state for backward compatibility

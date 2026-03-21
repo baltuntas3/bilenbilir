@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
 
 const TimerContext = createContext(null);
 
@@ -44,14 +44,14 @@ export function TimerProvider({ children }) {
     setTimeLimit(30);
   }, [stopTimer]);
 
-  const value = {
+  const value = useMemo(() => ({
     remainingTime,
     timeLimit,
     startTimer,
     stopTimer,
     extendTimer,
     resetTimer,
-  };
+  }), [remainingTime, timeLimit, startTimer, stopTimer, extendTimer, resetTimer]);
 
   return <TimerContext.Provider value={value}>{children}</TimerContext.Provider>;
 }
