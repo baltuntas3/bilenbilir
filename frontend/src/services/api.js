@@ -16,7 +16,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Don't redirect for login/register requests (user just entered wrong credentials)
       const url = error.config?.url || '';
       const isAuthAttempt = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/me');
       if (!isAuthAttempt) {

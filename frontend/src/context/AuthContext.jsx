@@ -6,21 +6,17 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Keep token in memory only (for socket auth) - not in localStorage
-  const tokenRef = useRef(null);
+  const tokenRef = useRef(null); // Only for socket auth
 
   useEffect(() => {
-    // Check if we have a valid session by calling /me (cookie sent automatically)
     authService.getMe()
       .then(setUser)
-      .catch(() => {
-        tokenRef.current = null;
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback((token, userData) => {
-    tokenRef.current = token;
+    tokenRef.current = token; // Keep for socket only
     setUser(userData);
   }, []);
 
@@ -28,7 +24,7 @@ export function AuthProvider({ children }) {
     try {
       await authService.logout();
     } catch {
-      // Ignore logout errors
+      // Ignore
     }
     tokenRef.current = null;
     setUser(null);
