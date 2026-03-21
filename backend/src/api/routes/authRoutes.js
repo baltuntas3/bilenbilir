@@ -4,6 +4,7 @@ const { authLimiter, passwordResetLimiter } = require('../middlewares/rateLimite
 const { AuthUseCases } = require('../../application/use-cases');
 const { emailService } = require('../../infrastructure/services');
 const { mongoUserRepository, mongoQuizRepository, gameSessionRepository } = require('../../infrastructure/repositories');
+const { setTokenCookie, clearTokenCookie } = require('../helpers/cookieHelper');
 
 const router = express.Router();
 
@@ -22,6 +23,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const { email, password, username } = req.body;
     const result = await authUseCases.register({ email, password, username });
+    setTokenCookie(res, result.token);
     res.status(201).json(result);
   } catch (error) {
     next(error);
@@ -36,10 +38,20 @@ router.post('/login', authLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const result = await authUseCases.login({ email, password });
+    setTokenCookie(res, result.token);
     res.json(result);
   } catch (error) {
     next(error);
   }
+});
+
+/**
+ * POST /api/auth/logout
+ * Clear auth cookie
+ */
+router.post('/logout', (req, res) => {
+  clearTokenCookie(res);
+  res.json({ message: 'Logged out' });
 });
 
 /**
@@ -120,6 +132,7 @@ router.delete('/account', authenticate, async (req, res, next) => {
   try {
     const { password } = req.body;
     const result = await authUseCases.deleteAccount(req.user.id, password);
+    clearTokenCookie(res);
     res.json(result);
   } catch (error) {
     next(error);

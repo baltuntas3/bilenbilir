@@ -10,7 +10,7 @@ import { showToast } from '../utils/toast';
 import { usernameValidation, passwordValidation, requiredPasswordValidation, confirmPasswordValidation } from '../constants/validation';
 
 export default function Profile() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -67,7 +67,8 @@ export default function Profile() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: (data) => authService.deleteAccount(data.password),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await logout();
       navigate('/login');
     },
   });

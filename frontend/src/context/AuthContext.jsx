@@ -1,49 +1,45 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authService } from '../services/authService';
 
 const AuthContext = createContext(null);
 
-const TOKEN_KEY = 'token';
-const USER_KEY = 'user';
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Keep token in memory only (for socket auth) - not in localStorage
+  const tokenRef = useRef(null);
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token) {
-      authService.getMe()
-        .then(setUser)
-        .catch(() => {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(USER_KEY);
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    // Check if we have a valid session by calling /me (cookie sent automatically)
+    authService.getMe()
+      .then(setUser)
+      .catch(() => {
+        tokenRef.current = null;
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback((token, userData) => {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(userData));
+    tokenRef.current = token;
     setUser(userData);
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout();
+    } catch {
+      // Ignore logout errors
+    }
+    tokenRef.current = null;
     setUser(null);
   }, []);
 
   const updateUser = useCallback((userData) => {
-    localStorage.setItem(USER_KEY, JSON.stringify(userData));
     setUser(userData);
   }, []);
 
   const getToken = useCallback(() => {
-    return localStorage.getItem(TOKEN_KEY);
+    return tokenRef.current;
   }, []);
 
   const value = {

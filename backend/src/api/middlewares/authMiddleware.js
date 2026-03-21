@@ -12,13 +12,15 @@ if (!JWT_SECRET) {
  */
 const authenticate = (req, res, next) => {
   try {
+    // Read token from cookie first, then fallback to Authorization header
     const authHeader = req.headers.authorization;
+    const token = req.cookies?.token
+      || (authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
     req.user = {
@@ -45,12 +47,13 @@ const authenticate = (req, res, next) => {
 const optionalAuthenticate = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
+    const token = req.cookies?.token
+      || (authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return next();
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
     req.user = {

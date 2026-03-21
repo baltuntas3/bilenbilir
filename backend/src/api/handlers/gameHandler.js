@@ -167,12 +167,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         requesterId: socket.id
       });
 
-      socket.emit('show_results', toShowResultsDTO(result));
-
-      socket.to(pin).emit('round_ended', {
-        correctAnswerIndex: result.correctAnswerIndex,
-        explanation: result.explanation || null
-      });
+      io.to(pin).emit('show_results', toShowResultsDTO(result));
     } catch (error) {
       handleSocketError(socket, error);
     }
