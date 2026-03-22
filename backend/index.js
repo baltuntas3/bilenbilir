@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const cookieParser = require('cookie-parser');
+
 const mongoose = require('mongoose');
 const connectDB = require('./src/infrastructure/db/connection');
 const { initializeSocket, stopCleanupService, stopTimerService, stopRateLimiter, gameUseCases } = require('./src/infrastructure/ws/socket');
@@ -40,9 +40,7 @@ app.use(cors({
     if (/^https:\/\/bilenbilir-web.*\.run\.app$/.test(origin)) return callback(null, true);
     callback(new Error('CORS not allowed'));
   },
-  credentials: true
 }));
-app.use(cookieParser());
 app.use(express.json());
 app.use(sanitize); // XSS protection - sanitize all inputs
 

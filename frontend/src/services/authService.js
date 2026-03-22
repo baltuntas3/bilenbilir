@@ -1,18 +1,25 @@
-import api from './api';
+import api, { setAuthToken } from './api';
 
 export const authService = {
   register: async (email, password, username) => {
     const response = await api.post('/auth/register', { email, password, username });
+    if (response.data.token) {
+      setAuthToken(response.data.token);
+    }
     return response.data;
   },
 
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
+    if (response.data.token) {
+      setAuthToken(response.data.token);
+    }
     return response.data;
   },
 
   logout: async () => {
     const response = await api.post('/auth/logout');
+    setAuthToken(null);
     return response.data;
   },
 

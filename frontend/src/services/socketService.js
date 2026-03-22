@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { getAuthToken } from './api';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
@@ -33,14 +34,14 @@ class SocketService {
       return this.connectionPromise;
     }
 
-    const auth = token ? { token } : {};
+    const authPayload = token || getAuthToken();
+    const auth = authPayload ? { token: authPayload } : {};
 
     // Store if we had a previous socket (need to re-attach listeners)
     const hadPreviousSocket = this.socket !== null;
 
     this.socket = io(SOCKET_URL, {
       auth,
-      withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
