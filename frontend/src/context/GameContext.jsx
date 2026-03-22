@@ -170,7 +170,7 @@ export function GameProvider({ children }) {
     socketService.on('answer_count_updated', ({ answeredCount }) => updateState({ answeredCount }));
 
     socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, totalPlayers, explanation }) => {
-      timer.stopTimer();
+      timerRef.current.stopTimer();
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
@@ -181,7 +181,7 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('round_ended', ({ correctAnswerIndex, explanation }) => {
-      timer.stopTimer();
+      timerRef.current.stopTimer();
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
@@ -218,23 +218,23 @@ export function GameProvider({ children }) {
       const labels = { FIFTY_FIFTY: '50:50', DOUBLE_POINTS: 'Çift Puan', TIME_EXTENSION: 'Süre Uzatma' };
       showToast.info(nickname + ' joker kullandı: ' + (labels[powerUpType] || powerUpType));
     });
-    socketService.on('time_extended', ({ extraTimeMs }) => timer.extendTimer(extraTimeMs));
+    socketService.on('time_extended', ({ extraTimeMs }) => timerRef.current.extendTimer(extraTimeMs));
 
     // Timer events
     socketService.on('timer_started', ({ duration, endTime, serverTime }) => {
       const adjustedEndTime = endTime + (Date.now() - serverTime);
-      timer.startTimer(duration, adjustedEndTime);
+      timerRef.current.startTimer(duration, adjustedEndTime);
     });
     socketService.on('timer_tick', () => {});
-    socketService.on('time_expired', () => { timer.stopTimer(); updateState({ remainingTime: 0 }); });
+    socketService.on('time_expired', () => { timerRef.current.stopTimer(); updateState({ remainingTime: 0 }); });
     socketService.on('timer_sync', ({ remainingMs, endTime, serverTime }) => {
       const adjustedEndTime = endTime + (Date.now() - serverTime);
-      timer.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
+      timerRef.current.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
     });
 
     // Pause/Resume
     socketService.on('game_paused', () => {
-      timer.stopTimer();
+      timerRef.current.stopTimer();
       setState(prev => ({ ...prev, previousState: prev.gameState, gameState: GAME_STATES.PAUSED }));
       showToast.info('Game paused by host');
     });

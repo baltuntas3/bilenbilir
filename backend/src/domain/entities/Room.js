@@ -326,6 +326,11 @@ class Room {
       throw new ForbiddenError('Only host can advance questions');
     }
 
+    // Enforce valid state — nextQuestion only allowed from LEADERBOARD
+    if (this.state !== RoomState.LEADERBOARD) {
+      throw new ValidationError(`Cannot advance question from ${this.state} state (must be in LEADERBOARD)`);
+    }
+
     // Validate totalQuestions parameter
     if (typeof totalQuestions !== 'number' || !Number.isInteger(totalQuestions) || totalQuestions < 1) {
       throw new ValidationError('totalQuestions must be a positive integer');
@@ -337,11 +342,11 @@ class Room {
     }
 
     if (this.currentQuestionIndex >= totalQuestions - 1) {
-      this.state = RoomState.PODIUM;
+      this.setState(RoomState.PODIUM);
       return false;
     }
     this.currentQuestionIndex++;
-    this.state = RoomState.QUESTION_INTRO;
+    this.setState(RoomState.QUESTION_INTRO);
     return true;
   }
 
@@ -491,13 +496,21 @@ class Room {
       }
     }
 
-    // Shuffle and pick 2
+    // Always leave at least 1 wrong option so 50:50 doesn't reveal the answer
+    const maxToEliminate = Math.max(0, wrongIndices.length - 1);
+    const eliminateCount = Math.min(2, maxToEliminate);
+
+    if (eliminateCount === 0) {
+      return [];
+    }
+
+    // Shuffle and pick
     for (let i = wrongIndices.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [wrongIndices[i], wrongIndices[j]] = [wrongIndices[j], wrongIndices[i]];
     }
 
-    return wrongIndices.slice(0, 2);
+    return wrongIndices.slice(0, eliminateCount);
   }
 
   // ==================== KICK/BAN METHODS ====================

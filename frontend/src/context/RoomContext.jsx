@@ -343,13 +343,19 @@ export function RoomProvider({ children }) {
   const getPlayers = useCallback(() => {
     return new Promise((resolve, reject) => {
       if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
+      let settled = false;
+      const cleanup = () => { socketService.off('players_list', onPlayersList); };
       const timeout = setTimeout(() => {
-        socketService.off('players_list', onPlayersList);
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error('get_players timed out'));
       }, 10000);
       const onPlayersList = (response) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
-        socketService.off('players_list', onPlayersList);
+        cleanup();
         updateRoomState({ players: response.players });
         resolve(response.players);
       };
@@ -361,13 +367,19 @@ export function RoomProvider({ children }) {
   const getSpectators = useCallback(() => {
     return new Promise((resolve, reject) => {
       if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
+      let settled = false;
+      const cleanup = () => { socketService.off('spectators_list', onSpectatorsList); };
       const timeout = setTimeout(() => {
-        socketService.off('spectators_list', onSpectatorsList);
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error('get_spectators timed out'));
       }, 10000);
       const onSpectatorsList = (response) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
-        socketService.off('spectators_list', onSpectatorsList);
+        cleanup();
         updateRoomState({ spectators: response.spectators });
         resolve(response.spectators);
       };
@@ -381,13 +393,19 @@ export function RoomProvider({ children }) {
   const getBannedNicknames = useCallback(() => {
     return new Promise((resolve, reject) => {
       if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
+      let settled = false;
+      const cleanup = () => { socketService.off('banned_nicknames', onBannedNicknames); };
       const timeout = setTimeout(() => {
-        socketService.off('banned_nicknames', onBannedNicknames);
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error('get_banned_nicknames timed out'));
       }, 10000);
       const onBannedNicknames = (response) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
-        socketService.off('banned_nicknames', onBannedNicknames);
+        cleanup();
         updateRoomState({ bannedNicknames: response.bannedNicknames });
         resolve(response.bannedNicknames);
       };

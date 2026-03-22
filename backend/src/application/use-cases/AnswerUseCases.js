@@ -117,8 +117,8 @@ class AnswerUseCases extends SharedUseCases {
     let elapsedTimeMs = timerService.getElapsedTime(pin);
     if (elapsedTimeMs === null) throw new ValidationError('No active timer for this room');
     const timerSync = timerService.getTimerSync(pin);
-    if (timerSync && timerSync.totalTimeMs) {
-      elapsedTimeMs = Math.min(elapsedTimeMs, timerSync.totalTimeMs);
+    if (timerSync && timerSync.duration) {
+      elapsedTimeMs = Math.min(elapsedTimeMs, timerSync.duration);
     }
     if (timerService.isTimeExpired(pin)) throw new ValidationError('Time expired');
     return elapsedTimeMs;

@@ -19,6 +19,7 @@ class RoomCleanupService {
     this.playerGracePeriod = options.playerGracePeriod || 120000; // 2 minutes for player to reconnect
     this.emptyRoomTimeout = options.emptyRoomTimeout || 300000; // 5 minutes for empty rooms
     this.idleRoomTimeout = options.idleRoomTimeout || 3600000; // 1 hour for idle rooms
+    this.maxPauseDuration = options.maxPauseDuration || 1800000; // 30 minutes max pause
 
     // States that indicate an active game (should not be cleaned up aggressively)
     this.activeGameStates = [
@@ -157,6 +158,31 @@ class RoomCleanupService {
             if (hostDisconnectedDuration > orphanTimeout) {
               shouldDelete = true;
               reason = 'Orphan room (host and all players disconnected)';
+            }
+          }
+
+          // Check if game has been paused too long
+          if (!shouldDelete && room.state === RoomState.PAUSED) {
+            const pauseDuration = room.getPauseDuration();
+            if (pauseDuration > this.maxPauseDuration) {
+              // Auto-resume to leaderboard state instead of deleting
+              try {
+                room.resume(room.hostId);
+              } catch {
+                // If resume fails (e.g. host disconnected), mark for cleanup
+                shouldDelete = true;
+                reason = 'Paused game timeout (host unavailable)';
+              }
+              if (!shouldDelete) {
+                await this.roomRepository.save(room);
+                if (this.io) {
+                  this.io.to(room.pin).emit('game_resumed', {
+                    state: room.state,
+                    pauseDuration
+                  });
+                }
+                console.log(`Auto-resumed room ${room.pin} after ${Math.round(pauseDuration / 1000)}s pause`);
+              }
             }
           }
 

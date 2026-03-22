@@ -1,6 +1,6 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO } = require('./socketHandlerUtils');
-const { ValidationError, NotFoundError } = require('../../shared/errors');
+const { ValidationError, NotFoundError, ConflictError } = require('../../shared/errors');
 
 /**
  * Game WebSocket Handler
@@ -121,7 +121,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         isCorrect: result.answer.isCorrect,
         score: result.answer.getTotalScore(),
         totalScore: result.player.score,
-        streak: result.player.streak
+        streak: result.player.streak,
+        streakBonus: result.answer.streakBonus
       });
 
       socket.to(pin).emit('answer_count_updated', {
@@ -144,8 +145,11 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
             io.to(pin).emit('show_results', toShowResultsDTO(endResult));
           }
         } catch (err) {
-          // Log but don't fail - host can still manually end
-          console.error('Auto-end after all answered error:', err.message);
+          // ConflictError/ValidationError/NotFoundError are expected if host already ended or room changed
+          const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
+          if (!isExpected) {
+            console.error('Auto-end after all answered error:', err.message);
+          }
         }
       }
     } catch (error) {
@@ -397,15 +401,15 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         if (resolved) {
           nickname = resolved;
         }
-      } catch {
-        // If lookup fails, use fallback nickname
+      } catch (err) {
+        console.warn(`[send_reaction] Failed to resolve nickname for socket ${socket.id}:`, err.message);
       }
 
       // Broadcast to entire room (including sender)
       io.to(pin).emit('reaction_received', {
         nickname,
         reaction,
-        timestamp: now
+        timestamp: Date.now()
       });
     } catch (error) {
       handleSocketError(socket, error);
