@@ -24,13 +24,14 @@ import {
   IconPlayerPause,
 } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
+import { useGameAction } from '../hooks/useGameAction';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
 import Leaderboard from '../components/game/Leaderboard';
 import Podium from '../components/game/Podium';
 import ReactionOverlay from '../components/game/ReactionOverlay';
 import AnswerDistribution from '../components/game/AnswerDistribution';
-import { showToast } from '../utils/toast';
+import GamePausedBanner from '../components/game/GamePausedBanner';
 
 export default function HostGame() {
   const navigate = useNavigate();
@@ -69,62 +70,13 @@ export default function HostGame() {
     }
   }, [isHost, roomPin, navigate]);
 
-  const handleStartAnswering = async () => {
-    try {
-      await startAnswering();
-    } catch (error) {
-      showToast.error(error.message);
-    }
-  };
-
-  const handleEndAnswering = async () => {
-    try {
-      await endAnswering();
-    } catch (error) {
-      showToast.error(error.message);
-    }
-  };
-
-  const handleShowLeaderboard = async () => {
-    try {
-      await showLeaderboard();
-    } catch (error) {
-      showToast.error(error.message);
-    }
-  };
-
-  const handleNextQuestion = async () => {
-    try {
-      await nextQuestion();
-    } catch (error) {
-      showToast.error(error.message);
-    }
-  };
-
-  const handleEndGame = async () => {
-    try {
-      await closeRoom();
-      navigate('/my-quizzes');
-    } catch (error) {
-      showToast.error(error.message);
-    }
-  };
-
-  const handlePauseGame = async () => {
-    try {
-      await pauseGame();
-    } catch (error) {
-      showToast.error(error.message);
-    }
-  };
-
-  const handleResumeGame = async () => {
-    try {
-      await resumeGame();
-    } catch (error) {
-      showToast.error(error.message);
-    }
-  };
+  const handleStartAnswering = useGameAction(startAnswering);
+  const handleEndAnswering = useGameAction(endAnswering);
+  const handleShowLeaderboard = useGameAction(showLeaderboard);
+  const handleNextQuestion = useGameAction(nextQuestion);
+  const handleEndGame = useGameAction(closeRoom, { onSuccess: () => navigate('/my-quizzes') });
+  const handlePauseGame = useGameAction(pauseGame);
+  const handleResumeGame = useGameAction(resumeGame);
 
   const connectedPlayers = players.filter((p) => !p.disconnectedAt);
 
@@ -168,7 +120,7 @@ export default function HostGame() {
                   </Group>
                   <Text size="xs" c="dimmed">answered</Text>
                   <Progress
-                    value={(answeredCount / connectedPlayers.length) * 100}
+                    value={(answeredCount / Math.max(connectedPlayers.length, 1)) * 100}
                     size="sm"
                     style={{ width: 100 }}
                   />
@@ -294,15 +246,7 @@ export default function HostGame() {
       case GAME_STATES.PAUSED:
         return (
           <Stack gap="xl">
-            <Center>
-              <Paper p="xl" radius="md" withBorder bg="yellow.0">
-                <Stack align="center" gap="md">
-                  <IconPlayerPause size={48} color="var(--mantine-color-yellow-6)" />
-                  <Title order={2}>Game Paused</Title>
-                  <Text c="dimmed">The game is currently paused. Players are waiting.</Text>
-                </Stack>
-              </Paper>
-            </Center>
+            <GamePausedBanner message="The game is currently paused. Players are waiting." />
 
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}

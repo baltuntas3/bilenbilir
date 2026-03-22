@@ -10,7 +10,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     authService.getMe()
       .then(setUser)
-      .catch(() => {})
+      .catch((error) => {
+        // 401/403 is expected when not logged in — only log unexpected errors
+        if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+          console.warn('[Auth] Failed to restore session:', error.message);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 

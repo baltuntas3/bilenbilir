@@ -11,7 +11,7 @@ import {
   Button,
   ThemeIcon,
 } from '@mantine/core';
-import { IconDoorExit, IconCheck, IconX, IconPlayerPause } from '@tabler/icons-react';
+import { IconDoorExit, IconCheck, IconX } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
@@ -24,6 +24,7 @@ import ReactionOverlay from '../components/game/ReactionOverlay';
 import ReactionPicker from '../components/game/ReactionPicker';
 import PowerUpBar from '../components/game/PowerUpBar';
 import AnswerDistribution from '../components/game/AnswerDistribution';
+import GamePausedBanner from '../components/game/GamePausedBanner';
 import { showToast } from '../utils/toast';
 
 export default function PlayerGame() {
@@ -237,17 +238,7 @@ export default function PlayerGame() {
       case GAME_STATES.PAUSED:
         return (
           <Stack gap="xl">
-            <Center>
-              <Paper p="xl" radius="md" withBorder bg="yellow.0">
-                <Stack align="center" gap="md">
-                  <ThemeIcon size={60} radius="xl" color="yellow" variant="light">
-                    <IconPlayerPause size={32} />
-                  </ThemeIcon>
-                  <Text size="xl" fw={600}>Game Paused</Text>
-                  <Text c="dimmed">The host has paused the game. Please wait...</Text>
-                </Stack>
-              </Paper>
-            </Center>
+            <GamePausedBanner />
 
             <Group justify="center" gap="md">
               <Paper p="md" radius="md" withBorder>

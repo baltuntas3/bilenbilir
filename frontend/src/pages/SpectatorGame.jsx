@@ -14,7 +14,7 @@ import {
   ThemeIcon,
   Alert,
 } from '@mantine/core';
-import { IconDoorExit, IconEye, IconPlayerPause, IconUsers, IconInfoCircle } from '@tabler/icons-react';
+import { IconDoorExit, IconEye, IconUsers, IconInfoCircle } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
@@ -23,6 +23,7 @@ import Podium from '../components/game/Podium';
 import ReactionOverlay from '../components/game/ReactionOverlay';
 import ReactionPicker from '../components/game/ReactionPicker';
 import AnswerDistribution from '../components/game/AnswerDistribution';
+import GamePausedBanner from '../components/game/GamePausedBanner';
 
 export default function SpectatorGame() {
   const navigate = useNavigate();
@@ -203,17 +204,7 @@ export default function SpectatorGame() {
       case GAME_STATES.PAUSED:
         return (
           <Stack gap="xl">
-            <Center>
-              <Paper p="xl" radius="md" withBorder bg="yellow.0">
-                <Stack align="center" gap="md">
-                  <ThemeIcon size={60} radius="xl" color="yellow" variant="light">
-                    <IconPlayerPause size={32} />
-                  </ThemeIcon>
-                  <Text size="xl" fw={600}>Game Paused</Text>
-                  <Text c="dimmed">The host has paused the game. Please wait...</Text>
-                </Stack>
-              </Paper>
-            </Center>
+            <GamePausedBanner />
 
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}

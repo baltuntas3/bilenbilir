@@ -1,5 +1,6 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO } = require('./socketHandlerUtils');
+const { ValidationError, NotFoundError } = require('../../shared/errors');
 
 /**
  * Game WebSocket Handler
@@ -71,8 +72,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
             io.to(pin).emit('show_results', toShowResultsDTO(endResult));
           }
         } catch (err) {
-          // Ignore expected errors when room state has changed
-          if (err.message !== 'Not in answering phase' && err.message !== 'Room not found') {
+          // Expected errors when room state has changed (e.g. host already ended, room deleted)
+          const isExpected = err instanceof ValidationError || err instanceof NotFoundError;
+          if (!isExpected) {
             console.error('Auto-end error:', err.message);
           }
         }
