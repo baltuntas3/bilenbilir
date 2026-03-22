@@ -119,7 +119,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       socket.emit('answer_received', {
         isCorrect: result.answer.isCorrect,
-        score: result.answer.getTotalScore(),
+        score: result.actualScore,
         totalScore: result.player.score,
         streak: result.player.streak,
         streakBonus: result.answer.streakBonus

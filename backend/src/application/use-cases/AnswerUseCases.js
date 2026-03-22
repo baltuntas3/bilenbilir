@@ -62,11 +62,12 @@ class AnswerUseCases extends SharedUseCases {
       });
 
       player.submitAnswer(answerIndex, validElapsedTime);
+      let actualScore = 0;
       if (answer.isCorrect) {
         player.incrementStreak();
-        let scoreToAdd = answer.getTotalScore();
-        if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) scoreToAdd *= 2;
-        player.addScore(scoreToAdd);
+        actualScore = answer.getTotalScore();
+        if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) actualScore *= 2;
+        player.addScore(actualScore);
       } else {
         player.resetStreak();
       }
@@ -78,7 +79,7 @@ class AnswerUseCases extends SharedUseCases {
         answerIndex,
         isCorrect: answer.isCorrect,
         elapsedTimeMs: validElapsedTime,
-        score: answer.getTotalScore(),
+        score: actualScore,
         streak: player.streak,
         optionCount: currentQuestion.options.length
       });
@@ -87,6 +88,7 @@ class AnswerUseCases extends SharedUseCases {
       return {
         answer,
         player,
+        actualScore,
         allAnswered: room.haveAllPlayersAnswered(),
         answeredCount: room.getAnsweredCount(),
         totalPlayers: room.getConnectedPlayerCount()

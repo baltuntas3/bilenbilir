@@ -67,8 +67,8 @@ export function GameProvider({ children }) {
   const cleanupGameListeners = useCallback(() => {
     const gameEvents = [
       'you_were_kicked', 'player_kicked', 'player_banned', 'player_returned',
-      'spectator_returned', 'nickname_unbanned', 'game_started', 'question_intro',
-      'answering_started', 'answer_received', 'answer_count_updated',
+      'spectator_returned', 'nickname_unbanned', 'player_reconnected', 'game_started', 'question_intro',
+      'answering_started', 'answer_received', 'answer_count_updated', 'all_players_answered',
       'show_results', 'round_ended', 'leaderboard', 'game_over', 'final_results',
       'fifty_fifty_result', 'power_up_activated', 'power_up_used', 'time_extended',
       'timer_started', 'timer_tick', 'time_expired', 'timer_sync',
@@ -117,6 +117,19 @@ export function GameProvider({ children }) {
       showToast.success(`${nickname} unbanned`);
     });
 
+    // Restore game state on player reconnect
+    socketService.on('player_reconnected', (data) => {
+      const { state, score, streak, powerUps, eliminatedOptions, hasAnswered } = data || {};
+      const updates = {};
+      if (state && GAME_STATES[state]) updates.gameState = state;
+      if (typeof score === 'number') updates.score = score;
+      if (typeof streak === 'number') updates.streak = streak;
+      if (powerUps) updates.powerUps = powerUps;
+      if (eliminatedOptions && eliminatedOptions.length > 0) updates.eliminatedOptions = eliminatedOptions;
+      if (typeof hasAnswered === 'boolean') updates.hasAnswered = hasAnswered;
+      if (Object.keys(updates).length > 0) updateState(updates);
+    });
+
     // Game flow events
     socketService.on('game_started', (data) => {
       const { totalQuestions, currentQuestion, questionIndex } = data || {};
@@ -147,6 +160,7 @@ export function GameProvider({ children }) {
         correctAnswerIndex: null,
         explanation: null,
         eliminatedOptions: [],
+        isLightning: false,
       }));
     });
 
@@ -168,14 +182,15 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('answer_count_updated', ({ answeredCount }) => updateState({ answeredCount }));
+    socketService.on('all_players_answered', () => { /* auto-transition to show_results follows */ });
 
-    socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, totalPlayers, explanation }) => {
+    socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, answeredCount, totalPlayers, explanation }) => {
       timerRef.current.stopTimer();
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
         answerDistribution: distribution,
-        answeredCount: totalPlayers,
+        answeredCount: answeredCount ?? totalPlayers,
         explanation: explanation || null,
       });
     });
@@ -289,18 +304,69 @@ export function GameProvider({ children }) {
 
   const submitAnswer = useCallback((answerIndex) => {
     if (room.isHost || !room.roomPin || state.hasAnswered) return Promise.reject(new Error('Cannot submit answer'));
-    socketService.emit('submit_answer', { pin: room.roomPin, answerIndex });
-    return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        socketService.off('answer_received', onSuccess);
+        socketService.off('error', onError);
+      };
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Answer submission timed out'));
+      }, 10000);
+      const onSuccess = (data) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        cleanup();
+        resolve(data);
+      };
+      const onError = ({ error }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        cleanup();
+        reject(new Error(error));
+      };
+      socketService.on('answer_received', onSuccess);
+      socketService.on('error', onError);
+      socketService.emit('submit_answer', { pin: room.roomPin, answerIndex });
+    });
   }, [room.isHost, room.roomPin, state.hasAnswered]);
 
   const usePowerUp = useCallback((type) => {
     if (!room.roomPin || room.isHost || state.hasAnswered) return;
     socketService.emit('use_power_up', { pin: room.roomPin, powerUpType: type });
+    // Optimistic update with error rollback
+    const previousCount = state.powerUps[type] || 0;
     setState(prev => ({
       ...prev,
       powerUps: { ...prev.powerUps, [type]: Math.max(0, (prev.powerUps[type] || 0) - 1) },
     }));
-  }, [room.roomPin, room.isHost, state.hasAnswered]);
+    const onError = () => {
+      clearTimeout(rollbackTimeout);
+      socketService.off('error', onError);
+      socketService.off('power_up_activated', onSuccess);
+      // Rollback on error
+      setState(prev => ({
+        ...prev,
+        powerUps: { ...prev.powerUps, [type]: previousCount },
+      }));
+    };
+    const onSuccess = () => {
+      clearTimeout(rollbackTimeout);
+      socketService.off('error', onError);
+      socketService.off('power_up_activated', onSuccess);
+    };
+    const rollbackTimeout = setTimeout(() => {
+      socketService.off('error', onError);
+      socketService.off('power_up_activated', onSuccess);
+    }, 5000);
+    socketService.on('error', onError);
+    socketService.on('power_up_activated', onSuccess);
+  }, [room.roomPin, room.isHost, state.hasAnswered, state.powerUps]);
 
   const endAnswering = useCallback(() => room.hostEmit('end_answering'), [room]);
   const showLeaderboard = useCallback(() => room.hostEmit('show_leaderboard'), [room]);

@@ -84,6 +84,11 @@ powerUpRegistry.register(PowerUpType.FIFTY_FIFTY, {
       currentQuestion.correctAnswerIndex,
       currentQuestion.options.length
     );
+    // Persist on player for reconnect scenarios
+    const player = room.getPlayer(socketId);
+    if (player) {
+      player.eliminatedOptions = eliminatedOptions;
+    }
     return { type: PowerUpType.FIFTY_FIFTY, eliminatedOptions };
   },
   getEmitActions(result) {
@@ -114,8 +119,11 @@ powerUpRegistry.register(PowerUpType.TIME_EXTENSION, {
   },
   getEmitActions(result) {
     return {
-      playerEmits: [{ event: 'power_up_activated', data: { type: 'TIME_EXTENSION' } }],
-      roomEmits: [{ event: 'time_extended', data: { extraTimeMs: result.extraTimeMs } }],
+      playerEmits: [
+        { event: 'power_up_activated', data: { type: 'TIME_EXTENSION' } },
+        { event: 'time_extended', data: { extraTimeMs: result.extraTimeMs } }
+      ],
+      roomEmits: [],
       timerAction: { method: 'extendTimer', args: [result.extraTimeMs] },
     };
   }

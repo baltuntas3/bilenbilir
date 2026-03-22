@@ -35,6 +35,8 @@ export function TimerProvider({ children }) {
   const extendTimer = useCallback((extraTimeMs) => {
     if (endTimeRef.current) {
       endTimeRef.current += extraTimeMs;
+      // Update timeLimit so progress ring stays proportional
+      setTimeLimit(prev => prev + Math.ceil(extraTimeMs / 1000));
     }
   }, []);
 

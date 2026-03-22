@@ -29,7 +29,7 @@ const validTransitions = {
   [RoomState.ANSWERING_PHASE]: [RoomState.SHOW_RESULTS],
   [RoomState.SHOW_RESULTS]: [RoomState.LEADERBOARD],
   [RoomState.LEADERBOARD]: [RoomState.QUESTION_INTRO, RoomState.PODIUM, RoomState.PAUSED],
-  [RoomState.PAUSED]: [RoomState.LEADERBOARD, RoomState.QUESTION_INTRO],
+  [RoomState.PAUSED]: [RoomState.LEADERBOARD],
   [RoomState.PODIUM]: [] // Terminal state
 };
 

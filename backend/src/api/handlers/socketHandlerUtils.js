@@ -67,6 +67,7 @@ const toShowResultsDTO = (endResult) => ({
   correctAnswerIndex: endResult.correctAnswerIndex,
   distribution: endResult.distribution,
   correctCount: endResult.correctCount,
+  answeredCount: endResult.answeredCount,
   totalPlayers: endResult.totalPlayers,
   explanation: endResult.explanation || null
 });

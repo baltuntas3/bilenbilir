@@ -24,6 +24,7 @@ class Player extends BaseParticipant {
     // Power-up state
     this.powerUps = { ...DEFAULT_POWER_UPS };
     this.activePowerUp = null; // Currently active power-up for current question
+    this.eliminatedOptions = []; // 50:50 eliminated options for current question (persisted for reconnect)
   }
 
   // Backward-compatible alias for token
@@ -91,6 +92,7 @@ class Player extends BaseParticipant {
   clearAnswerAttempt() {
     this.answerAttempt = null;
     this.clearActivePowerUp();
+    this.eliminatedOptions = [];
   }
 
   hasAnswered() {

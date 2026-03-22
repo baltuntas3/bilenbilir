@@ -237,10 +237,14 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         playerId: result.player.id,
         nickname: result.player.nickname,
         score: result.player.score,
+        streak: result.player.streak,
         state: result.room.state,
         currentQuestionIndex: result.room.currentQuestionIndex,
         timerSync, // null if not in answering phase or no timer
-        playerToken: result.newPlayerToken // New rotated token for security
+        playerToken: result.newPlayerToken, // New rotated token for security
+        powerUps: result.player.getAllPowerUps(),
+        eliminatedOptions: result.player.eliminatedOptions || [],
+        hasAnswered: result.player.hasAnswered()
       });
 
       socket.to(pin).emit('player_returned', {

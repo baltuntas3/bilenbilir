@@ -143,7 +143,7 @@ export default function HostGame() {
                   p="md"
                   radius="md"
                   withBorder
-                  bg={index === correctAnswerIndex ? 'green.1' : undefined}
+                  bg={index === currentQuestion?.correctAnswerIndex ? 'green.1' : undefined}
                 >
                   <Group gap="sm">
                     <Badge>{String.fromCharCode(65 + index)}</Badge>
@@ -181,7 +181,7 @@ export default function HostGame() {
             <AnswerDistribution
               distribution={answerDistribution}
               correctAnswerIndex={correctAnswerIndex}
-              totalPlayers={players.length || answeredCount}
+              totalPlayers={connectedPlayers.length || answeredCount}
               options={currentQuestion?.options}
             />
 

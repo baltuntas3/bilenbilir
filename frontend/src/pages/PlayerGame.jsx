@@ -204,7 +204,7 @@ export default function PlayerGame() {
             <AnswerDistribution
               distribution={answerDistribution}
               correctAnswerIndex={correctAnswerIndex}
-              totalPlayers={players.length || answeredCount}
+              totalPlayers={answeredCount || players.length}
               options={currentQuestion?.options}
             />
           </Stack>

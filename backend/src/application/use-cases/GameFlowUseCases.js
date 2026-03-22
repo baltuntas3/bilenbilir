@@ -83,6 +83,7 @@ class GameFlowUseCases extends SharedUseCases {
       correctAnswerIndex: currentQuestion.correctAnswerIndex,
       distribution,
       correctCount,
+      answeredCount: room.getAnsweredCount(),
       totalPlayers: room.getConnectedPlayerCount(),
       explanation: currentQuestion.explanation || null
     };
