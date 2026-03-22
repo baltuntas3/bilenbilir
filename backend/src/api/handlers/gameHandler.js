@@ -297,22 +297,22 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       const { pin, powerUpType } = data || {};
 
-      const result = await gameUseCases.usePowerUp({
+      const { result, emitActions } = await gameUseCases.usePowerUp({
         pin,
         socketId: socket.id,
         powerUpType
       });
 
-      if (powerUpType === 'FIFTY_FIFTY') {
-        socket.emit('fifty_fifty_result', { eliminatedOptions: result.eliminatedOptions });
-      } else if (powerUpType === 'DOUBLE_POINTS') {
-        socket.emit('power_up_activated', { type: 'DOUBLE_POINTS' });
-      } else if (powerUpType === 'TIME_EXTENSION') {
-        // Extend time for the entire room
-        timerService.extendTimer(pin, 10000);
-        socket.emit('power_up_activated', { type: 'TIME_EXTENSION' });
-        // Notify all clients in the room about the time extension
-        io.to(pin).emit('time_extended', { extraTimeMs: 10000 });
+      // Execute emit actions from strategy — no if/else needed
+      if (emitActions.playerEmits) {
+        emitActions.playerEmits.forEach(e => socket.emit(e.event, e.data));
+      }
+      if (emitActions.roomEmits) {
+        emitActions.roomEmits.forEach(e => io.to(pin).emit(e.event, e.data));
+      }
+      if (emitActions.timerAction) {
+        const { method, args } = emitActions.timerAction;
+        timerService[method](pin, ...args);
       }
 
       // Broadcast to room that a player used a power-up

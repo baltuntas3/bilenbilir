@@ -2,7 +2,7 @@ const { Answer } = require('./Answer');
 const { PIN } = require('./PIN');
 const { Score } = require('./Score');
 const { Nickname } = require('./Nickname');
-const { PowerUp, PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpStrategies, executePowerUp } = require('./PowerUp');
+const { PowerUp, PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpRegistry, executePowerUp } = require('./PowerUp');
 
 module.exports = {
   Answer,
@@ -13,6 +13,6 @@ module.exports = {
   PowerUpType,
   POWER_UP_LABELS,
   DEFAULT_POWER_UPS,
-  powerUpStrategies,
+  powerUpRegistry,
   executePowerUp
 };

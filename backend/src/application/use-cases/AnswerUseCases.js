@@ -1,7 +1,7 @@
 const { SharedUseCases } = require('./SharedUseCases');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { RoomState } = require('../../domain/entities');
-const { Answer, PowerUpType, executePowerUp } = require('../../domain/value-objects');
+const { Answer, PowerUpType, powerUpRegistry } = require('../../domain/value-objects');
 const { NotFoundError, ValidationError, ConflictError } = require('../../shared/errors');
 const { LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 
@@ -105,11 +105,11 @@ class AnswerUseCases extends SharedUseCases {
 
     player.usePowerUp(powerUpType);
     const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
-    const result = executePowerUp(powerUpType, { room, socketId, currentQuestion });
+    const { result, emitActions } = powerUpRegistry.execute(powerUpType, { room, socketId, currentQuestion });
     result.nickname = player.nickname;
 
     await this.roomRepository.save(room);
-    return result;
+    return { result, emitActions };
   }
 
   getServerElapsedTime(timerService, pin) {
