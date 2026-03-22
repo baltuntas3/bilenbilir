@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Container, Title, Paper, TextInput, Textarea, Switch, Button, Stack, Select, TagsInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { quizService } from '../services/quizService';
 import { showToast } from '../utils/toast';
@@ -26,9 +26,12 @@ export default function QuizCreate() {
     },
   });
 
+  const queryClient = useQueryClient();
+
   const createMutation = useMutation({
     mutationFn: (data) => quizService.create(data.title, data.description, data.isPublic, data.category, data.tags),
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['quizzes'] });
       showToast.success('Quiz created');
       navigate(`/quizzes/${data.id || data._id}/edit`);
     },

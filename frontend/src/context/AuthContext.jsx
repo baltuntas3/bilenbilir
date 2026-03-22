@@ -6,7 +6,6 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const tokenRef = useRef(null); // Only for socket auth
 
   useEffect(() => {
     authService.getMe()
@@ -16,7 +15,6 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback((token, userData) => {
-    tokenRef.current = token; // Keep for socket only
     setUser(userData);
   }, []);
 
@@ -26,16 +24,11 @@ export function AuthProvider({ children }) {
     } catch {
       // Ignore
     }
-    tokenRef.current = null;
     setUser(null);
   }, []);
 
   const updateUser = useCallback((userData) => {
     setUser(userData);
-  }, []);
-
-  const getToken = useCallback(() => {
-    return tokenRef.current;
   }, []);
 
   const value = {
@@ -44,7 +37,6 @@ export function AuthProvider({ children }) {
     login,
     logout,
     updateUser,
-    getToken,
     isAuthenticated: !!user
   };
 

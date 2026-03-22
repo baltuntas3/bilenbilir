@@ -135,7 +135,6 @@ quizSchema.index({ isPublic: 1 });
 quizSchema.index({ createdAt: -1 });
 quizSchema.index({ category: 1 });
 quizSchema.index({ tags: 1 });
-quizSchema.index({ slug: 1 });
 
 // Virtual for question count
 quizSchema.virtual('questionCount').get(function() {

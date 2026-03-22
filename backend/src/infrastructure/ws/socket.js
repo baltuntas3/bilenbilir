@@ -1,5 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const cookie = require('cookie');
 const { createRoomHandler, createGameHandler } = require('../../api/handlers');
 const { RoomUseCases, GameUseCases } = require('../../application/use-cases');
 const { roomRepository, gameSessionRepository } = require('../repositories');
@@ -57,7 +58,12 @@ const initializeSocket = (server) => {
 
   // Socket.io authentication middleware
   io.use((socket, next) => {
-    const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+    let token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token && socket.handshake.headers.cookie) {
+      const cookies = cookie.parse(socket.handshake.headers.cookie);
+      token = cookies.token;
+    }
 
     try {
       // Verify token if provided (optional for players, required for hosts)

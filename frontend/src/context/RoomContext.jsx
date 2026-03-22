@@ -60,7 +60,7 @@ const initialRoomState = {
 };
 
 export function RoomProvider({ children }) {
-  const { getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [roomState, setRoomState] = useState(initialRoomState);
 
   const updateRoomState = useCallback((updates) => {
@@ -103,8 +103,8 @@ export function RoomProvider({ children }) {
     return Promise.resolve();
   }, [roomState.isHost, roomState.roomPin]);
 
-  const connectSocket = useCallback(async (token = null) => {
-    await socketService.connect(token);
+  const connectSocket = useCallback(async () => {
+    await socketService.connect();
   }, []);
 
   const resetRoom = useCallback(() => {
@@ -218,9 +218,8 @@ export function RoomProvider({ children }) {
 
   // Room management
   const createRoom = useCallback(async (quizId) => {
-    const token = getToken();
-    if (!token) throw new Error('You must be logged in to host a game');
-    await connectSocket(token);
+    if (!isAuthenticated) throw new Error('You must be logged in to host a game');
+    await connectSocket();
     const response = await emitWithResponse('create_room', { quizId }, 'room_created');
     saveSession({ pin: response.pin, hostToken: response.hostToken, role: 'host' });
     updateRoomState({
@@ -229,7 +228,7 @@ export function RoomProvider({ children }) {
       players: [],
     });
     return response;
-  }, [getToken, connectSocket, updateRoomState, emitWithResponse]);
+  }, [isAuthenticated, connectSocket, updateRoomState, emitWithResponse]);
 
   const joinRoom = useCallback(async (pin, nickname) => {
     await connectSocket();
@@ -276,29 +275,26 @@ export function RoomProvider({ children }) {
   }, [roomState.roomPin, resetRoom]);
 
   const getMyRoom = useCallback(async () => {
-    const token = getToken();
-    if (!token) return null;
-    await connectSocket(token);
+    if (!isAuthenticated) return null;
+    await connectSocket();
     try { return await emitWithResponse('get_my_room', {}, 'my_room', 5000); }
     catch { return null; }
-  }, [getToken, connectSocket, emitWithResponse]);
+  }, [isAuthenticated, connectSocket, emitWithResponse]);
 
   const forceCloseExistingRoom = useCallback(async () => {
-    const token = getToken();
-    if (!token) throw new Error('Not authenticated');
-    await connectSocket(token);
+    if (!isAuthenticated) throw new Error('Not authenticated');
+    await connectSocket();
     return emitWithResponse('force_close_room', {}, 'room_force_closed', 5000);
-  }, [getToken, connectSocket, emitWithResponse]);
+  }, [isAuthenticated, connectSocket, emitWithResponse]);
 
   // Reconnection
   const reconnectHost = useCallback(async (pin, hostToken) => {
-    const token = getToken();
-    if (!token) throw new Error('Not authenticated');
-    await connectSocket(token);
+    if (!isAuthenticated) throw new Error('Not authenticated');
+    await connectSocket();
     const response = await emitWithResponse('reconnect_host', { pin, hostToken }, 'host_reconnected');
     updateRoomState({ roomPin: response.pin, isHost: true, hostToken });
     return response;
-  }, [getToken, connectSocket, updateRoomState, emitWithResponse]);
+  }, [isAuthenticated, connectSocket, updateRoomState, emitWithResponse]);
 
   const reconnectPlayer = useCallback(async (pin, playerToken) => {
     await connectSocket();
@@ -393,7 +389,7 @@ export function RoomProvider({ children }) {
       updateRoomState({ isReconnecting: true });
       showToast.info('Reconnecting...');
       try {
-        if (session.role === 'host' && session.hostToken && getToken()) {
+        if (session.role === 'host' && session.hostToken && isAuthenticated) {
           await reconnectHost(session.pin, session.hostToken);
           updateRoomState({ isReconnecting: false });
           showToast.success('Reconnected as host!');
@@ -422,7 +418,7 @@ export function RoomProvider({ children }) {
 
     const session = getSession();
     if (session && !roomState.roomPin) attemptReconnection();
-  }, [getToken, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState, roomState.roomPin]);
+  }, [isAuthenticated, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState, roomState.roomPin]);
 
   const value = {
     ...roomState,

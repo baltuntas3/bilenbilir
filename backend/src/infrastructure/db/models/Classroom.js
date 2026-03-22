@@ -20,7 +20,6 @@ const classroomSchema = new mongoose.Schema({
 });
 
 classroomSchema.index({ teacher: 1, isActive: 1 });
-classroomSchema.index({ joinCode: 1 });
 
 const Classroom = mongoose.model('Classroom', classroomSchema);
 

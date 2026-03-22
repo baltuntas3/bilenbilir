@@ -40,6 +40,7 @@ class SocketService {
 
     this.socket = io(SOCKET_URL, {
       auth,
+      withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
