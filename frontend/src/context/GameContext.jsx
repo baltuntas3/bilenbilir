@@ -63,10 +63,27 @@ export function GameProvider({ children }) {
     setState(initialGameState);
   }, [timer, room]);
 
+  // Clean up game-specific socket listeners
+  const cleanupGameListeners = useCallback(() => {
+    const gameEvents = [
+      'you_were_kicked', 'player_kicked', 'player_banned', 'player_returned',
+      'spectator_returned', 'nickname_unbanned', 'game_started', 'question_intro',
+      'answering_started', 'answer_received', 'answer_count_updated',
+      'show_results', 'round_ended', 'leaderboard', 'game_over', 'final_results',
+      'fifty_fifty_result', 'power_up_activated', 'power_up_used', 'time_extended',
+      'timer_started', 'timer_tick', 'time_expired', 'timer_sync',
+      'game_paused', 'game_resumed', 'reaction_received', 'room_closed',
+      'host_disconnected', 'host_disconnected_warning', 'host_returned', 'error'
+    ];
+    gameEvents.forEach(event => socketService.off(event));
+  }, []);
+
   // Socket event handlers
   const setupSocketListeners = useCallback(() => {
     const currentSocketId = socketService.getSocketId();
     if (listenersSetupRef.current && lastSocketIdRef.current !== currentSocketId) {
+      // Socket changed (reconnected) — clean up old listeners before re-attaching
+      cleanupGameListeners();
       listenersSetupRef.current = false;
     }
     if (listenersSetupRef.current) return;
@@ -151,7 +168,6 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('answer_count_updated', ({ answeredCount }) => updateState({ answeredCount }));
-    socketService.on('all_players_answered', () => {});
 
     socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, totalPlayers, explanation }) => {
       timer.stopTimer();
@@ -256,7 +272,7 @@ export function GameProvider({ children }) {
     });
     socketService.on('host_returned', () => showToast.success('Host has reconnected!'));
     socketService.on('error', ({ error, message }) => showToast.error(error || message || 'An error occurred'));
-  }, [updateState, timer, room, resetGame]);
+  }, [updateState, timer, room, resetGame, cleanupGameListeners]);
 
   // Set up listeners when room connects
   useEffect(() => {
@@ -300,7 +316,12 @@ export function GameProvider({ children }) {
   const getResults = useCallback(() => {
     return new Promise((resolve, reject) => {
       if (!room.roomPin) { reject(new Error('Not in a room')); return; }
+      const timeout = setTimeout(() => {
+        socketService.off('final_results', onFinalResults);
+        reject(new Error('get_results timed out'));
+      }, 10000);
       const onFinalResults = (response) => {
+        clearTimeout(timeout);
         socketService.off('final_results', onFinalResults);
         updateState({ leaderboard: response.leaderboard, podium: response.podium });
         resolve(response);
@@ -329,17 +350,18 @@ export function GameProvider({ children }) {
     return () => clearInterval(interval);
   }, [state.reactions.length]);
 
-  // Cleanup on unmount only
+  // Cleanup on unmount only — remove game-specific listeners, not all listeners
   useEffect(() => {
     return () => {
       timerRef.current.stopTimer();
-      socketService.removeAllListeners();
-      socketService.disconnect();
+      cleanupGameListeners();
+      listenersSetupRef.current = false;
+      lastSocketIdRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cleanupGameListeners]);
 
-  const value = {
+  const value = useMemo(() => ({
     // Spread room state for backward compatibility
     ...room,
     // Timer state
@@ -353,7 +375,14 @@ export function GameProvider({ children }) {
     pauseGame, resumeGame,
     requestTimerSync, getResults, sendReaction,
     resetGame,
-  };
+  }), [
+    room, timer.remainingTime, timer.timeLimit, state,
+    startGame, startAnswering, submitAnswer, usePowerUp,
+    endAnswering, showLeaderboard, nextQuestion,
+    pauseGame, resumeGame,
+    requestTimerSync, getResults, sendReaction,
+    resetGame,
+  ]);
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 }

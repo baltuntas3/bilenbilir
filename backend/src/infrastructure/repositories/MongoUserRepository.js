@@ -47,9 +47,13 @@ class MongoUserRepository {
       const doc = await query;
       return this._toDomain(doc, includePassword);
     } catch (error) {
-      // Log database errors for debugging, but don't expose to caller
-      console.error(`[MongoUserRepository.findById] Error finding user ${id}:`, error.message);
-      return null;
+      // CastError means invalid ObjectId format — treat as "not found"
+      if (error.name === 'CastError') {
+        return null;
+      }
+      // Log and re-throw real database errors so callers can handle them
+      console.error(`[MongoUserRepository.findById] DB error for user ${id}:`, error.message);
+      throw error;
     }
   }
 
@@ -232,8 +236,11 @@ class MongoUserRepository {
       const result = await UserModel.findByIdAndDelete(id);
       return !!result;
     } catch (error) {
-      console.error(`[MongoUserRepository.deleteById] Error deleting user ${id}:`, error.message);
-      return false;
+      if (error.name === 'CastError') {
+        return false;
+      }
+      console.error(`[MongoUserRepository.deleteById] DB error for user ${id}:`, error.message);
+      throw error;
     }
   }
 }

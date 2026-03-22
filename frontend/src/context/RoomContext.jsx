@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { socketService } from '../services/socketService';
 import { useAuth } from './AuthContext';
 import { showToast } from '../utils/toast';
@@ -69,23 +69,33 @@ export function RoomProvider({ children }) {
 
   const emitWithResponse = useCallback((emitEvent, emitData, responseEvent, timeoutMs = 10000) => {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      let settled = false;
+
+      const cleanup = () => {
         socketService.off(responseEvent, onResponse);
         socketService.off('error', onError);
+      };
+
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error(`${responseEvent} timed out`));
       }, timeoutMs);
 
       const onResponse = (response) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
-        socketService.off(responseEvent, onResponse);
-        socketService.off('error', onError);
+        cleanup();
         resolve(response);
       };
 
       const onError = ({ error }) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
-        socketService.off(responseEvent, onResponse);
-        socketService.off('error', onError);
+        cleanup();
         reject(new Error(error));
       };
 
@@ -333,7 +343,12 @@ export function RoomProvider({ children }) {
   const getPlayers = useCallback(() => {
     return new Promise((resolve, reject) => {
       if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
+      const timeout = setTimeout(() => {
+        socketService.off('players_list', onPlayersList);
+        reject(new Error('get_players timed out'));
+      }, 10000);
       const onPlayersList = (response) => {
+        clearTimeout(timeout);
         socketService.off('players_list', onPlayersList);
         updateRoomState({ players: response.players });
         resolve(response.players);
@@ -346,7 +361,12 @@ export function RoomProvider({ children }) {
   const getSpectators = useCallback(() => {
     return new Promise((resolve, reject) => {
       if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
+      const timeout = setTimeout(() => {
+        socketService.off('spectators_list', onSpectatorsList);
+        reject(new Error('get_spectators timed out'));
+      }, 10000);
       const onSpectatorsList = (response) => {
+        clearTimeout(timeout);
         socketService.off('spectators_list', onSpectatorsList);
         updateRoomState({ spectators: response.spectators });
         resolve(response.spectators);
@@ -361,7 +381,12 @@ export function RoomProvider({ children }) {
   const getBannedNicknames = useCallback(() => {
     return new Promise((resolve, reject) => {
       if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
+      const timeout = setTimeout(() => {
+        socketService.off('banned_nicknames', onBannedNicknames);
+        reject(new Error('get_banned_nicknames timed out'));
+      }, 10000);
       const onBannedNicknames = (response) => {
+        clearTimeout(timeout);
         socketService.off('banned_nicknames', onBannedNicknames);
         updateRoomState({ bannedNicknames: response.bannedNicknames });
         resolve(response.bannedNicknames);
@@ -420,7 +445,7 @@ export function RoomProvider({ children }) {
     if (session && !roomState.roomPin) attemptReconnection();
   }, [isAuthenticated, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState, roomState.roomPin]);
 
-  const value = {
+  const value = useMemo(() => ({
     ...roomState,
     createRoom, joinRoom, joinAsSpectator,
     leaveRoom, closeRoom, leaveSpectator,
@@ -433,7 +458,20 @@ export function RoomProvider({ children }) {
     resetRoom, updateRoomState,
     hostEmit, emitWithResponse,
     connectSocket,
-  };
+  }), [
+    roomState,
+    createRoom, joinRoom, joinAsSpectator,
+    leaveRoom, closeRoom, leaveSpectator,
+    getMyRoom, forceCloseExistingRoom,
+    reconnectHost, reconnectPlayer, reconnectSpectator,
+    kickPlayer, banPlayer, getPlayers, getSpectators,
+    unbanNickname, getBannedNicknames,
+    enableTeamMode, disableTeamMode, addTeam, removeTeam, assignTeam,
+    setLightningRound,
+    resetRoom, updateRoomState,
+    hostEmit, emitWithResponse,
+    connectSocket,
+  ]);
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
 }

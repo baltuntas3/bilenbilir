@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Paper, Stack, Group, Text, Badge, ThemeIcon, ScrollArea, Tabs, ColorSwatch } from '@mantine/core';
 import { IconTrophy, IconMedal, IconUser, IconUsersGroup } from '@tabler/icons-react';
 import PlayerAvatar from './PlayerAvatar';
@@ -15,7 +16,10 @@ const RANK_ICONS = {
 };
 
 function PlayerLeaderboard({ players, currentPlayerId, maxHeight }) {
-  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+  const sortedPlayers = useMemo(
+    () => [...players].sort((a, b) => b.score - a.score),
+    [players]
+  );
 
   return (
     <ScrollArea h={maxHeight} offsetScrollbars>

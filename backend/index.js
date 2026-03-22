@@ -11,6 +11,7 @@ const { quizRoutes, authRoutes, gameRoutes, adminRoutes, statsRoutes, tournament
 const { errorHandler } = require('./src/api/middlewares/errorHandler');
 const { sanitize } = require('./src/api/middlewares/sanitizeMiddleware');
 const { emailService } = require('./src/infrastructure/services');
+const { checkOrigin } = require('./src/shared/config/cors');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -26,21 +27,7 @@ emailService.initialize();
 const io = initializeSocket(server);
 
 // Middleware
-const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(',').map(url => url.trim())
-  : ['http://localhost:5173'];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    // Allow if in explicit list
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Allow any Cloud Run origin for this project
-    if (/^https:\/\/bilenbilir-web.*\.run\.app$/.test(origin)) return callback(null, true);
-    callback(new Error('CORS not allowed'));
-  },
-}));
+app.use(cors({ origin: checkOrigin }));
 app.use(express.json());
 app.use(sanitize); // XSS protection - sanitize all inputs
 

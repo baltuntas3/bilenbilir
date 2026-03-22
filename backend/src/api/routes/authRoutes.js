@@ -48,7 +48,8 @@ router.post('/login', authLimiter, async (req, res, next) => {
  * Clear auth cookie
  */
 router.post('/logout', (req, res) => {
-  clearTokenCookie(res);
+  // Token is stored client-side (localStorage), so logout is handled by the client
+  // Server just confirms the logout request
   res.json({ message: 'Logged out' });
 });
 

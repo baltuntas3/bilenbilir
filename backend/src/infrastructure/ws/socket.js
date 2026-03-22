@@ -8,6 +8,7 @@ const { mongoQuizRepository } = require('../repositories/MongoQuizRepository');
 const { RoomCleanupService } = require('../services/RoomCleanupService');
 const { GameTimerService } = require('../services/GameTimerService');
 const { socketRateLimiter } = require('../../api/middlewares/socketRateLimiter');
+const { checkOrigin } = require('../../shared/config/cors');
 
 let io;
 let cleanupService;
@@ -40,18 +41,9 @@ const verifySocketToken = (token) => {
 };
 
 const initializeSocket = (server) => {
-  const allowedOrigins = process.env.CLIENT_URL
-    ? process.env.CLIENT_URL.split(',').map(url => url.trim())
-    : ['http://localhost:5173'];
-
   io = new Server(server, {
     cors: {
-      origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        if (/^https:\/\/bilenbilir-web.*\.run\.app$/.test(origin)) return callback(null, true);
-        callback(new Error('CORS not allowed'));
-      },
+      origin: checkOrigin,
       methods: ['GET', 'POST']
     }
   });

@@ -77,15 +77,38 @@ class RoomCleanupService {
     this.isCleanupRunning = true;
     try {
       const rooms = await this.roomRepository.getAll();
-      const now = Date.now();
 
       for (const room of rooms) {
         try {
+          const now = Date.now();
+          const roomAge = now - room.createdAt.getTime();
+          const hasDisconnectedHost = room.isHostDisconnected();
+          const hasNoPlayers = room.getPlayerCount() === 0;
+          const isActiveGame = this._isActiveGame(room);
+
+          // Fast path: skip rooms that are clearly healthy
+          // (host connected, has players, not idle, game active or recently created)
+          if (!hasDisconnectedHost && !hasNoPlayers && roomAge < this.emptyRoomTimeout) {
+            // Still check for stale disconnected players
+            const stalePlayers = room.removeStaleDisconnectedPlayers(this.playerGracePeriod);
+            if (stalePlayers.length > 0) {
+              console.log(`Removed ${stalePlayers.length} stale players from room ${room.pin}`);
+              if (this.io) {
+                stalePlayers.forEach(player => {
+                  this.io.to(room.pin).emit('player_removed', {
+                    playerId: player.id,
+                    nickname: player.nickname,
+                    reason: 'reconnection_timeout'
+                  });
+                });
+              }
+              await this.roomRepository.save(room);
+            }
+            continue;
+          }
+
           let shouldDelete = false;
           let reason = '';
-
-          // Skip aggressive cleanup for rooms with active games (but still clean stale players)
-          const isActiveGame = this._isActiveGame(room);
 
           // Clean up stale disconnected players (always do this, even in active games)
           const stalePlayers = room.removeStaleDisconnectedPlayers(this.playerGracePeriod);
@@ -138,8 +161,7 @@ class RoomCleanupService {
           }
 
           // Check if room is empty for too long (skip if game is active with no players - edge case)
-          if (!shouldDelete && room.getPlayerCount() === 0 && !isActiveGame) {
-            const roomAge = now - room.createdAt.getTime();
+          if (!shouldDelete && hasNoPlayers && !isActiveGame) {
             if (roomAge > this.emptyRoomTimeout) {
               shouldDelete = true;
               reason = 'Empty room timeout';
@@ -149,7 +171,6 @@ class RoomCleanupService {
           // Check if room has been idle too long
           // Use longer timeout for active games
           if (!shouldDelete) {
-            const roomAge = now - room.createdAt.getTime();
             const timeout = isActiveGame ? this.idleRoomTimeout * 2 : this.idleRoomTimeout;
             if (roomAge > timeout) {
               shouldDelete = true;

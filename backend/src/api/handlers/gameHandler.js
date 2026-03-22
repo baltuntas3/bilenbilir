@@ -375,11 +375,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
   const ALLOWED_REACTIONS = ['\u{1F44F}', '\u{1F389}', '\u{1F62E}', '\u{1F602}', '\u{1F525}', '\u{2764}\u{FE0F}', '\u{1F44D}', '\u{1F4AF}'];
 
-  // Per-socket reaction rate limiter: max 3 per 5 seconds
-  const reactionTimestamps = [];
-
   socket.on('send_reaction', async (data) => {
     try {
+      if (!checkRateLimit('send_reaction')) return;
+
       const { pin, reaction } = data || {};
 
       if (!pin || !reaction) return;
@@ -388,18 +387,6 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Verify socket is in the room
       const rooms = socket.rooms;
       if (!rooms || !rooms.has(pin)) return;
-
-      // Rate limit: max 3 reactions per 5 seconds
-      const now = Date.now();
-      // Remove timestamps older than 5 seconds
-      while (reactionTimestamps.length > 0 && now - reactionTimestamps[0] > 5000) {
-        reactionTimestamps.shift();
-      }
-      if (reactionTimestamps.length >= 3) {
-        socket.emit('error', { error: 'Too many reactions, please wait' });
-        return;
-      }
-      reactionTimestamps.push(now);
 
       // Look up nickname from room (player, spectator, or host)
       let nickname = 'Anonymous';

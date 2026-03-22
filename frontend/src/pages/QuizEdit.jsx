@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Container, Title, Paper, TextInput, Textarea, Switch, Button, Stack, Group, Card, Text, Badge, ActionIcon, Modal, Center, Loader, Select, TagsInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
@@ -46,15 +46,18 @@ export default function QuizEdit() {
   });
 
   // Update form when quiz data loads
-  if (quiz && form.values.title === '' && quiz.title) {
-    form.setValues({
-      title: quiz.title,
-      description: quiz.description || '',
-      isPublic: quiz.isPublic,
-      category: quiz.category || 'Diğer',
-      tags: quiz.tags || [],
-    });
-  }
+  useEffect(() => {
+    if (quiz) {
+      form.setValues({
+        title: quiz.title || '',
+        description: quiz.description || '',
+        isPublic: quiz.isPublic || false,
+        category: quiz.category || 'Diğer',
+        tags: quiz.tags || [],
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quiz]);
 
   const updateMutation = useMutation({
     mutationFn: (data) => quizService.update(id, data),
