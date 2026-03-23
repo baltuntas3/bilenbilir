@@ -59,8 +59,8 @@ class GameFlowUseCases extends SharedUseCases {
     this._throwIfNotHost(room, requesterId);
     room.setState(RoomState.ANSWERING_PHASE);
     room.clearAllAnswerAttempts();
-    if (pendingAnswers) pendingAnswers.clearByPrefix(`${pin}:`);
     await this.roomRepository.save(room);
+    if (pendingAnswers) pendingAnswers.clearByPrefix(`${pin}:`);
 
     const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
     let timeLimit = currentQuestion.timeLimit;

@@ -364,11 +364,11 @@ export function GameProvider({ children }) {
 
   const powerUpPendingRef = useRef(false);
   const powerUpCleanupRef = useRef(null);
+  const mountedRef = useRef(true);
   const usePowerUp = useCallback((type) => {
     if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
     powerUpPendingRef.current = true;
 
-    // Capture previous count synchronously before any async state change
     const previousCount = state.powerUps[type] || 0;
     socketService.emit('use_power_up', { pin: room.roomPin, powerUpType: type });
     setState(prev => ({
@@ -389,10 +389,12 @@ export function GameProvider({ children }) {
     const onError = () => {
       const countToRestore = previousCount;
       cleanup();
-      setState(prev => ({
-        ...prev,
-        powerUps: { ...prev.powerUps, [type]: countToRestore },
-      }));
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          powerUps: { ...prev.powerUps, [type]: countToRestore },
+        }));
+      }
     };
     const onSuccess = () => {
       cleanup();
@@ -468,12 +470,13 @@ export function GameProvider({ children }) {
 
   // Cleanup on unmount only — remove game-specific listeners, not all listeners
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       timerRef.current.stopTimer();
       cleanupGameListeners();
       listenersSetupRef.current = false;
       lastSocketIdRef.current = null;
-      // Clean up any pending power-up timeout to prevent state updates after unmount
       if (powerUpCleanupRef.current) powerUpCleanupRef.current();
     };
   }, [cleanupGameListeners]);

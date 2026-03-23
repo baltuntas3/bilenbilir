@@ -1,7 +1,7 @@
 import { Text, Paper, Group, Progress, Stack } from '@mantine/core';
 
-const OPTION_COLORS = ['blue', 'orange', 'green', 'red'];
-const OPTION_LABELS = ['A', 'B', 'C', 'D'];
+const OPTION_COLORS = ['blue', 'orange', 'green', 'red', 'grape', 'cyan'];
+const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export default function AnswerDistribution({ distribution, correctAnswerIndex, totalPlayers, options }) {
   if (!distribution || !Array.isArray(distribution)) return null;

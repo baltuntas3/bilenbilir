@@ -9,6 +9,10 @@ class GameArchiveUseCases extends SharedUseCases {
     this.pendingArchives = new LockManager(LOCK_TIMEOUT_MS);
   }
 
+  cleanupExpiredLocks() {
+    return this.pendingArchives.cleanupExpired();
+  }
+
   _calculatePlayerStats(answerHistory) {
     const playerStats = new Map();
     for (const answer of answerHistory) {
@@ -87,10 +91,14 @@ class GameArchiveUseCases extends SharedUseCases {
       const session = await this.gameSessionRepository.save(sessionData);
       if (pendingAnswers) pendingAnswers.clearByPrefix(`${pin}:`);
 
+      let roomDeleted = true;
       try { await this.roomRepository.delete(pin); }
-      catch (deleteError) { console.error(`Failed to delete room ${pin} after archiving:`, deleteError.message); }
+      catch (deleteError) {
+        roomDeleted = false;
+        console.error(`Failed to delete room ${pin} after archiving:`, deleteError.message);
+      }
 
-      return { session };
+      return { session, roomDeleted };
     });
   }
 

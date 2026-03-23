@@ -15,9 +15,9 @@ const RANK_ICONS = {
   3: <IconMedal size={18} />,
 };
 
-function PlayerLeaderboard({ players, currentPlayerId, maxHeight }) {
+function PlayerLeaderboard({ players = [], currentPlayerId, maxHeight }) {
   const sortedPlayers = useMemo(
-    () => [...players].sort((a, b) => b.score - a.score),
+    () => [...(players || [])].sort((a, b) => (b.score || 0) - (a.score || 0)),
     [players]
   );
 
@@ -74,7 +74,7 @@ function PlayerLeaderboard({ players, currentPlayerId, maxHeight }) {
                     </Badge>
                   )}
                   <Text fw={700} size="lg">
-                    {player.score.toLocaleString()}
+                    {(player.score || 0).toLocaleString()}
                   </Text>
                 </Group>
               </Group>
@@ -136,7 +136,7 @@ function TeamLeaderboard({ teamLeaderboard, maxHeight }) {
                   </Badge>
                 </Group>
                 <Text fw={700} size="lg">
-                  {team.score.toLocaleString()}
+                  {(team.score || 0).toLocaleString()}
                 </Text>
               </Group>
             </Paper>
@@ -147,7 +147,7 @@ function TeamLeaderboard({ teamLeaderboard, maxHeight }) {
   );
 }
 
-export default function Leaderboard({ players, currentPlayerId, maxHeight = 400, teamMode = false, teamLeaderboard = [] }) {
+export default function Leaderboard({ players = [], currentPlayerId, maxHeight = 400, teamMode = false, teamLeaderboard = [] }) {
   if (!teamMode) {
     return <PlayerLeaderboard players={players} currentPlayerId={currentPlayerId} maxHeight={maxHeight} />;
   }

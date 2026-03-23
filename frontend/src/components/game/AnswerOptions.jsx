@@ -1,8 +1,8 @@
 import { SimpleGrid, Button, Text, Stack, Progress, Badge, Group } from '@mantine/core';
 import { IconCheck, IconX, IconUsers } from '@tabler/icons-react';
 
-const OPTION_COLORS = ['blue', 'orange', 'green', 'grape'];
-const OPTION_LABELS = ['A', 'B', 'C', 'D'];
+const OPTION_COLORS = ['blue', 'orange', 'green', 'grape', 'red', 'cyan'];
+const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export default function AnswerOptions({
   options,

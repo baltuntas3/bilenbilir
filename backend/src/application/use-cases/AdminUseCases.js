@@ -1,4 +1,4 @@
-const { NotFoundError, ForbiddenError, ValidationError } = require('../../shared/errors');
+const { NotFoundError, ForbiddenError, ValidationError, ConflictError } = require('../../shared/errors');
 
 class AdminUseCases {
   constructor(userRepository, quizRepository, roomRepository, gameSessionRepository, auditLogRepository = null, options = {}) {
@@ -218,22 +218,22 @@ class AdminUseCases {
 
     // Close any active rooms hosted by this user and notify players (before user deletion)
     if (this.roomRepository) {
-      const rooms = await this.roomRepository.getAll();
-      for (const room of rooms) {
-        if (room.hostUserId === userId) {
-          if (this.onRoomClosed) {
-            try {
-              await this.onRoomClosed(room.pin, {
-                reason: 'Host account deleted',
-                playerCount: room.getPlayerCount(),
-                spectatorCount: room.getSpectatorCount()
-              });
-            } catch (error) {
-              console.error('[AdminUseCases] Failed to notify room closure for deleted user:', error.message);
-            }
+      const room = this.roomRepository.findByHostUserId
+        ? await this.roomRepository.findByHostUserId(userId)
+        : (await this.roomRepository.getAll()).find(r => r.hostUserId === userId);
+      if (room) {
+        if (this.onRoomClosed) {
+          try {
+            await this.onRoomClosed(room.pin, {
+              reason: 'Host account deleted',
+              playerCount: room.getPlayerCount(),
+              spectatorCount: room.getSpectatorCount()
+            });
+          } catch (error) {
+            console.error('[AdminUseCases] Failed to notify room closure for deleted user:', error.message);
           }
-          await this.roomRepository.delete(room.pin);
         }
+        await this.roomRepository.delete(room.pin);
       }
     }
 
@@ -270,6 +270,20 @@ class AdminUseCases {
     return { success: true, deletedQuizCount, deletedSessionCount };
   }
 
+  /**
+   * Check if a quiz is currently in use in any active room
+   * @private
+   */
+  async _throwIfQuizInUse(quizId) {
+    if (!this.roomRepository) return;
+    const room = this.roomRepository.findByQuizId
+      ? await this.roomRepository.findByQuizId(quizId)
+      : (await this.roomRepository.getAll()).find(r => r.quizId === quizId);
+    if (room) {
+      throw new ConflictError('Cannot delete quiz while it is being used in an active game');
+    }
+  }
+
   // ==================== QUIZ MANAGEMENT ====================
 
   /**
@@ -298,13 +312,7 @@ class AdminUseCases {
     }
 
     // Check for active games
-    if (this.roomRepository) {
-      const rooms = await this.roomRepository.getAll();
-      const activeGame = rooms.find(room => room.quizId === quizId);
-      if (activeGame) {
-        throw new ForbiddenError('Cannot delete quiz while it is being used in an active game');
-      }
-    }
+    await this._throwIfQuizInUse(quizId);
 
     const quizTitle = quiz.title;
     const quizCreator = quiz.createdBy;

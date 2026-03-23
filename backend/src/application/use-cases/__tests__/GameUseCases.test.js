@@ -676,7 +676,7 @@ describe('GameUseCases', () => {
   });
 
   describe('startGame validation', () => {
-    it('should throw error for quiz with no questions', async () => {
+    it('should throw error for quiz with no questions at room creation', async () => {
       // Create empty quiz
       const emptyQuiz = new Quiz({
         id: 'empty-quiz',
@@ -685,22 +685,11 @@ describe('GameUseCases', () => {
       });
       await quizRepository.save(emptyQuiz);
 
-      // Create room with empty quiz
-      const createResult = await roomUseCases.createRoom({
+      // createRoom should reject empty quiz early (fail-fast)
+      await expect(roomUseCases.createRoom({
         hostId: 'host-socket-2',
         quizId: 'empty-quiz'
-      });
-
-      await roomUseCases.joinRoom({
-        pin: createResult.room.pin,
-        nickname: 'Player',
-        socketId: 'player-socket-3'
-      });
-
-      await expect(gameUseCases.startGame({
-        pin: createResult.room.pin,
-        requesterId: 'host-socket-2'
-      })).rejects.toThrow('Quiz must have at least one question');
+      })).rejects.toThrow('Cannot create room: quiz has no questions');
     });
   });
 

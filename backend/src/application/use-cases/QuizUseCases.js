@@ -182,6 +182,20 @@ class QuizUseCases {
   }
 
   /**
+   * Check if a quiz is currently in use in any active room
+   * @private
+   */
+  async _throwIfQuizInUse(quizId) {
+    if (!this.roomRepository) return;
+    const room = await this.roomRepository.findByQuizId
+      ? await this.roomRepository.findByQuizId(quizId)
+      : (await this.roomRepository.getAll()).find(r => r.quizId === quizId);
+    if (room) {
+      throw new ConflictError('Cannot delete quiz while it is being used in an active game');
+    }
+  }
+
+  /**
    * Delete quiz
    * Checks for active games using this quiz before deletion
    * Also deletes related game sessions (cascade delete)
@@ -189,15 +203,7 @@ class QuizUseCases {
   async deleteQuiz({ quizId, requesterId }) {
     const quiz = await this._getQuizOrThrow(quizId);
     this._validateQuizOwnership(quiz, requesterId);
-
-    // Check for active games using this quiz
-    if (this.roomRepository) {
-      const rooms = await this.roomRepository.getAll();
-      const activeGame = rooms.find(room => room.quizId === quizId);
-      if (activeGame) {
-        throw new ConflictError('Cannot delete quiz while it is being used in an active game');
-      }
-    }
+    await this._throwIfQuizInUse(quizId);
 
     // Cascade delete: remove all game sessions for this quiz
     let deletedSessionsCount = 0;

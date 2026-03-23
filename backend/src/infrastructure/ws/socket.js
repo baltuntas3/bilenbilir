@@ -74,7 +74,7 @@ const initializeSocket = (server) => {
   timerService = new GameTimerService(io);
 
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.id, socket.isAuthenticated ? `(authenticated: ${socket.user.userId})` : '(guest)');
+    console.log('User connected:', socket.id, socket.isAuthenticated && socket.user ? `(authenticated: ${socket.user.userId})` : '(guest)');
 
     // Register handlers
     createRoomHandler(io, socket, roomUseCases, timerService);

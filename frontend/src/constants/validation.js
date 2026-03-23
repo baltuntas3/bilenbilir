@@ -79,7 +79,7 @@ export const questionTextValidation = (value) => {
 export const questionOptionsValidation = (value, values) => {
   if (!value || !Array.isArray(value)) return 'Options are required';
   const minOptions = values?.type === 'TRUE_FALSE' ? 2 : 2;
-  const maxOptions = values?.type === 'TRUE_FALSE' ? 2 : 4;
+  const maxOptions = values?.type === 'TRUE_FALSE' ? 2 : 6;
   if (value.length < minOptions) return `At least ${minOptions} options required`;
   if (value.length > maxOptions) return `At most ${maxOptions} options allowed`;
   if (value.some(opt => !opt || !opt.trim())) return 'All options must have text';

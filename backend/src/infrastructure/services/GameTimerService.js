@@ -70,11 +70,11 @@ class GameTimerService {
       }
     }, durationMs);
 
-    timerEntry.intervalId = setInterval(() => {
+    const intervalId = setInterval(() => {
       // Check if timer was stopped to prevent zombie intervals
       const currentTimer = this.activeTimers.get(pin);
       if (!currentTimer || currentTimer.stopped) {
-        clearInterval(timerEntry.intervalId);
+        clearInterval(intervalId);
         return;
       }
 
@@ -83,9 +83,10 @@ class GameTimerService {
 
       // Clean up interval when timer expires
       if (syncData.remaining <= 0) {
-        clearInterval(timerEntry.intervalId);
+        clearInterval(intervalId);
       }
     }, 1000);
+    timerEntry.intervalId = intervalId;
 
     this.activeTimers.set(pin, timerEntry);
 

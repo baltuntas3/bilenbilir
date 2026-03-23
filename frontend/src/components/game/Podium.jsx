@@ -46,7 +46,7 @@ function PodiumPlace({ player, rank }) {
           {player.nickname}
         </Text>
         <Text size="sm" c="dimmed">
-          {player.score.toLocaleString()} pts
+          {(player.score || 0).toLocaleString()} pts
         </Text>
         <Paper
           style={{
@@ -91,7 +91,7 @@ function TeamPodiumPlace({ team, rank }) {
           </Text>
         </Group>
         <Text size="sm" c="dimmed">
-          {team.score.toLocaleString()} pts
+          {(team.score || 0).toLocaleString()} pts
         </Text>
         <Text size="xs" c="dimmed">
           {team.playerCount} oyuncu
@@ -117,9 +117,9 @@ function TeamPodiumPlace({ team, rank }) {
   );
 }
 
-export default function Podium({ players, currentPlayerId, teamMode = false, teamPodium = [] }) {
+export default function Podium({ players = [], currentPlayerId, teamMode = false, teamPodium = [] }) {
   // Sort players by score and get top 3
-  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+  const sortedPlayers = [...(players || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
   const top3 = sortedPlayers.slice(0, 3);
 
   // Find current player's rank
@@ -166,7 +166,7 @@ export default function Podium({ players, currentPlayerId, teamMode = false, tea
               </Text>
               <Text c="dimmed">puan:</Text>
               <Text fw={700} size="xl">
-                {currentPlayer.score.toLocaleString()} pts
+                {(currentPlayer.score || 0).toLocaleString()} pts
               </Text>
             </Group>
           </Center>

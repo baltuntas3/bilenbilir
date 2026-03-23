@@ -339,9 +339,11 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       if (emitActions.timerAction) {
         const { method, args } = emitActions.timerAction;
         const allowedTimerMethods = ['extendTimer', 'stopTimer'];
-        if (allowedTimerMethods.includes(method)) {
+        if (allowedTimerMethods.includes(method) && Array.isArray(args)) {
+          // Validate args are safe primitives (numbers/strings only)
+          const safeArgs = args.filter(a => typeof a === 'number' || typeof a === 'string');
           try {
-            timerService[method](pin, ...args);
+            timerService[method](pin, ...safeArgs);
           } catch (timerErr) {
             console.error(`Timer action '${method}' failed for pin ${pin}:`, timerErr.message);
           }

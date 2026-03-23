@@ -17,7 +17,7 @@ class GameUseCases {
   cleanupExpiredLocks() {
     return {
       pendingAnswers: this._answer.cleanupExpiredLocks(),
-      pendingArchives: 0
+      pendingArchives: this._archive.cleanupExpiredLocks()
     };
   }
 

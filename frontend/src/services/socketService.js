@@ -61,10 +61,11 @@ class SocketService {
         this.currentSocketId = this.socket.id;
 
         // Re-attach stored listeners to the new socket instance.
-        // Contexts will cleanup and re-add their own listeners via reconnect callback,
-        // which properly deduplicates.
+        // Contexts will cleanup and re-add their own listeners via reconnect callback.
+        // Clone the Map to avoid mutation during iteration.
         if (hadPreviousSocket && this.listeners.size > 0) {
-          this.listeners.forEach((callbacks, event) => {
+          const snapshot = new Map(this.listeners);
+          snapshot.forEach((callbacks, event) => {
             callbacks.forEach(callback => {
               this.socket.on(event, callback);
             });

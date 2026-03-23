@@ -33,28 +33,24 @@ export function TimerProvider({ children }) {
   }, []);
 
   const extendTimer = useCallback((extraTimeMs) => {
-    if (endTimeRef.current) {
-      endTimeRef.current += extraTimeMs;
-      // Update timeLimit so progress ring stays proportional
-      setTimeLimit(prev => prev + Math.ceil(extraTimeMs / 1000));
+    if (!endTimeRef.current) return;
+    endTimeRef.current += extraTimeMs;
+    setTimeLimit(prev => prev + Math.ceil(extraTimeMs / 1000));
 
-      // Restart interval if it was cleared (timer had expired)
-      if (!timerRef.current) {
-        const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
-        setRemainingTime(remaining);
-        if (remaining > 0) {
-          timerRef.current = setInterval(() => {
-            const now = Date.now();
-            const r = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
-            setRemainingTime(r);
-            if (r <= 0) {
-              clearInterval(timerRef.current);
-              timerRef.current = null;
-            }
-          }, 100);
-        }
+    // Restart interval only if it was already cleared (timer had expired)
+    if (timerRef.current) return;
+    const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+    setRemainingTime(remaining);
+    if (remaining <= 0) return;
+    timerRef.current = setInterval(() => {
+      const now = Date.now();
+      const r = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
+      setRemainingTime(r);
+      if (r <= 0) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
       }
-    }
+    }, 100);
   }, []);
 
   const resetTimer = useCallback(() => {

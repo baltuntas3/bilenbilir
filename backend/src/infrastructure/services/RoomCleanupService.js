@@ -77,6 +77,13 @@ class RoomCleanupService {
     }
 
     this.isCleanupRunning = true;
+    // Safety timeout to prevent permanent lock if cleanup hangs
+    const safetyTimeout = setTimeout(() => {
+      if (this.isCleanupRunning) {
+        console.error('Cleanup safety timeout reached, releasing lock');
+        this.isCleanupRunning = false;
+      }
+    }, this.checkInterval * 3);
     try {
       const rooms = await this.roomRepository.getAll();
 
@@ -287,7 +294,7 @@ class RoomCleanupService {
     } catch (error) {
       console.error('Room cleanup error:', error.message);
     } finally {
-      // Always release the lock
+      clearTimeout(safetyTimeout);
       this.isCleanupRunning = false;
     }
   }

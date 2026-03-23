@@ -36,6 +36,9 @@ class RoomUseCases extends SharedUseCases {
     }
 
     const quiz = await this._getQuizOrThrow(quizId);
+    if (quiz.getTotalQuestions() === 0) {
+      throw new ValidationError('Cannot create room: quiz has no questions');
+    }
 
     let pin;
     let attempts = 0;

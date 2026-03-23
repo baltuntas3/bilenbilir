@@ -170,7 +170,16 @@ class AuthUseCases {
       throw new ConflictError('Username already taken');
     }
 
-    const user = await this.userRepository.updateById(userId, { username });
+    let user;
+    try {
+      user = await this.userRepository.updateById(userId, { username });
+    } catch (error) {
+      // Handle DB duplicate key error (TOCTOU race condition)
+      if (error.code === 11000 || error.message?.includes('duplicate key')) {
+        throw new ConflictError('Username already taken');
+      }
+      throw error;
+    }
 
     if (!user) {
       throw new NotFoundError('User not found');

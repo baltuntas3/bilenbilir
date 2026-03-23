@@ -24,7 +24,7 @@ const createRateLimiter = (socket) => (eventName) => {
  * @returns {Function} Auth check function that returns user or throws
  */
 const createAuthChecker = (socket) => () => {
-  if (!socket.isAuthenticated || !socket.user) {
+  if (!socket.isAuthenticated || !socket.user || !socket.user.userId) {
     throw new UnauthorizedError('Authentication required for this action');
   }
   return socket.user;

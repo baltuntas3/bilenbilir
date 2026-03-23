@@ -70,7 +70,7 @@ export default function QuestionForm({ quizId, question, onSaved, onCancel }) {
   };
 
   const addOption = () => {
-    if (form.values.options.length < 4) {
+    if (form.values.options.length < 6) {
       form.setFieldValue('options', [...form.values.options, '']);
     }
   };
@@ -124,7 +124,7 @@ export default function QuestionForm({ quizId, question, onSaved, onCancel }) {
         <div>
           <Group justify="space-between" mb="xs">
             <Text size="sm" fw={500}>Options</Text>
-            {form.values.type === 'MULTIPLE_CHOICE' && form.values.options.length < 4 && (
+            {form.values.type === 'MULTIPLE_CHOICE' && form.values.options.length < 6 && (
               <Button
                 size="xs"
                 variant="light"

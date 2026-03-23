@@ -16,9 +16,9 @@ const questionSchema = new mongoose.Schema({
     required: true,
     validate: {
       validator: function(v) {
-        return v.length >= 2 && v.length <= 4;
+        return v.length >= 2 && v.length <= 6;
       },
-      message: 'Options must have 2-4 items'
+      message: 'Options must have 2-6 items'
     }
   },
   correctAnswerIndex: {

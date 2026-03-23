@@ -90,4 +90,4 @@ class Answer {
   }
 }
 
-module.exports = { Answer };
+module.exports = { Answer, MAX_ANSWER_SCORE };

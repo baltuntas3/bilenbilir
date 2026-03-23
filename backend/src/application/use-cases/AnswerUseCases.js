@@ -1,7 +1,7 @@
 const { SharedUseCases } = require('./SharedUseCases');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { RoomState } = require('../../domain/entities');
-const { Answer, PowerUpType, powerUpRegistry } = require('../../domain/value-objects');
+const { Answer, PowerUpType, powerUpRegistry, MAX_ANSWER_SCORE } = require('../../domain/value-objects');
 const { NotFoundError, ValidationError, ConflictError } = require('../../shared/errors');
 const { LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 
@@ -63,12 +63,10 @@ class AnswerUseCases extends SharedUseCases {
 
       player.submitAnswer(answerIndex, validElapsedTime);
       let actualScore = 0;
-      const streakBeforeUpdate = player.streak;
       if (answer.isCorrect) {
         player.incrementStreak();
         if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) {
-          // Only double the base score, not the streak bonus
-          actualScore = answer.score * 2 + answer.streakBonus;
+          actualScore = Math.min(answer.score * 2 + answer.streakBonus, MAX_ANSWER_SCORE);
         } else {
           actualScore = answer.getTotalScore();
         }
@@ -85,7 +83,7 @@ class AnswerUseCases extends SharedUseCases {
         isCorrect: answer.isCorrect,
         elapsedTimeMs: validElapsedTime,
         score: actualScore,
-        streak: streakBeforeUpdate,
+        streak: player.streak,
         optionCount: currentQuestion.options.length
       });
 
