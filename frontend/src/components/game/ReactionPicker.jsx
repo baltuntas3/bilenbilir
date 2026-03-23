@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Group, UnstyledButton } from '@mantine/core';
 import { useGame } from '../../context/GameContext';
 
@@ -8,12 +8,20 @@ const COOLDOWN_MS = 1500;
 export default function ReactionPicker() {
   const { sendReaction } = useGame();
   const [cooldown, setCooldown] = useState(false);
+  const cooldownTimerRef = useRef(null);
+
+  // Clear timeout on unmount to prevent setState on unmounted component
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+    };
+  }, []);
 
   const handleReaction = useCallback((reaction) => {
     if (cooldown) return;
     sendReaction(reaction);
     setCooldown(true);
-    setTimeout(() => setCooldown(false), COOLDOWN_MS);
+    cooldownTimerRef.current = setTimeout(() => setCooldown(false), COOLDOWN_MS);
   }, [cooldown, sendReaction]);
 
   return (

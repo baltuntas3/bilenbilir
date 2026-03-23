@@ -10,13 +10,13 @@ import { showToast } from '../utils/toast';
  * @param {Function} [options.onSuccess] - Called after successful execution
  * @returns {Function} Wrapped handler
  */
-export function useGameAction(action, options = {}) {
+export function useGameAction(action, { onSuccess } = {}) {
   return useCallback(async () => {
     try {
       await action();
-      if (options.onSuccess) options.onSuccess();
+      if (onSuccess) onSuccess();
     } catch (error) {
       showToast.error(error.message);
     }
-  }, [action, options.onSuccess]);
+  }, [action, onSuccess]);
 }

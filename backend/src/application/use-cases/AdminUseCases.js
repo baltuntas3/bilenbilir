@@ -102,6 +102,10 @@ class AdminUseCases {
   async getAllUsers({ requesterId, page = 1, limit = 20 }) {
     await this._validateAdmin(requesterId);
 
+    // Validate pagination bounds
+    page = Math.max(1, Math.min(Math.floor(page) || 1, 1000));
+    limit = Math.max(1, Math.min(Math.floor(limit) || 20, 100));
+
     // Use findAll if available, otherwise construct a workaround
     if (this.userRepository.findAll) {
       return await this.userRepository.findAll({ page, limit });
@@ -212,24 +216,11 @@ class AdminUseCases {
     const userEmail = user.email;
     const username = user.username;
 
-    // Delete user's quizzes first
-    let deletedQuizCount = 0;
-    if (this.quizRepository.deleteByCreator) {
-      deletedQuizCount = await this.quizRepository.deleteByCreator(userId);
-    }
-
-    // Delete user's game sessions
-    let deletedSessionCount = 0;
-    if (this.gameSessionRepository && this.gameSessionRepository.deleteByHost) {
-      deletedSessionCount = await this.gameSessionRepository.deleteByHost(userId);
-    }
-
-    // Close any active rooms hosted by this user and notify players
+    // Close any active rooms hosted by this user and notify players (before user deletion)
     if (this.roomRepository) {
       const rooms = await this.roomRepository.getAll();
       for (const room of rooms) {
         if (room.hostUserId === userId) {
-          // Notify players before closing room
           if (this.onRoomClosed) {
             try {
               await this.onRoomClosed(room.pin, {
@@ -246,8 +237,27 @@ class AdminUseCases {
       }
     }
 
-    // Delete user
+    // Delete user first - if this fails, related data stays intact
     await this.userRepository.deleteById(userId);
+
+    // Clean up related data (non-critical - orphaned data is acceptable)
+    let deletedQuizCount = 0;
+    try {
+      if (this.quizRepository.deleteByCreator) {
+        deletedQuizCount = await this.quizRepository.deleteByCreator(userId);
+      }
+    } catch (error) {
+      console.error('[AdminUseCases] Failed to cleanup quizzes for deleted user:', error.message);
+    }
+
+    let deletedSessionCount = 0;
+    try {
+      if (this.gameSessionRepository && this.gameSessionRepository.deleteByHost) {
+        deletedSessionCount = await this.gameSessionRepository.deleteByHost(userId);
+      }
+    } catch (error) {
+      console.error('[AdminUseCases] Failed to cleanup sessions for deleted user:', error.message);
+    }
 
     // Audit log
     await this._logAction(admin, 'USER_DELETED', 'user', userId, {
@@ -267,6 +277,10 @@ class AdminUseCases {
    */
   async getAllQuizzes({ requesterId, page = 1, limit = 20 }) {
     await this._validateAdmin(requesterId);
+
+    // Validate pagination bounds
+    page = Math.max(1, Math.min(Math.floor(page) || 1, 1000));
+    limit = Math.max(1, Math.min(Math.floor(limit) || 20, 100));
 
     const result = await this.quizRepository.getAll({ page, limit });
     return result;
@@ -389,6 +403,10 @@ class AdminUseCases {
    */
   async getAllSessions({ requesterId, page = 1, limit = 20 }) {
     await this._validateAdmin(requesterId);
+
+    // Validate pagination bounds
+    page = Math.max(1, Math.min(Math.floor(page) || 1, 1000));
+    limit = Math.max(1, Math.min(Math.floor(limit) || 20, 100));
 
     if (!this.gameSessionRepository) {
       return { sessions: [], pagination: { page, limit, total: 0, totalPages: 0 } };

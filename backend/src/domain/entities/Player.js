@@ -56,9 +56,8 @@ class Player extends BaseParticipant {
       this.streak++;
     }
     this.correctAnswers++;
-    // Cap longestStreak at MAX_STREAK as well for consistency
-    if (this.streak > this.longestStreak && this.longestStreak < MAX_STREAK) {
-      this.longestStreak = Math.min(this.streak, MAX_STREAK);
+    if (this.streak > this.longestStreak) {
+      this.longestStreak = this.streak;
     }
   }
 

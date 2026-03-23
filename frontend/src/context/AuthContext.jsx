@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authService } from '../services/authService';
+import { socketService } from '../services/socketService';
 
 const AuthContext = createContext(null);
 
@@ -29,6 +30,7 @@ export function AuthProvider({ children }) {
     } catch {
       // Ignore
     }
+    socketService.disconnect();
     setUser(null);
   }, []);
 

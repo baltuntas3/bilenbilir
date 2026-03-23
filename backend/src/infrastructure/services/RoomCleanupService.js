@@ -10,6 +10,7 @@ class RoomCleanupService {
     this.io = io;
     this.roomUseCases = options.roomUseCases || null; // Optional: for join lock cleanup
     this.gameUseCases = options.gameUseCases || null; // Optional: for interrupted game archival
+    this.timerService = options.timerService || null; // Optional: for stopping room timers on deletion
     this.intervalId = null;
     this.isCleanupRunning = false; // Lock to prevent concurrent cleanup
 
@@ -219,6 +220,11 @@ class RoomCleanupService {
                 // Log but don't fail cleanup - room will still be deleted
                 console.error(`Failed to archive interrupted game ${room.pin}:`, archiveError.message);
               }
+            }
+
+            // Stop any active timer for this room
+            if (this.timerService) {
+              this.timerService.stopTimer(room.pin);
             }
 
             // Notify all clients in room

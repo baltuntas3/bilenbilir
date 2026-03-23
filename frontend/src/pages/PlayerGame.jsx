@@ -57,6 +57,7 @@ export default function PlayerGame() {
     teamLeaderboard,
     teamPodium,
     eliminatedOptions,
+    isLightning,
   } = useGame();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -109,6 +110,7 @@ export default function PlayerGame() {
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
+              isLightning={isLightning}
             />
             <Center>
               <Paper p="xl" radius="md" withBorder>
@@ -124,7 +126,7 @@ export default function PlayerGame() {
         return (
           <Stack gap="xl">
             <Group justify="space-between" align="flex-start">
-              <Timer remaining={remainingTime} total={timeLimit} />
+              <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} />
               <Paper p="md" radius="md" withBorder>
                 <Stack gap="xs" align="center">
                   <Text size="xs" c="dimmed">Your Score</Text>
@@ -142,6 +144,7 @@ export default function PlayerGame() {
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
+              isLightning={isLightning}
             />
 
             {!hasAnswered && <PowerUpBar />}
@@ -198,6 +201,7 @@ export default function PlayerGame() {
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
+              isLightning={isLightning}
             />
 
             {/* Answer distribution */}

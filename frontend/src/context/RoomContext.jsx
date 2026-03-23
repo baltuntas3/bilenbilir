@@ -126,12 +126,28 @@ export function RoomProvider({ children }) {
   // Room-level socket listeners (player/spectator/team/lightning/ban events)
   const roomListenersSetupRef = useRef(false);
 
+  const roomEvents = [
+    'player_joined', 'player_left', 'player_kicked', 'player_banned',
+    'player_returned', 'spectator_joined', 'spectator_left', 'spectator_returned',
+    'team_mode_updated', 'teams_updated', 'lightning_round_updated',
+    'banned_nicknames', 'nickname_unbanned',
+  ];
+
+  const cleanupRoomListeners = useCallback(() => {
+    roomEvents.forEach(event => socketService.off(event));
+    roomListenersSetupRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const setupRoomListeners = useCallback(() => {
     if (roomListenersSetupRef.current) return;
+
+    // Always cleanup before re-attaching to prevent listener accumulation
+    cleanupRoomListeners();
     roomListenersSetupRef.current = true;
 
     // Player events
-    socketService.on('player_joined', ({ player, playerCount }) => {
+    socketService.on('player_joined', ({ player }) => {
       setRoomState(prev => ({
         ...prev,
         players: [...prev.players.filter(p => p.id !== player.id), player],
@@ -150,6 +166,7 @@ export function RoomProvider({ children }) {
         ...prev,
         players: prev.players.filter(p => p.nickname !== nickname),
       }));
+      showToast.success(`${nickname} was kicked`);
     });
 
     socketService.on('player_banned', ({ nickname }) => {
@@ -157,6 +174,7 @@ export function RoomProvider({ children }) {
         ...prev,
         players: prev.players.filter(p => p.nickname !== nickname),
       }));
+      showToast.success(`${nickname} was banned`);
     });
 
     socketService.on('player_returned', ({ playerId, nickname }) => {
@@ -166,6 +184,7 @@ export function RoomProvider({ children }) {
           p.id === playerId ? { ...p, disconnected: false } : p
         ),
       }));
+      showToast.info(`${nickname} reconnected`);
     });
 
     // Spectator events
@@ -183,13 +202,14 @@ export function RoomProvider({ children }) {
       }));
     });
 
-    socketService.on('spectator_returned', ({ spectatorId }) => {
+    socketService.on('spectator_returned', ({ spectatorId, nickname }) => {
       setRoomState(prev => ({
         ...prev,
         spectators: prev.spectators.map(s =>
           s.id === spectatorId ? { ...s, disconnected: false } : s
         ),
       }));
+      if (nickname) showToast.info(`${nickname} reconnected`);
     });
 
     // Team mode events
@@ -216,15 +236,18 @@ export function RoomProvider({ children }) {
         ...prev,
         bannedNicknames: prev.bannedNicknames.filter(n => n !== nickname),
       }));
+      showToast.success(`${nickname} unbanned`);
     });
-  }, []);
+  }, [cleanupRoomListeners]);
 
-  // Set up room listeners when roomPin is set
+  // Set up room listeners when roomPin is set, cleanup on unmount or pin change
   useEffect(() => {
     if (roomState.roomPin) {
       setupRoomListeners();
     }
-  }, [roomState.roomPin, setupRoomListeners]);
+    return () => cleanupRoomListeners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomState.roomPin]);
 
   // Room management
   const createRoom = useCallback(async (quizId) => {
@@ -425,10 +448,13 @@ export function RoomProvider({ children }) {
   const setLightningRound = useCallback((enabled, questionCount) => hostEmit('set_lightning_round', { enabled, questionCount }), [hostEmit]);
 
   // Auto-reconnection
+  const reconnectingRef = useRef(false);
   useEffect(() => {
     const attemptReconnection = async () => {
+      if (reconnectingRef.current) return;
       const session = getSession();
       if (!session) return;
+      reconnectingRef.current = true;
       updateRoomState({ isReconnecting: true });
       showToast.info('Reconnecting...');
       try {
@@ -449,6 +475,8 @@ export function RoomProvider({ children }) {
         showToast.error('Failed to reconnect: ' + error.message);
         clearSession();
         updateRoomState({ isReconnecting: false });
+      } finally {
+        reconnectingRef.current = false;
       }
     };
 

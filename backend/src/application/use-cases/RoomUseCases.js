@@ -195,6 +195,9 @@ class RoomUseCases extends SharedUseCases {
     const room = await this._getRoomOrThrow(pin);
     const newPlayerToken = generateId();
     const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod, newPlayerToken);
+    // Clear stale power-up state from previous question to prevent unfair advantage
+    player.clearActivePowerUp();
+    player.eliminatedOptions = [];
     await this.roomRepository.save(room);
     return { room, player, newPlayerToken };
   }

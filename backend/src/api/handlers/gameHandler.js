@@ -6,6 +6,9 @@ const { ValidationError, NotFoundError, ConflictError } = require('../../shared/
  * Game WebSocket Handler
  * Handles game flow: start, questions, answers, results
  */
+// Per-room lock to prevent concurrent endAnsweringPhase calls (timer expiry vs all-answered race)
+const endAnsweringLocks = new Set();
+
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
   const checkRateLimit = createRateLimiter(socket);
   const requireAuth = createAuthChecker(socket);
@@ -58,6 +61,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       });
       // Start server-side timer
       timerService.startTimer(pin, result.timeLimit, async () => {
+        // Lock prevents race with all-answered auto-transition
+        if (endAnsweringLocks.has(pin)) return;
+        endAnsweringLocks.add(pin);
         try {
           const roomExists = await gameUseCases.roomExists(pin);
           if (!roomExists) return;
@@ -77,6 +83,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           if (!isExpected) {
             console.error('Auto-end error:', err.message);
           }
+        } finally {
+          endAnsweringLocks.delete(pin);
         }
       });
 
@@ -134,6 +142,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         timerService.stopTimer(pin);
         io.to(pin).emit('all_players_answered');
 
+        // Lock prevents race with timer expiry auto-transition
+        if (endAnsweringLocks.has(pin)) return;
+        endAnsweringLocks.add(pin);
+
         // Auto-transition to results when all players have answered
         try {
           const endResult = await gameUseCases.endAnsweringPhase({
@@ -150,6 +162,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           if (!isExpected) {
             console.error('Auto-end after all answered error:', err.message);
           }
+        } finally {
+          endAnsweringLocks.delete(pin);
         }
       }
     } catch (error) {
@@ -316,7 +330,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
       if (emitActions.timerAction) {
         const { method, args } = emitActions.timerAction;
-        timerService[method](pin, ...args);
+        const allowedTimerMethods = ['extendTimer', 'stopTimer'];
+        if (allowedTimerMethods.includes(method)) {
+          timerService[method](pin, ...args);
+        }
       }
 
       // Broadcast to room that a player used a power-up
@@ -339,13 +356,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       const { pin } = data || {};
 
-      // Stop timer if any is running (safety measure to prevent desync)
-      timerService.stopTimer(pin);
-
       const result = await gameUseCases.pauseGame({
         pin,
         requesterId: socket.id
       });
+
+      // Stop timer only after pause succeeds to prevent desync on failure
+      timerService.stopTimer(pin);
 
       io.to(pin).emit('game_paused', {
         pausedAt: result.pausedAt

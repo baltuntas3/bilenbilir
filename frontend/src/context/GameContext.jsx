@@ -55,19 +55,24 @@ export function GameProvider({ children }) {
     setState((prev) => ({ ...prev, ...updates }));
   }, []);
 
+  const roomRef = useRef(room);
+  roomRef.current = room;
+
   const resetGame = useCallback(() => {
-    timer.resetTimer();
+    timerRef.current.resetTimer();
     listenersSetupRef.current = false;
     lastSocketIdRef.current = null;
-    room.resetRoom();
+    roomRef.current.resetRoom();
     setState(initialGameState);
-  }, [timer, room]);
+  }, []);
 
   // Clean up game-specific socket listeners
   const cleanupGameListeners = useCallback(() => {
+    // Only clean up events owned by GameContext — NOT events shared with RoomContext
+    // (player_kicked, player_banned, player_returned, spectator_returned, nickname_unbanned
+    //  are managed by RoomContext to prevent cleanup conflicts)
     const gameEvents = [
-      'you_were_kicked', 'player_kicked', 'player_banned', 'player_returned',
-      'spectator_returned', 'nickname_unbanned', 'player_reconnected', 'game_started', 'question_intro',
+      'you_were_kicked', 'player_reconnected', 'game_started', 'question_intro',
       'answering_started', 'answer_received', 'answer_count_updated', 'all_players_answered',
       'show_results', 'round_ended', 'leaderboard', 'game_over', 'final_results',
       'fifty_fifty_result', 'power_up_activated', 'power_up_used', 'time_extended',
@@ -81,40 +86,21 @@ export function GameProvider({ children }) {
   // Socket event handlers
   const setupSocketListeners = useCallback(() => {
     const currentSocketId = socketService.getSocketId();
-    if (listenersSetupRef.current && lastSocketIdRef.current !== currentSocketId) {
-      // Socket changed (reconnected) — clean up old listeners before re-attaching
-      cleanupGameListeners();
-      listenersSetupRef.current = false;
-    }
-    if (listenersSetupRef.current) return;
+    if (listenersSetupRef.current && lastSocketIdRef.current === currentSocketId) return;
+
+    // Always cleanup before re-attaching to prevent listener accumulation
+    cleanupGameListeners();
     listenersSetupRef.current = true;
     lastSocketIdRef.current = currentSocketId;
 
-    // Player/spectator toast-only events (state is managed by RoomContext)
+    // Kick handler — only 'you_were_kicked' is game-specific.
+    // Other player/spectator events (player_kicked, player_banned, player_returned,
+    // spectator_returned, nickname_unbanned) are handled by RoomContext to avoid
+    // duplicate listeners and cleanup conflicts.
     socketService.on('you_were_kicked', ({ reason }) => {
       showToast.error(reason === 'banned' ? 'You have been banned from the game' : 'You have been kicked from the game');
       resetGame();
       socketService.disconnect();
-    });
-
-    socketService.on('player_kicked', ({ nickname }) => {
-      showToast.success(`${nickname} was kicked`);
-    });
-
-    socketService.on('player_banned', ({ nickname }) => {
-      showToast.success(`${nickname} was banned`);
-    });
-
-    socketService.on('player_returned', ({ playerId, nickname }) => {
-      showToast.info(`${nickname} reconnected`);
-    });
-
-    socketService.on('spectator_returned', ({ nickname }) => {
-      showToast.info(`${nickname} reconnected`);
-    });
-
-    socketService.on('nickname_unbanned', ({ nickname }) => {
-      showToast.success(`${nickname} unbanned`);
     });
 
     // Restore game state on player reconnect
@@ -185,7 +171,7 @@ export function GameProvider({ children }) {
     socketService.on('all_players_answered', () => { /* auto-transition to show_results follows */ });
 
     socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, answeredCount, totalPlayers, explanation }) => {
-      timerRef.current.stopTimer();
+      try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
@@ -196,7 +182,7 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('round_ended', ({ correctAnswerIndex, explanation }) => {
-      timerRef.current.stopTimer();
+      try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
@@ -233,23 +219,32 @@ export function GameProvider({ children }) {
       const labels = { FIFTY_FIFTY: '50:50', DOUBLE_POINTS: 'Çift Puan', TIME_EXTENSION: 'Süre Uzatma' };
       showToast.info(nickname + ' joker kullandı: ' + (labels[powerUpType] || powerUpType));
     });
-    socketService.on('time_extended', ({ extraTimeMs }) => timerRef.current.extendTimer(extraTimeMs));
+    socketService.on('time_extended', ({ extraTimeMs }) => {
+      try { timerRef.current.extendTimer(extraTimeMs); } catch { /* timer may be unavailable */ }
+    });
 
     // Timer events
     socketService.on('timer_started', ({ duration, endTime, serverTime }) => {
-      const adjustedEndTime = endTime + (Date.now() - serverTime);
-      timerRef.current.startTimer(duration, adjustedEndTime);
+      try {
+        const adjustedEndTime = endTime + (Date.now() - serverTime);
+        timerRef.current.startTimer(duration, adjustedEndTime);
+      } catch { /* timer may be unavailable */ }
     });
     socketService.on('timer_tick', () => {});
-    socketService.on('time_expired', () => { timerRef.current.stopTimer(); updateState({ remainingTime: 0 }); });
+    socketService.on('time_expired', () => {
+      try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
+      updateState({ remainingTime: 0 });
+    });
     socketService.on('timer_sync', ({ remainingMs, endTime, serverTime }) => {
-      const adjustedEndTime = endTime + (Date.now() - serverTime);
-      timerRef.current.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
+      try {
+        const adjustedEndTime = endTime + (Date.now() - serverTime);
+        timerRef.current.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
+      } catch { /* timer may be unavailable */ }
     });
 
     // Pause/Resume
     socketService.on('game_paused', () => {
-      timerRef.current.stopTimer();
+      try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
       setState(prev => ({ ...prev, previousState: prev.gameState, gameState: GAME_STATES.PAUSED }));
       showToast.info('Game paused by host');
     });
@@ -287,12 +282,15 @@ export function GameProvider({ children }) {
     });
     socketService.on('host_returned', () => showToast.success('Host has reconnected!'));
     socketService.on('error', ({ error, message }) => showToast.error(error || message || 'An error occurred'));
-  }, [updateState, timer, room, resetGame, cleanupGameListeners]);
+    // Dependencies: only stable callbacks and refs. timer/room accessed via timerRef/roomRef
+    // to prevent listener rebuild on every timer tick or room state change.
+  }, [updateState, resetGame, cleanupGameListeners]);
 
   // Set up listeners when room connects
   useEffect(() => {
     if (room.roomPin) setupSocketListeners();
-  }, [room.roomPin, setupSocketListeners]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.roomPin]);
 
   // Game actions
   const startGame = useCallback((questionCount) => {
@@ -336,8 +334,11 @@ export function GameProvider({ children }) {
     });
   }, [room.isHost, room.roomPin, state.hasAnswered]);
 
+  const powerUpPendingRef = useRef(false);
   const usePowerUp = useCallback((type) => {
-    if (!room.roomPin || room.isHost || state.hasAnswered) return;
+    if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
+    powerUpPendingRef.current = true;
+
     socketService.emit('use_power_up', { pin: room.roomPin, powerUpType: type });
     // Optimistic update with error rollback
     const previousCount = state.powerUps[type] || 0;
@@ -345,25 +346,27 @@ export function GameProvider({ children }) {
       ...prev,
       powerUps: { ...prev.powerUps, [type]: Math.max(0, (prev.powerUps[type] || 0) - 1) },
     }));
-    const onError = () => {
+
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      powerUpPendingRef.current = false;
       clearTimeout(rollbackTimeout);
       socketService.off('error', onError);
       socketService.off('power_up_activated', onSuccess);
-      // Rollback on error
+    };
+    const onError = () => {
+      cleanup();
       setState(prev => ({
         ...prev,
         powerUps: { ...prev.powerUps, [type]: previousCount },
       }));
     };
     const onSuccess = () => {
-      clearTimeout(rollbackTimeout);
-      socketService.off('error', onError);
-      socketService.off('power_up_activated', onSuccess);
+      cleanup();
     };
-    const rollbackTimeout = setTimeout(() => {
-      socketService.off('error', onError);
-      socketService.off('power_up_activated', onSuccess);
-    }, 5000);
+    const rollbackTimeout = setTimeout(cleanup, 5000);
     socketService.on('error', onError);
     socketService.on('power_up_activated', onSuccess);
   }, [room.roomPin, room.isHost, state.hasAnswered, state.powerUps]);
@@ -424,7 +427,6 @@ export function GameProvider({ children }) {
       listenersSetupRef.current = false;
       lastSocketIdRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleanupGameListeners]);
 
   const value = useMemo(() => ({

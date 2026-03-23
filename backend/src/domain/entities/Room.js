@@ -679,7 +679,8 @@ class Room {
 
   isLightningQuestion(currentIndex, totalQuestions) {
     if (!this.lightningRound.enabled) return false;
-    const lightningStart = totalQuestions - this.lightningRound.questionCount;
+    // Clamp to 0 to prevent all questions becoming lightning when questionCount > totalQuestions
+    const lightningStart = Math.max(0, totalQuestions - this.lightningRound.questionCount);
     return currentIndex >= lightningStart;
   }
 

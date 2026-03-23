@@ -48,6 +48,7 @@ export default function SpectatorGame() {
     teamMode,
     teamLeaderboard,
     teamPodium,
+    isLightning,
   } = useGame();
 
   // Redirect if not a spectator
@@ -94,6 +95,7 @@ export default function SpectatorGame() {
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
+              isLightning={isLightning}
             />
             <Center>
               <Paper p="xl" radius="md" withBorder>
@@ -109,7 +111,7 @@ export default function SpectatorGame() {
         return (
           <Stack gap="xl">
             <Group justify="space-between" align="flex-start">
-              <Timer remaining={remainingTime} total={timeLimit} />
+              <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} />
               <Paper p="md" radius="md" withBorder>
                 <Stack gap="xs" align="center">
                   <Group gap="xs">
@@ -132,6 +134,7 @@ export default function SpectatorGame() {
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
+              isLightning={isLightning}
             />
 
             {/* Show options without ability to answer */}
@@ -164,6 +167,7 @@ export default function SpectatorGame() {
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
+              isLightning={isLightning}
             />
 
             {/* Answer distribution */}

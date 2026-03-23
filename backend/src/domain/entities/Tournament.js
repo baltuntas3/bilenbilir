@@ -116,6 +116,9 @@ class Tournament {
     if (this.state !== TournamentState.BETWEEN_ROUNDS) {
       throw new ValidationError('Cannot advance to next round');
     }
+    if (this.currentRoundIndex >= this.rounds.length - 1) {
+      throw new ValidationError('No more rounds available');
+    }
     this.currentRoundIndex++;
     this.rounds[this.currentRoundIndex].status = 'in_progress';
     this.state = TournamentState.IN_PROGRESS;

@@ -61,6 +61,7 @@ export default function HostGame() {
     teamMode,
     teamLeaderboard,
     teamPodium,
+    isLightning,
   } = useGame();
 
   // Redirect if not host
@@ -91,6 +92,7 @@ export default function HostGame() {
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
               totalQuestions={totalQuestions}
+              isLightning={isLightning}
             />
 
             <Center>
@@ -109,7 +111,7 @@ export default function HostGame() {
         return (
           <Stack gap="xl">
             <Group justify="space-between" align="flex-start">
-              <Timer remaining={remainingTime} total={timeLimit} />
+              <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} />
               <Paper p="md" radius="md" withBorder>
                 <Stack gap="xs" align="center">
                   <Group gap="xs">

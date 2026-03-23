@@ -17,12 +17,15 @@ class GameFlowUseCases extends SharedUseCases {
 
   async startGame({ pin, requesterId, questionCount }) {
     const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
     const quiz = await this._getQuizOrThrow(room.quizId);
     if (quiz.getTotalQuestions() === 0) throw new ValidationError('Quiz must have at least one question');
-
-    room.startGame(requesterId);
     if (room.getConnectedPlayerCount() === 0) throw new ValidationError('Cannot start game: all players are disconnected');
 
+    // Validate host/state first (no side effects)
+    room.startGame(requesterId);
+
+    // Create snapshot BEFORE mutating room state — if this fails, room stays in WAITING_PLAYERS
     let quizSnapshot;
     if (questionCount && Number.isInteger(questionCount) && questionCount >= 1 && questionCount <= quiz.getTotalQuestions()) {
       quizSnapshot = quiz.getRandomSubset(questionCount);
@@ -32,6 +35,7 @@ class GameFlowUseCases extends SharedUseCases {
 
     if (!Object.isFrozen(quizSnapshot)) throw new ValidationError('Failed to create immutable quiz snapshot - quiz not frozen');
 
+    // All validations passed — now mutate room state
     room.setQuizSnapshot(quizSnapshot);
     room.setState(RoomState.QUESTION_INTRO);
     await this.roomRepository.save(room);

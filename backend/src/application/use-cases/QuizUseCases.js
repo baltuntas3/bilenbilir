@@ -268,11 +268,8 @@ class QuizUseCases {
    * @returns {Promise<{rating: number, isNew: boolean}>}
    */
   async rateQuiz({ quizId, userId, rating }) {
-    // Verify quiz exists
-    const quiz = await this._getQuizOrThrow(quizId);
-    if (!quiz) {
-      throw new NotFoundError('Quiz not found');
-    }
+    // Verify quiz exists (_getQuizOrThrow throws NotFoundError if missing)
+    await this._getQuizOrThrow(quizId);
     return this.quizRatingRepository.rate(quizId, userId, rating);
   }
 
@@ -374,6 +371,12 @@ class QuizUseCases {
         throw new ValidationError(`Invalid question at index ${index}: must have 2-4 options`);
       }
 
+      for (let i = 0; i < q.options.length; i++) {
+        if (typeof q.options[i] !== 'string' || q.options[i].trim().length === 0) {
+          throw new ValidationError(`Invalid question at index ${index}: option ${i} must be a non-empty string`);
+        }
+      }
+
       if (typeof q.correctAnswerIndex !== 'number' || q.correctAnswerIndex < 0 || q.correctAnswerIndex >= q.options.length) {
         throw new ValidationError(`Invalid question at index ${index}: invalid correctAnswerIndex`);
       }
@@ -430,7 +433,19 @@ class QuizUseCases {
       quiz.addQuestion(question);
     }
 
-    const savedQuiz = await this.quizRepository.save(quiz);
+    // Generate slug and handle collisions (same as createQuiz)
+    quiz.slug = Quiz.generateSlug(quizData.title);
+    let savedQuiz;
+    try {
+      savedQuiz = await this.quizRepository.save(quiz);
+    } catch (error) {
+      if (error.code === 11000 || (error.message && error.message.includes('duplicate'))) {
+        quiz.slug = Quiz.generateSlug(quizData.title);
+        savedQuiz = await this.quizRepository.save(quiz);
+      } else {
+        throw error;
+      }
+    }
 
     return { quiz: savedQuiz, questionCount: savedQuiz.questions.length };
   }

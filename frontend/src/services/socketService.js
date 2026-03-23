@@ -60,7 +60,9 @@ class SocketService {
         clearTimeout(timeout);
         this.currentSocketId = this.socket.id;
 
-        // Re-attach stored listeners if this is a new socket
+        // Re-attach stored listeners to the new socket instance.
+        // Contexts will cleanup and re-add their own listeners via reconnect callback,
+        // which properly deduplicates.
         if (hadPreviousSocket && this.listeners.size > 0) {
           this.listeners.forEach((callbacks, event) => {
             callbacks.forEach(callback => {

@@ -115,6 +115,7 @@ const initializeSocket = (server) => {
   cleanupService = new RoomCleanupService(roomRepository, io, {
     roomUseCases,
     gameUseCases,
+    timerService,
     hostGracePeriod: 300000,   // 5 minutes - match RoomUseCases
     playerGracePeriod: 120000  // 2 minutes
   });

@@ -105,9 +105,16 @@ class AnswerUseCases extends SharedUseCases {
     if (player.isDisconnected()) throw new ValidationError('Disconnected players cannot use power-ups');
     if (player.hasAnswered()) throw new ConflictError('Cannot use power-up after answering');
 
-    player.usePowerUp(powerUpType);
+    // Validate power-up count BEFORE executing to prevent using unavailable power-ups
+    if (player.getPowerUpCount(powerUpType) <= 0) {
+      throw new ValidationError(`No ${powerUpType} power-up remaining`);
+    }
+
     const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
     const { result, emitActions } = powerUpRegistry.execute(powerUpType, { room, socketId, currentQuestion });
+
+    // Decrement after successful execution
+    player.usePowerUp(powerUpType);
     result.nickname = player.nickname;
 
     await this.roomRepository.save(room);
@@ -117,7 +124,8 @@ class AnswerUseCases extends SharedUseCases {
   getServerElapsedTime(timerService, pin) {
     if (timerService.isTimeExpired(pin)) throw new ValidationError('Time expired');
     let elapsedTimeMs = timerService.getElapsedTime(pin);
-    if (elapsedTimeMs === null) throw new ValidationError('No active timer for this room');
+    // Timer may have been cleaned up between the expiry check and getElapsedTime - treat as expired
+    if (elapsedTimeMs === null) throw new ValidationError('Time expired');
     const timerSync = timerService.getTimerSync(pin);
     if (timerSync && timerSync.duration) {
       elapsedTimeMs = Math.min(elapsedTimeMs, timerSync.duration);

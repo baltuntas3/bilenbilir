@@ -50,6 +50,9 @@ class Answer {
     if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) || answerIndex < 0) {
       throw new ValidationError('answerIndex must be a non-negative integer');
     }
+    if (question && question.options && answerIndex >= question.options.length) {
+      throw new ValidationError('answerIndex exceeds the number of options');
+    }
 
     // Validate question is provided
     if (!question || typeof question.isCorrect !== 'function') {

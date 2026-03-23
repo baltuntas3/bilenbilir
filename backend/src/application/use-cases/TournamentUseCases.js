@@ -20,6 +20,9 @@ class TournamentUseCases {
     for (const quizId of quizIds) {
       const quiz = await this.quizRepository.findById(quizId);
       if (!quiz) throw new NotFoundError(`Quiz ${quizId} not found`);
+      if (!quiz.isPublic && quiz.createdBy !== hostUserId) {
+        throw new ForbiddenError('Not authorized to use this quiz');
+      }
       tournament.addRound(quizId, quiz.title);
     }
 
@@ -42,6 +45,9 @@ class TournamentUseCases {
 
     const quiz = await this.quizRepository.findById(quizId);
     if (!quiz) throw new NotFoundError('Quiz not found');
+    if (!quiz.isPublic && quiz.createdBy !== requesterId) {
+      throw new ForbiddenError('Not authorized to use this quiz');
+    }
 
     tournament.addRound(quizId, quiz.title);
     await this.tournamentRepository.save(tournament);

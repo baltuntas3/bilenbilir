@@ -88,7 +88,7 @@ describe('GameUseCases', () => {
       await expect(gameUseCases.startGame({
         pin: roomPin,
         requesterId: 'player-socket-1'
-      })).rejects.toThrow('Only host can start the game');
+      })).rejects.toThrow('Only host can perform this action');
     });
 
     it('should throw error for non-existent room', async () => {
