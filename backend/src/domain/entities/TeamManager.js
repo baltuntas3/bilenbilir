@@ -46,6 +46,12 @@ class TeamManager {
     team.addPlayer(playerId);
   }
 
+  removePlayer(playerId) {
+    for (const team of this.teams) {
+      team.removePlayer(playerId);
+    }
+  }
+
   getTeamForPlayer(playerId) {
     return this.teams.find(t => t.hasPlayer(playerId)) || null;
   }

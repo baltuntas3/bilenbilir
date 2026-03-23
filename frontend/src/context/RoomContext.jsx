@@ -198,12 +198,22 @@ export function RoomProvider({ children }) {
     });
 
     socketService.on('player_returned', ({ playerId, nickname }) => {
-      setRoomState(prev => ({
-        ...prev,
-        players: prev.players.map(p =>
-          p.id === playerId ? { ...p, disconnected: false } : p
-        ),
-      }));
+      setRoomState(prev => {
+        const exists = prev.players.some(p => p.id === playerId);
+        if (exists) {
+          return {
+            ...prev,
+            players: prev.players.map(p =>
+              p.id === playerId ? { ...p, disconnected: false } : p
+            ),
+          };
+        }
+        // Player not in list (timing edge case) — add them
+        return {
+          ...prev,
+          players: [...prev.players, { id: playerId, nickname, disconnected: false }],
+        };
+      });
       showToast.info(`${nickname} reconnected`);
     });
 
@@ -521,6 +531,11 @@ export function RoomProvider({ children }) {
 
     const session = getSession();
     if (session && !roomPinRef.current) attemptReconnection();
+
+    return () => {
+      socketService.setReconnectCallback(null);
+      socketService.setDisconnectCallback(null);
+    };
   }, [isAuthenticated, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState]);
 
   const value = useMemo(() => ({

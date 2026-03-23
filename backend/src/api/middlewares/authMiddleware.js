@@ -59,9 +59,13 @@ const optionalAuthenticate = (req, res, next) => {
     };
 
     next();
-  } catch {
-    // Invalid token - continue without user
-    next();
+  } catch (error) {
+    // Only swallow JWT-specific errors — re-throw unexpected ones
+    if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
+      next();
+    } else {
+      next(error);
+    }
   }
 };
 

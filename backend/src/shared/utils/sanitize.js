@@ -29,10 +29,10 @@ const sanitizeObject = (obj, skipFields = ['password', 'currentPassword', 'newPa
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') return obj;
 
-  // Prevent stack overflow from deeply nested or circular objects
+  // Reject deeply nested objects to prevent both stack overflow and XSS bypass
   if (depth >= MAX_SANITIZE_DEPTH) {
-    console.warn('[sanitizeObject] Max depth reached, returning object as-is');
-    return obj;
+    console.warn('[sanitizeObject] Max depth reached, rejecting nested content');
+    return {};
   }
 
   if (Array.isArray(obj)) {

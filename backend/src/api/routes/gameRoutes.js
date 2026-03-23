@@ -76,7 +76,7 @@ router.get('/quiz/:quizId/history', authenticate, async (req, res, next) => {
 router.get('/join/:pin', async (req, res, next) => {
   try {
     const { pin } = req.params;
-    const room = roomRepository.findByPin(pin);
+    const room = await roomRepository.findByPin(pin);
 
     if (!room) {
       throw new NotFoundError('Room not found');

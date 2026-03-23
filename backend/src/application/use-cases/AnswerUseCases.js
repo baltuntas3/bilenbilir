@@ -66,8 +66,12 @@ class AnswerUseCases extends SharedUseCases {
       const streakBeforeUpdate = player.streak;
       if (answer.isCorrect) {
         player.incrementStreak();
-        actualScore = answer.getTotalScore();
-        if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) actualScore *= 2;
+        if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) {
+          // Only double the base score, not the streak bonus
+          actualScore = answer.score * 2 + answer.streakBonus;
+        } else {
+          actualScore = answer.getTotalScore();
+        }
         player.addScore(actualScore);
       } else {
         player.resetStreak();
@@ -126,16 +130,14 @@ class AnswerUseCases extends SharedUseCases {
   }
 
   getServerElapsedTime(timerService, pin) {
-    if (timerService.isTimeExpired(pin)) throw new ValidationError('Time expired');
-    let elapsedTimeMs = timerService.getElapsedTime(pin);
-    // Timer may have been cleaned up between the expiry check and getElapsedTime - treat as expired
-    if (elapsedTimeMs === null) throw new ValidationError('Time expired');
-    const timerSync = timerService.getTimerSync(pin);
-    if (timerSync && timerSync.duration) {
-      elapsedTimeMs = Math.min(elapsedTimeMs, timerSync.duration);
+    const elapsedTimeMs = timerService.getElapsedTime(pin);
+    if (elapsedTimeMs === null || timerService.isTimeExpired(pin)) {
+      throw new ValidationError('Time expired');
     }
-    if (timerService.isTimeExpired(pin)) throw new ValidationError('Time expired');
-    return elapsedTimeMs;
+    // Cap elapsed time to timer duration to prevent score underflow
+    const timerSync = timerService.getTimerSync(pin);
+    const maxTime = timerSync?.duration || Infinity;
+    return Math.min(elapsedTimeMs, maxTime);
   }
 }
 

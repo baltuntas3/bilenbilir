@@ -154,6 +154,17 @@ class Player extends BaseParticipant {
   /**
    * Clear the active power-up
    */
+  /**
+   * Set eliminated options for 50:50 power-up (persisted for reconnect)
+   * @param {number[]} options - Array of eliminated option indices
+   */
+  setEliminatedOptions(options) {
+    if (!Array.isArray(options)) {
+      throw new ValidationError('eliminatedOptions must be an array');
+    }
+    this.eliminatedOptions = [...options];
+  }
+
   clearActivePowerUp() {
     this.activePowerUp = null;
   }

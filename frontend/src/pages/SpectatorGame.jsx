@@ -43,6 +43,7 @@ export default function SpectatorGame() {
     correctAnswerIndex,
     answerDistribution,
     answeredCount,
+    totalPlayersInPhase,
     explanation,
     leaveSpectator,
     teamMode,
@@ -63,7 +64,7 @@ export default function SpectatorGame() {
     navigate('/');
   };
 
-  const connectedPlayers = players.filter((p) => !p.disconnectedAt);
+  const connectedPlayers = players.filter((p) => !p.disconnected);
 
   // Render based on game state
   const renderContent = () => {
@@ -117,12 +118,12 @@ export default function SpectatorGame() {
                   <Group gap="xs">
                     <IconUsers size={20} />
                     <Text fw={600}>
-                      {answeredCount} / {connectedPlayers.length}
+                      {answeredCount} / {totalPlayersInPhase || connectedPlayers.length}
                     </Text>
                   </Group>
                   <Text size="xs" c="dimmed">answered</Text>
                   <Progress
-                    value={(answeredCount / Math.max(connectedPlayers.length, 1)) * 100}
+                    value={(answeredCount / Math.max(totalPlayersInPhase || connectedPlayers.length, 1)) * 100}
                     size="sm"
                     style={{ width: 100 }}
                   />

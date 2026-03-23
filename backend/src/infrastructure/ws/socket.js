@@ -1,7 +1,9 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 
-const { createRoomHandler, createGameHandler } = require('../../api/handlers');
+const { createRoomHandler, createGameHandler, endAnsweringLocks } = require('../../api/handlers');
+const { toShowResultsDTO } = require('../../api/handlers/socketHandlerUtils');
+const { ValidationError, NotFoundError, ConflictError } = require('../../shared/errors');
 const { RoomUseCases, GameUseCases } = require('../../application/use-cases');
 const { roomRepository, gameSessionRepository } = require('../repositories');
 const { mongoQuizRepository } = require('../repositories/MongoQuizRepository');
@@ -98,6 +100,29 @@ const initializeSocket = (server) => {
             nickname: result.player.nickname,
             playerCount: result.playerCount
           });
+
+          // Auto-advance if remaining connected players have all answered
+          if (result.allAnswered) {
+            const pin = result.pin;
+            if (!endAnsweringLocks.has(pin)) {
+              endAnsweringLocks.add(pin);
+              try {
+                if (timerService) timerService.stopTimer(pin);
+                io.to(pin).emit('all_players_answered');
+                const endResult = await gameUseCases.endAnsweringPhase({ pin, requesterId: 'server' });
+                if (endResult) {
+                  io.to(pin).emit('show_results', toShowResultsDTO(endResult));
+                }
+              } catch (err) {
+                const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
+                if (!isExpected) {
+                  console.error('Auto-end after disconnect all-answered error:', err.message);
+                }
+              } finally {
+                endAnsweringLocks.delete(pin);
+              }
+            }
+          }
         } else if (result.type === 'spectator_disconnected') {
           io.to(result.pin).emit('spectator_left', {
             spectatorId: result.spectator.id,

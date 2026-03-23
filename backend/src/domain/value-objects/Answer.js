@@ -1,8 +1,8 @@
 const { ValidationError } = require('../../shared/errors');
 
 const MAX_STREAK_BONUS = 500;
-// Maximum possible score per answer (should match Question.MAX_POINTS + MAX_STREAK_BONUS)
-const MAX_ANSWER_SCORE = 10500;
+// Maximum possible score per answer with DOUBLE_POINTS: (MAX_POINTS * 2) + MAX_STREAK_BONUS
+const MAX_ANSWER_SCORE = 20500;
 
 class Answer {
   constructor({ playerId, questionId, roomPin, answerIndex, isCorrect, elapsedTimeMs, score = 0, streakBonus = 0, submittedAt = new Date() }) {

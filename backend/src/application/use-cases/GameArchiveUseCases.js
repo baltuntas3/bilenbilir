@@ -32,7 +32,7 @@ class GameArchiveUseCases extends SharedUseCases {
         nickname: player.nickname,
         rank: index + 1,
         score: player.score,
-        correctAnswers: player.correctAnswers,
+        correctAnswers: stats.correctCount,
         wrongAnswers: stats.wrongCount,
         averageResponseTime: stats.answerCount > 0 ? Math.round(stats.totalResponseTime / stats.answerCount) : 0,
         longestStreak: player.longestStreak
@@ -96,24 +96,27 @@ class GameArchiveUseCases extends SharedUseCases {
 
   async saveInterruptedGame({ pin, reason = 'unknown' }) {
     if (!this.gameSessionRepository) return null;
-    if (!this.pendingArchives.acquire(pin)) return null;
 
     try {
-      const room = await this.roomRepository.findByPin(pin);
-      if (!room || !room.hasQuizSnapshot()) return null;
+      return await this.pendingArchives.withLock(pin, 'Game archival already in progress', async () => {
+        const room = await this.roomRepository.findByPin(pin);
+        if (!room || !room.hasQuizSnapshot()) return null;
 
-      const sessionData = this._buildSessionData(room, 'interrupted', {
-        interruptionReason: reason,
-        lastQuestionIndex: room.currentQuestionIndex,
-        lastState: room.state
+        const sessionData = this._buildSessionData(room, 'interrupted', {
+          interruptionReason: reason,
+          lastQuestionIndex: room.currentQuestionIndex,
+          lastState: room.state
+        });
+
+        const session = await this.gameSessionRepository.save(sessionData);
+        try { await this.roomRepository.delete(pin); }
+        catch (err) { console.error(`Failed to delete interrupted room ${pin}:`, err.message); }
+        return { session };
       });
-
-      const session = await this.gameSessionRepository.save(sessionData);
-      try { await this.roomRepository.delete(pin); }
-      catch (err) { console.error(`Failed to delete interrupted room ${pin}:`, err.message); }
-      return { session };
-    } finally {
-      this.pendingArchives.release(pin);
+    } catch (err) {
+      // Lock held by concurrent archival — silently skip (best-effort for interrupted games)
+      if (err.statusCode === 409) return null;
+      throw err;
     }
   }
 

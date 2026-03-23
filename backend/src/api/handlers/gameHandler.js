@@ -446,4 +446,4 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   });
 };
 
-module.exports = { createGameHandler };
+module.exports = { createGameHandler, endAnsweringLocks };

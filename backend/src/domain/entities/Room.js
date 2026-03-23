@@ -195,6 +195,9 @@ class Room {
 
   removePlayer(socketId) {
     const player = this.getPlayer(socketId);
+    if (player) {
+      this._teamManager.removePlayer(player.id);
+    }
     this.players = this.players.filter(p => p.socketId !== socketId);
     return player || null;
   }
@@ -365,7 +368,7 @@ class Room {
    * Creates a snapshot of player answers to prevent race conditions during iteration
    * @param {number} optionCount - Number of options in the question
    * @param {Function} isCorrectFn - Function to check if answer index is correct
-   * @returns {{ distribution: number[], correctCount: number, skippedCount: number }}
+   * @returns {{ distribution: number[], correctCount: number, skippedCount: number, unansweredCount: number }}
    */
   getAnswerDistribution(optionCount, isCorrectFn) {
     // Validate optionCount
@@ -410,7 +413,10 @@ class Room {
       }
     }
 
-    return { distribution, correctCount, skippedCount };
+    const connectedCount = this.getConnectedPlayerCount();
+    const unansweredCount = Math.max(0, connectedCount - answerSnapshots.length);
+
+    return { distribution, correctCount, skippedCount, unansweredCount };
   }
 
   getLeaderboard() {
@@ -531,6 +537,7 @@ class Room {
       throw new ValidationError('Player not found');
     }
 
+    this._teamManager.removePlayer(playerId);
     this.players = this.players.filter(p => p.id !== playerId);
     return player;
   }
@@ -585,6 +592,9 @@ class Room {
   // ==================== SPECTATOR METHODS (delegated to SpectatorManager) ====================
 
   addSpectator(spectator) {
+    if (this.state === RoomState.PODIUM || this.state === RoomState.PAUSED) {
+      throw new ValidationError('Spectators cannot join a finished or paused game');
+    }
     this._spectatorManager.add(spectator, this.players, this.bannedNicknames);
   }
 

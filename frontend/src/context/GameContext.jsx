@@ -31,6 +31,7 @@ const initialGameState = {
   answerDistribution: null,
   correctAnswerIndex: null,
   answeredCount: 0,
+  totalPlayersInPhase: 0,
   hasAnswered: false,
   reactions: [],
   teamLeaderboard: [],
@@ -105,7 +106,7 @@ export function GameProvider({ children }) {
 
     // Restore game state on player reconnect
     socketService.on('player_reconnected', (data) => {
-      const { state, score, streak, powerUps, eliminatedOptions, hasAnswered, currentQuestionIndex, timerSync, playerToken } = data || {};
+      const { state, score, streak, powerUps, eliminatedOptions, hasAnswered, currentQuestionIndex, totalQuestions, currentQuestion, timerSync, playerToken } = data || {};
       const updates = {};
       if (state && GAME_STATES[state]) updates.gameState = state;
       if (typeof score === 'number') updates.score = score;
@@ -114,6 +115,8 @@ export function GameProvider({ children }) {
       if (eliminatedOptions && eliminatedOptions.length > 0) updates.eliminatedOptions = eliminatedOptions;
       if (typeof hasAnswered === 'boolean') updates.hasAnswered = hasAnswered;
       if (typeof currentQuestionIndex === 'number') updates.currentQuestionIndex = currentQuestionIndex;
+      if (typeof totalQuestions === 'number') updates.totalQuestions = totalQuestions;
+      if (currentQuestion) updates.currentQuestion = currentQuestion;
       if (Object.keys(updates).length > 0) updateState(updates);
 
       // Restore timer if in answering phase
@@ -182,7 +185,11 @@ export function GameProvider({ children }) {
       });
     });
 
-    socketService.on('answer_count_updated', ({ answeredCount }) => updateState({ answeredCount }));
+    socketService.on('answer_count_updated', ({ answeredCount, totalPlayers }) => {
+      const updates = { answeredCount };
+      if (typeof totalPlayers === 'number') updates.totalPlayersInPhase = totalPlayers;
+      updateState(updates);
+    });
     socketService.on('all_players_answered', () => { /* auto-transition to show_results follows */ });
 
     socketService.on('show_results', ({ correctAnswerIndex, distribution, correctCount, answeredCount, totalPlayers, explanation }) => {
@@ -318,30 +325,33 @@ export function GameProvider({ children }) {
 
   const startAnswering = useCallback(() => room.hostEmit('start_answering'), [room]);
 
+  const answerSubmittingRef = useRef(false);
   const submitAnswer = useCallback((answerIndex) => {
-    if (room.isHost || !room.roomPin || state.hasAnswered) return Promise.reject(new Error('Cannot submit answer'));
+    if (room.isHost || !room.roomPin || state.hasAnswered || answerSubmittingRef.current) return Promise.reject(new Error('Cannot submit answer'));
+    answerSubmittingRef.current = true;
     return new Promise((resolve, reject) => {
       let settled = false;
       const cleanup = () => {
         socketService.off('answer_received', onSuccess);
         socketService.off('error', onError);
       };
+      const settle = () => { settled = true; answerSubmittingRef.current = false; };
       const timeout = setTimeout(() => {
         if (settled) return;
-        settled = true;
+        settle();
         cleanup();
         reject(new Error('Answer submission timed out'));
       }, 10000);
       const onSuccess = (data) => {
         if (settled) return;
-        settled = true;
+        settle();
         clearTimeout(timeout);
         cleanup();
         resolve(data);
       };
       const onError = ({ error }) => {
         if (settled) return;
-        settled = true;
+        settle();
         clearTimeout(timeout);
         cleanup();
         reject(new Error(error));
@@ -358,16 +368,13 @@ export function GameProvider({ children }) {
     if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
     powerUpPendingRef.current = true;
 
+    // Capture previous count synchronously before any async state change
+    const previousCount = state.powerUps[type] || 0;
     socketService.emit('use_power_up', { pin: room.roomPin, powerUpType: type });
-    // Capture previous count from current state for accurate rollback
-    let previousCount;
-    setState(prev => {
-      previousCount = prev.powerUps[type] || 0;
-      return {
-        ...prev,
-        powerUps: { ...prev.powerUps, [type]: Math.max(0, (prev.powerUps[type] || 0) - 1) },
-      };
-    });
+    setState(prev => ({
+      ...prev,
+      powerUps: { ...prev.powerUps, [type]: Math.max(0, (prev.powerUps[type] || 0) - 1) },
+    }));
 
     let settled = false;
     const cleanup = () => {
@@ -432,8 +439,9 @@ export function GameProvider({ children }) {
 
   // Auto-cleanup reactions
   const reactionsActiveRef = useRef(false);
+  const hasReactions = state.reactions.length > 0;
   useEffect(() => {
-    if (state.reactions.length === 0) {
+    if (!hasReactions) {
       reactionsActiveRef.current = false;
       return;
     }
@@ -456,7 +464,7 @@ export function GameProvider({ children }) {
       clearInterval(interval);
       reactionsActiveRef.current = false;
     };
-  }, [state.reactions.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasReactions]);
 
   // Cleanup on unmount only — remove game-specific listeners, not all listeners
   useEffect(() => {

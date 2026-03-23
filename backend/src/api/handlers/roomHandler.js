@@ -1,7 +1,7 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { ConflictError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
-const { createRateLimiter, createAuthChecker, validateToken } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toPlayerQuestionDTO, validateToken } = require('./socketHandlerUtils');
 
 /**
  * Map team data for client consumption
@@ -144,10 +144,14 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
     }
   });
 
-  // Get players list
+  // Get players list (requires room membership)
   socket.on('get_players', async (data) => {
     try {
       const { pin } = data || {};
+      if (!pin || !socket.rooms.has(pin)) {
+        socket.emit('error', { error: 'Not in this room' });
+        return;
+      }
 
       const result = await roomUseCases.getPlayers({ pin });
 
@@ -233,6 +237,18 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       // Get timer sync data if in answering phase
       const timerSync = timerService ? timerService.getTimerSync(pin) : null;
 
+      // Retrieve current question from quiz snapshot for state restoration
+      const snapshot = result.room.getQuizSnapshot();
+      let currentQuestion = null;
+      let totalQuestions = 0;
+      if (snapshot) {
+        totalQuestions = snapshot.getTotalQuestions();
+        const question = snapshot.getQuestion(result.room.currentQuestionIndex);
+        if (question) {
+          currentQuestion = toPlayerQuestionDTO(question.getHostData());
+        }
+      }
+
       socket.emit('player_reconnected', {
         pin: result.room.pin,
         playerId: result.player.id,
@@ -241,6 +257,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         streak: result.player.streak,
         state: result.room.state,
         currentQuestionIndex: result.room.currentQuestionIndex,
+        totalQuestions,
+        currentQuestion,
         timerSync, // null if not in answering phase or no timer
         playerToken: result.newPlayerToken, // New rotated token for security
         powerUps: result.player.getAllPowerUps(),
@@ -533,10 +551,14 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
     }
   });
 
-  // Get spectators list
+  // Get spectators list (requires room membership)
   socket.on('get_spectators', async (data) => {
     try {
       const { pin } = data || {};
+      if (!pin || !socket.rooms.has(pin)) {
+        socket.emit('error', { error: 'Not in this room' });
+        return;
+      }
 
       const result = await roomUseCases.getSpectators({ pin });
 

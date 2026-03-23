@@ -113,7 +113,7 @@ describe('PowerUpRegistry', () => {
 
   describe('FIFTY_FIFTY strategy', () => {
     it('should execute and return eliminated options', () => {
-      const mockPlayer = { eliminatedOptions: [] };
+      const mockPlayer = { eliminatedOptions: [], setEliminatedOptions(opts) { this.eliminatedOptions = [...opts]; } };
       const mockRoom = {
         getFiftyFiftyOptions: jest.fn().mockReturnValue([0, 2]),
         getPlayer: jest.fn().mockReturnValue(mockPlayer)

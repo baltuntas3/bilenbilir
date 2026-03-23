@@ -159,12 +159,17 @@ class RoomUseCases extends SharedUseCases {
         room.setPlayerDisconnected(socketId);
       }
       await this.roomRepository.save(room);
+
+      // Check if remaining connected players have all answered (auto-advance trigger)
+      const allAnswered = room.state === RoomState.ANSWERING_PHASE && room.haveAllPlayersAnswered();
+
       return {
         type: 'player_disconnected',
         pin: room.pin,
         player,
         playerCount: room.getPlayerCount(),
-        canReconnect: room.state !== RoomState.WAITING_PLAYERS
+        canReconnect: room.state !== RoomState.WAITING_PLAYERS,
+        allAnswered
       };
     }
 

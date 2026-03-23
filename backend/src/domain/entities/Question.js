@@ -145,9 +145,9 @@ class Question {
       return this.points; // Return full points if time limit is invalid
     }
 
-    // timeFactor ranges from 1 (instant answer) to 0.5 (at time limit)
+    // timeFactor ranges from 1.0 (instant answer) to 0.5 (at time limit)
     // Clamp to [0, 1] to handle edge cases where elapsedTimeMs > totalTimeMs
-    const rawTimeFactor = 1 - (elapsedTimeMs / totalTimeMs / 2);
+    const rawTimeFactor = 1 - ((elapsedTimeMs / totalTimeMs) / 2);
     const timeFactor = Math.max(0, Math.min(1, rawTimeFactor));
     const score = Math.round(timeFactor * this.points);
 

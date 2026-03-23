@@ -14,6 +14,22 @@ class QuizUseCases {
   }
 
   /**
+   * Save quiz with automatic slug collision retry
+   * @private
+   */
+  async _saveWithSlugRetry(quiz, title, maxRetries = 3) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.quizRepository.save(quiz);
+      } catch (error) {
+        const isSlugConflict = error.code === 11000 || (error.message && error.message.includes('duplicate'));
+        if (!isSlugConflict || attempt === maxRetries) throw error;
+        quiz.slug = Quiz.generateSlug(title);
+      }
+    }
+  }
+
+  /**
    * Get quiz by ID or throw NotFoundError
    * @private
    */
@@ -50,18 +66,7 @@ class QuizUseCases {
       tags,
       slug
     });
-    let savedQuiz;
-    try {
-      savedQuiz = await this.quizRepository.save(quiz);
-    } catch (error) {
-      // Handle slug uniqueness conflict by retrying with a new slug
-      if (error.code === 11000 || (error.message && error.message.includes('duplicate'))) {
-        quiz.slug = Quiz.generateSlug(title);
-        savedQuiz = await this.quizRepository.save(quiz);
-      } else {
-        throw error;
-      }
-    }
+    const savedQuiz = await this._saveWithSlugRetry(quiz, title);
     return { quiz: savedQuiz };
   }
 
@@ -369,6 +374,10 @@ class QuizUseCases {
       throw new ValidationError('Invalid import data: missing version');
     }
 
+    if (jsonData.version !== EXPORT_VERSION) {
+      throw new ValidationError(`Unsupported import version: ${jsonData.version}. Expected: ${EXPORT_VERSION}`);
+    }
+
     if (!jsonData.quiz || typeof jsonData.quiz !== 'object') {
       throw new ValidationError('Invalid import data: missing quiz object');
     }
@@ -459,19 +468,9 @@ class QuizUseCases {
       quiz.addQuestion(question);
     }
 
-    // Generate slug and handle collisions (same as createQuiz)
+    // Generate slug and save with collision retry
     quiz.slug = Quiz.generateSlug(quizData.title);
-    let savedQuiz;
-    try {
-      savedQuiz = await this.quizRepository.save(quiz);
-    } catch (error) {
-      if (error.code === 11000 || (error.message && error.message.includes('duplicate'))) {
-        quiz.slug = Quiz.generateSlug(quizData.title);
-        savedQuiz = await this.quizRepository.save(quiz);
-      } else {
-        throw error;
-      }
-    }
+    const savedQuiz = await this._saveWithSlugRetry(quiz, quizData.title);
 
     return { quiz: savedQuiz, questionCount: savedQuiz.questions.length };
   }

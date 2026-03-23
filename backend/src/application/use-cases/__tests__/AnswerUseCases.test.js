@@ -104,7 +104,7 @@ describe('AnswerUseCases', () => {
 
   describe('getServerElapsedTime', () => {
     it('should throw when time expired', () => {
-      const timerService = { isTimeExpired: jest.fn().mockReturnValue(true) };
+      const timerService = { getElapsedTime: jest.fn().mockReturnValue(5000), isTimeExpired: jest.fn().mockReturnValue(true) };
       expect(() => answerUC.getServerElapsedTime(timerService, roomPin)).toThrow('Time expired');
     });
 
@@ -133,17 +133,14 @@ describe('AnswerUseCases', () => {
       expect(result).toBe(5000);
     });
 
-    it('should throw on second expiry check', () => {
-      let callCount = 0;
+    it('should return elapsed time when timer is active and not expired', () => {
       const timerService = {
-        isTimeExpired: jest.fn(() => {
-          callCount++;
-          return callCount > 1;
-        }),
+        isTimeExpired: jest.fn().mockReturnValue(false),
         getElapsedTime: jest.fn().mockReturnValue(5000),
-        getTimerSync: jest.fn().mockReturnValue(null)
+        getTimerSync: jest.fn().mockReturnValue({ duration: 30000 })
       };
-      expect(() => answerUC.getServerElapsedTime(timerService, roomPin)).toThrow('Time expired');
+      const result = answerUC.getServerElapsedTime(timerService, roomPin);
+      expect(result).toBe(5000);
     });
   });
 

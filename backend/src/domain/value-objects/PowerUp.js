@@ -87,7 +87,7 @@ powerUpRegistry.register(PowerUpType.FIFTY_FIFTY, {
     // Persist on player for reconnect scenarios
     const player = room.getPlayer(socketId);
     if (player) {
-      player.eliminatedOptions = eliminatedOptions;
+      player.setEliminatedOptions(eliminatedOptions);
     }
     return { type: PowerUpType.FIFTY_FIFTY, eliminatedOptions };
   },
