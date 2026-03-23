@@ -344,20 +344,28 @@ class AuthUseCases {
       throw new UnauthorizedError('Invalid password');
     }
 
-    // Delete user's quizzes
-    const deletedQuizzes = await this.quizRepository.deleteByCreator(userId);
-
-    // Delete user's game sessions
-    let deletedSessions = 0;
-    if (this.gameSessionRepository && this.gameSessionRepository.deleteByHost) {
-      deletedSessions = await this.gameSessionRepository.deleteByHost(userId);
-    }
-
-    // Delete user account
+    // Delete user account first - if this fails, related data stays intact
     const deleted = await this.userRepository.deleteById(userId);
 
     if (!deleted) {
       throw new InternalError('Failed to delete account');
+    }
+
+    // Clean up related data (non-critical - orphaned data is acceptable)
+    let deletedQuizzes = 0;
+    try {
+      deletedQuizzes = await this.quizRepository.deleteByCreator(userId);
+    } catch (err) {
+      console.error('Failed to cleanup quizzes for deleted account:', err.message);
+    }
+
+    let deletedSessions = 0;
+    try {
+      if (this.gameSessionRepository && this.gameSessionRepository.deleteByHost) {
+        deletedSessions = await this.gameSessionRepository.deleteByHost(userId);
+      }
+    } catch (err) {
+      console.error('Failed to cleanup sessions for deleted account:', err.message);
     }
 
     return {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { socketService } from '../services/socketService';
-import { useRoom } from './RoomContext';
+import { useRoom, saveSession } from './RoomContext';
 import { useTimer } from './TimerContext';
 import { showToast } from '../utils/toast';
 
@@ -105,7 +105,7 @@ export function GameProvider({ children }) {
 
     // Restore game state on player reconnect
     socketService.on('player_reconnected', (data) => {
-      const { state, score, streak, powerUps, eliminatedOptions, hasAnswered } = data || {};
+      const { state, score, streak, powerUps, eliminatedOptions, hasAnswered, currentQuestionIndex, timerSync, playerToken } = data || {};
       const updates = {};
       if (state && GAME_STATES[state]) updates.gameState = state;
       if (typeof score === 'number') updates.score = score;
@@ -113,7 +113,22 @@ export function GameProvider({ children }) {
       if (powerUps) updates.powerUps = powerUps;
       if (eliminatedOptions && eliminatedOptions.length > 0) updates.eliminatedOptions = eliminatedOptions;
       if (typeof hasAnswered === 'boolean') updates.hasAnswered = hasAnswered;
+      if (typeof currentQuestionIndex === 'number') updates.currentQuestionIndex = currentQuestionIndex;
       if (Object.keys(updates).length > 0) updateState(updates);
+
+      // Restore timer if in answering phase
+      if (timerSync && timerSync.remainingMs > 0) {
+        try {
+          const adjustedEndTime = timerSync.endTime + (Date.now() - timerSync.serverTime);
+          timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime);
+        } catch { /* timer may be unavailable */ }
+      }
+
+      // Save rotated token to session storage
+      if (playerToken) {
+        roomRef.current.updateRoomState({ playerToken });
+        saveSession({ playerToken });
+      }
     });
 
     // Game flow events
@@ -203,7 +218,7 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('final_results', ({ leaderboard, podium, teamLeaderboard, teamPodium }) => {
-      const updates = { leaderboard, podium };
+      const updates = { leaderboard, podium, gameState: GAME_STATES.PODIUM };
       if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
       if (teamPodium) updates.teamPodium = teamPodium;
       updateState(updates);
@@ -235,8 +250,11 @@ export function GameProvider({ children }) {
       try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
       updateState({ remainingTime: 0 });
     });
-    socketService.on('timer_sync', ({ remainingMs, endTime, serverTime }) => {
+    socketService.on('timer_sync', (data) => {
       try {
+        if (!data || data.active === false) return;
+        const { remainingMs, endTime, serverTime } = data;
+        if (typeof remainingMs !== 'number' || typeof endTime !== 'number' || typeof serverTime !== 'number') return;
         const adjustedEndTime = endTime + (Date.now() - serverTime);
         timerRef.current.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
       } catch { /* timer may be unavailable */ }
@@ -406,18 +424,32 @@ export function GameProvider({ children }) {
   }, [room.roomPin]);
 
   // Auto-cleanup reactions
+  const reactionsActiveRef = useRef(false);
   useEffect(() => {
-    if (state.reactions.length === 0) return;
+    if (state.reactions.length === 0) {
+      reactionsActiveRef.current = false;
+      return;
+    }
+    // Only start a new interval if one isn't already running
+    if (reactionsActiveRef.current) return;
+    reactionsActiveRef.current = true;
     const interval = setInterval(() => {
       const now = Date.now();
       setState(prev => {
         const filtered = prev.reactions.filter(r => now - r.timestamp < 3000);
+        if (filtered.length === 0) {
+          clearInterval(interval);
+          reactionsActiveRef.current = false;
+        }
         if (filtered.length === prev.reactions.length) return prev;
         return { ...prev, reactions: filtered };
       });
     }, 500);
-    return () => clearInterval(interval);
-  }, [state.reactions.length]);
+    return () => {
+      clearInterval(interval);
+      reactionsActiveRef.current = false;
+    };
+  }, [state.reactions.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount only — remove game-specific listeners, not all listeners
   useEffect(() => {

@@ -152,7 +152,7 @@ class EmailService {
    * @returns {Promise<Object>}
    */
   async sendPasswordReset(email, resetToken) {
-    const resetUrl = `${this.appUrl}/reset-password?token=${resetToken}`;
+    const resetUrl = `${this.appUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     const html = this._getPasswordResetTemplate(resetUrl);
 
@@ -286,7 +286,7 @@ class EmailService {
    */
   _getWelcomeTemplate(username) {
     const content = `
-      <h2 style="margin: 0 0 20px 0; color: #1f2937; font-size: 24px; font-weight: 600;">Hoş Geldiniz, ${username}!</h2>
+      <h2 style="margin: 0 0 20px 0; color: #1f2937; font-size: 24px; font-weight: 600;">Hoş Geldiniz, ${username.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}!</h2>
       <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
         BilenBilir ailesine katıldığınız için teşekkür ederiz! Artık kendi quizlerinizi oluşturabilir ve arkadaşlarınızla yarışabilirsiniz.
       </p>
@@ -336,7 +336,7 @@ class EmailService {
    */
   _stripHtml(html) {
     return html
-      .replace(/<style[^>]*>.*<\/style>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, '')
       .replace(/\s+/g, ' ')
       .trim();

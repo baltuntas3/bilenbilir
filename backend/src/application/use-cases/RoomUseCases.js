@@ -97,11 +97,11 @@ class RoomUseCases extends SharedUseCases {
 
   async leaveRoom({ pin, socketId }) {
     const room = await this._getRoomOrThrow(pin);
-    room.removePlayer(socketId);
+    const removedPlayer = room.removePlayer(socketId);
 
     await this.roomRepository.save(room);
 
-    return { room };
+    return { room, removedPlayer };
   }
 
   async getRoom({ pin }) {
@@ -195,9 +195,12 @@ class RoomUseCases extends SharedUseCases {
     const room = await this._getRoomOrThrow(pin);
     const newPlayerToken = generateId();
     const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod, newPlayerToken);
-    // Clear stale power-up state from previous question to prevent unfair advantage
-    player.clearActivePowerUp();
-    player.eliminatedOptions = [];
+    // Only clear power-up state if the player has already answered the current question
+    // (if they haven't answered, they may still use their power-up from before disconnect)
+    if (player.hasAnswered()) {
+      player.clearActivePowerUp();
+      player.eliminatedOptions = [];
+    }
     await this.roomRepository.save(room);
     return { room, player, newPlayerToken };
   }

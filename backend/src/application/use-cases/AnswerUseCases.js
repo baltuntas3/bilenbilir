@@ -63,6 +63,7 @@ class AnswerUseCases extends SharedUseCases {
 
       player.submitAnswer(answerIndex, validElapsedTime);
       let actualScore = 0;
+      const streakBeforeUpdate = player.streak;
       if (answer.isCorrect) {
         player.incrementStreak();
         actualScore = answer.getTotalScore();
@@ -80,7 +81,7 @@ class AnswerUseCases extends SharedUseCases {
         isCorrect: answer.isCorrect,
         elapsedTimeMs: validElapsedTime,
         score: actualScore,
-        streak: player.streak,
+        streak: streakBeforeUpdate,
         optionCount: currentQuestion.options.length
       });
 
@@ -97,28 +98,31 @@ class AnswerUseCases extends SharedUseCases {
   }
 
   async usePowerUp({ pin, socketId, powerUpType }) {
-    const room = await this._getRoomOrThrow(pin);
-    if (room.state !== RoomState.ANSWERING_PHASE) throw new ValidationError('Power-ups can only be used during answering phase');
+    const powerUpKey = `${pin}:${socketId}:powerup`;
+    return this.pendingAnswers.withLock(powerUpKey, 'Power-up usage in progress', async () => {
+      const room = await this._getRoomOrThrow(pin);
+      if (room.state !== RoomState.ANSWERING_PHASE) throw new ValidationError('Power-ups can only be used during answering phase');
 
-    const player = room.getPlayer(socketId);
-    if (!player) throw new NotFoundError('Player not found');
-    if (player.isDisconnected()) throw new ValidationError('Disconnected players cannot use power-ups');
-    if (player.hasAnswered()) throw new ConflictError('Cannot use power-up after answering');
+      const player = room.getPlayer(socketId);
+      if (!player) throw new NotFoundError('Player not found');
+      if (player.isDisconnected()) throw new ValidationError('Disconnected players cannot use power-ups');
+      if (player.hasAnswered()) throw new ConflictError('Cannot use power-up after answering');
 
-    // Validate power-up count BEFORE executing to prevent using unavailable power-ups
-    if (player.getPowerUpCount(powerUpType) <= 0) {
-      throw new ValidationError(`No ${powerUpType} power-up remaining`);
-    }
+      // Validate power-up count BEFORE executing to prevent using unavailable power-ups
+      if (player.getPowerUpCount(powerUpType) <= 0) {
+        throw new ValidationError(`No ${powerUpType} power-up remaining`);
+      }
 
-    const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
-    const { result, emitActions } = powerUpRegistry.execute(powerUpType, { room, socketId, currentQuestion });
+      const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
+      const { result, emitActions } = powerUpRegistry.execute(powerUpType, { room, socketId, currentQuestion });
 
-    // Decrement after successful execution
-    player.usePowerUp(powerUpType);
-    result.nickname = player.nickname;
+      // Decrement after successful execution
+      player.usePowerUp(powerUpType);
+      result.nickname = player.nickname;
 
-    await this.roomRepository.save(room);
-    return { result, emitActions };
+      await this.roomRepository.save(room);
+      return { result, emitActions };
+    });
   }
 
   getServerElapsedTime(timerService, pin) {

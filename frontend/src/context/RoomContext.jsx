@@ -109,8 +109,24 @@ export function RoomProvider({ children }) {
     if (!roomState.isHost || !roomState.roomPin) {
       return Promise.reject(new Error('Not authorized'));
     }
-    socketService.emit(event, { pin: roomState.roomPin, ...extraData });
-    return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const onError = ({ error }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        socketService.off('error', onError);
+        reject(new Error(error));
+      };
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        socketService.off('error', onError);
+        resolve(); // Resolve on timeout (no error means success)
+      }, 5000);
+      socketService.on('error', onError);
+      socketService.emit(event, { pin: roomState.roomPin, ...extraData });
+    });
   }, [roomState.isHost, roomState.roomPin]);
 
   const connectSocket = useCallback(async () => {
@@ -125,6 +141,7 @@ export function RoomProvider({ children }) {
 
   // Room-level socket listeners (player/spectator/team/lightning/ban events)
   const roomListenersSetupRef = useRef(false);
+  const lastRoomSocketIdRef = useRef(null);
 
   const roomEvents = [
     'player_joined', 'player_left', 'player_kicked', 'player_banned',
@@ -136,15 +153,18 @@ export function RoomProvider({ children }) {
   const cleanupRoomListeners = useCallback(() => {
     roomEvents.forEach(event => socketService.off(event));
     roomListenersSetupRef.current = false;
+    lastRoomSocketIdRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setupRoomListeners = useCallback(() => {
-    if (roomListenersSetupRef.current) return;
+    const currentSocketId = socketService.getSocketId();
+    if (roomListenersSetupRef.current && lastRoomSocketIdRef.current === currentSocketId) return;
 
     // Always cleanup before re-attaching to prevent listener accumulation
     cleanupRoomListeners();
     roomListenersSetupRef.current = true;
+    lastRoomSocketIdRef.current = currentSocketId;
 
     // Player events
     socketService.on('player_joined', ({ player }) => {
@@ -336,6 +356,10 @@ export function RoomProvider({ children }) {
       roomPin: response.pin, isHost: false, playerId: response.playerId,
       playerToken: response.playerToken, nickname: response.nickname,
     });
+    // Save rotated token to sessionStorage for page reload resilience
+    if (response.playerToken) {
+      saveSession({ pin: response.pin, playerToken: response.playerToken, role: 'player', nickname: response.nickname });
+    }
     return response;
   }, [connectSocket, updateRoomState, emitWithResponse]);
 
@@ -347,6 +371,10 @@ export function RoomProvider({ children }) {
       spectatorId: response.spectatorId, spectatorToken: response.spectatorToken,
       nickname: response.nickname,
     });
+    // Save rotated token to sessionStorage for page reload resilience
+    if (response.spectatorToken) {
+      saveSession({ pin: response.pin, spectatorToken: response.spectatorToken, role: 'spectator', nickname: response.nickname });
+    }
     return response;
   }, [connectSocket, updateRoomState, emitWithResponse]);
 

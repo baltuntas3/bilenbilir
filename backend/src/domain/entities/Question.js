@@ -1,4 +1,5 @@
 const { ValidationError } = require('../../shared/errors');
+const { MAX_POINTS, MIN_POINTS, MAX_OPTIONS } = require('../../shared/config/constants');
 
 const QuestionType = {
   MULTIPLE_CHOICE: 'MULTIPLE_CHOICE',
@@ -7,9 +8,6 @@ const QuestionType = {
 
 // Allowed protocols for image URLs
 const ALLOWED_IMAGE_PROTOCOLS = ['http:', 'https:'];
-// Maximum points per question
-const MAX_POINTS = 10000;
-const MIN_POINTS = 100;
 
 // Valid question types
 const VALID_QUESTION_TYPES = Object.values(QuestionType);
@@ -106,11 +104,12 @@ class Question {
       throw new ValidationError('TRUE_FALSE questions must have exactly 2 options');
     }
 
-    if (this.type === QuestionType.MULTIPLE_CHOICE && this.options.length > 4) {
-      throw new ValidationError('Maximum 4 options allowed');
+    if (this.type === QuestionType.MULTIPLE_CHOICE && this.options.length > MAX_OPTIONS) {
+      throw new ValidationError(`Maximum ${MAX_OPTIONS} options allowed`);
     }
 
-    if (this.correctAnswerIndex < 0 || this.correctAnswerIndex >= this.options.length) {
+    if (typeof this.correctAnswerIndex !== 'number' || !Number.isInteger(this.correctAnswerIndex) ||
+        this.correctAnswerIndex < 0 || this.correctAnswerIndex >= this.options.length) {
       throw new ValidationError('Invalid correct answer index');
     }
 

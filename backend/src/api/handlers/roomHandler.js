@@ -135,7 +135,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       socket.leave(pin);
 
       io.to(pin).emit('player_left', {
-        socketId: socket.id,
+        playerId: result.removedPlayer?.id || socket.id,
+        nickname: result.removedPlayer?.nickname || null,
         playerCount: result.room.getPlayerCount()
       });
     } catch (error) {

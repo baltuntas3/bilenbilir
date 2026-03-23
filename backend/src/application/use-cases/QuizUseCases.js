@@ -99,9 +99,33 @@ class QuizUseCases {
 
   /**
    * Get quiz by ID
+   * Private quizzes are only visible to their owner
+   * Non-owners get quiz data without correctAnswerIndex
    */
-  async getQuiz({ quizId }) {
+  async getQuiz({ quizId, requesterId = null }) {
     const quiz = await this._getQuizOrThrow(quizId);
+
+    // Private quizzes are only accessible by their owner
+    if (!quiz.isPublic && quiz.createdBy !== requesterId) {
+      throw new ForbiddenError('Not authorized to view this quiz');
+    }
+
+    // Non-owners get a sanitized copy without correct answers
+    if (quiz.createdBy !== requesterId) {
+      const sanitized = { ...quiz };
+      sanitized.questions = quiz.questions.map(q => ({
+        id: q.id,
+        text: q.text,
+        type: q.type,
+        options: q.options,
+        timeLimit: q.timeLimit,
+        points: q.points,
+        imageUrl: q.imageUrl,
+        explanation: q.explanation
+      }));
+      return { quiz: sanitized };
+    }
+
     return { quiz };
   }
 
@@ -195,9 +219,11 @@ class QuizUseCases {
 
   /**
    * Get all questions for a quiz
+   * Only quiz owner can see correct answers
    */
-  async getQuestions({ quizId }) {
+  async getQuestions({ quizId, requesterId }) {
     const quiz = await this._getQuizOrThrow(quizId);
+    this._validateQuizOwnership(quiz, requesterId);
     return { questions: quiz.questions };
   }
 

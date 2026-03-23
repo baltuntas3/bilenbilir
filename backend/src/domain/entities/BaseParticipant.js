@@ -59,6 +59,7 @@ class BaseParticipant {
 
   set token(value) {
     this._token = value;
+    this.tokenCreatedAt = new Date();
   }
 
   // Backward-compatible aliases for token access

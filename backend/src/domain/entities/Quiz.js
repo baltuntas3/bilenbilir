@@ -1,7 +1,6 @@
 const { ValidationError, NotFoundError } = require('../../shared/errors');
 
-const MAX_QUESTIONS = 50;
-const MAX_TAGS = 5;
+const { MAX_QUESTIONS, MAX_TAGS } = require('../../shared/config/constants');
 const MIN_TAG_LENGTH = 2;
 const MAX_TAG_LENGTH = 30;
 const TAG_PATTERN = /^[a-zA-ZÀ-ÿĞğÜüŞşİıÖöÇç0-9\s]+$/;

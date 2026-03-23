@@ -71,6 +71,11 @@ class Player extends BaseParticipant {
       throw new ForbiddenError('Cannot submit answer while disconnected');
     }
 
+    // Prevent duplicate submissions
+    if (this.hasAnswered()) {
+      throw new ForbiddenError('Already answered this question');
+    }
+
     // Validate answerIndex
     if (typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) || answerIndex < 0) {
       throw new ValidationError('Answer index must be a non-negative integer');

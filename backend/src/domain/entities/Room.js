@@ -194,7 +194,9 @@ class Room {
   }
 
   removePlayer(socketId) {
+    const player = this.getPlayer(socketId);
     this.players = this.players.filter(p => p.socketId !== socketId);
+    return player || null;
   }
 
   setPlayerDisconnected(socketId) {
@@ -583,7 +585,7 @@ class Room {
   // ==================== SPECTATOR METHODS (delegated to SpectatorManager) ====================
 
   addSpectator(spectator) {
-    this._spectatorManager.add(spectator, this.players);
+    this._spectatorManager.add(spectator, this.players, this.bannedNicknames);
   }
 
   removeSpectator(socketId) {

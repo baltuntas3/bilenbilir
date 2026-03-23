@@ -168,7 +168,8 @@ describe('QuizUseCases', () => {
       });
 
       const result = await quizUseCases.getQuiz({
-        quizId: createResult.quiz.id
+        quizId: createResult.quiz.id,
+        requesterId: userId
       });
 
       expect(result.quiz.title).toBe('My Quiz');
@@ -176,7 +177,8 @@ describe('QuizUseCases', () => {
 
     it('should throw error for non-existent quiz', async () => {
       await expect(quizUseCases.getQuiz({
-        quizId: 'non-existent'
+        quizId: 'non-existent',
+        requesterId: userId
       })).rejects.toThrow('Quiz not found');
     });
   });
@@ -316,7 +318,7 @@ describe('QuizUseCases', () => {
 
       expect(result.success).toBe(true);
 
-      await expect(quizUseCases.getQuiz({ quizId }))
+      await expect(quizUseCases.getQuiz({ quizId, requesterId: userId }))
         .rejects.toThrow('Quiz not found');
     });
 
@@ -441,7 +443,7 @@ describe('QuizUseCases', () => {
     });
 
     it('should return all questions for a quiz', async () => {
-      const result = await quizUseCases.getQuestions({ quizId });
+      const result = await quizUseCases.getQuestions({ quizId, requesterId: userId });
 
       expect(result.questions).toHaveLength(2);
       expect(result.questions[0].text).toBe('Q1');
@@ -449,7 +451,7 @@ describe('QuizUseCases', () => {
     });
 
     it('should throw error for non-existent quiz', async () => {
-      await expect(quizUseCases.getQuestions({ quizId: 'non-existent' }))
+      await expect(quizUseCases.getQuestions({ quizId: 'non-existent', requesterId: userId }))
         .rejects.toThrow('Quiz not found');
     });
   });
@@ -676,7 +678,7 @@ describe('QuizUseCases', () => {
       });
 
       // Question 2 should have default timeLimit and points
-      const quiz = await quizUseCases.getQuiz({ quizId: result.quiz.id });
+      const quiz = await quizUseCases.getQuiz({ quizId: result.quiz.id, requesterId: userId });
       expect(quiz.quiz.getQuestion(1).timeLimit).toBe(30);
       expect(quiz.quiz.getQuestion(1).points).toBe(1000);
     });
@@ -891,7 +893,7 @@ describe('QuizUseCases', () => {
       expect(importResult.questionCount).toBe(1);
 
       // Verify question data
-      const questions = await quizUseCases.getQuestions({ quizId: importResult.quiz.id });
+      const questions = await quizUseCases.getQuestions({ quizId: importResult.quiz.id, requesterId: 'user-2' });
       expect(questions.questions[0].text).toBe('What is 1+1?');
       expect(questions.questions[0].correctAnswerIndex).toBe(1);
       expect(questions.questions[0].timeLimit).toBe(20);

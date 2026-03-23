@@ -6,7 +6,7 @@ class SpectatorManager {
     this.spectators = [];
   }
 
-  add(spectator, players) {
+  add(spectator, players, bannedNicknames = []) {
     if (this.spectators.length >= MAX_SPECTATORS) {
       throw new ValidationError(`Room is full (maximum ${MAX_SPECTATORS} spectators)`);
     }
@@ -14,6 +14,19 @@ class SpectatorManager {
     const nicknameExistsSpectator = this.spectators.some(s => s.hasNickname(spectator.nickname));
     if (nicknameExistsPlayer || nicknameExistsSpectator) {
       throw new ValidationError('Nickname already taken');
+    }
+    // Check banned nicknames
+    if (bannedNicknames.length > 0) {
+      const { Nickname } = require('../value-objects/Nickname');
+      let normalized;
+      try {
+        normalized = new Nickname(spectator.nickname).normalized();
+      } catch {
+        normalized = spectator.nickname.toLowerCase().trim();
+      }
+      if (bannedNicknames.includes(normalized)) {
+        throw new ForbiddenError('This nickname is banned from this room');
+      }
     }
     this.spectators.push(spectator);
   }

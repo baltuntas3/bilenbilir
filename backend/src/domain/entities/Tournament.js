@@ -89,6 +89,12 @@ class Tournament {
     if (roundIndex < 0 || roundIndex >= this.rounds.length) {
       throw new ValidationError('Invalid round index');
     }
+    if (this.state !== TournamentState.IN_PROGRESS) {
+      throw new ValidationError('Tournament must be in progress to complete a round');
+    }
+    if (roundIndex !== this.currentRoundIndex) {
+      throw new ValidationError('Can only complete the current round');
+    }
     this.rounds[roundIndex].status = 'completed';
     this.rounds[roundIndex].results = results;
 

@@ -95,8 +95,8 @@ class GameStatsUseCases {
     let totalScore = 0;
     let totalCorrect = 0;
     let totalWrong = 0;
-    let totalResponseTime = 0;
-    let totalAnswers = 0;
+    let weightedResponseTimeSum = 0;
+    let totalAnswerCount = 0;
     let bestRank = Infinity;
 
     for (const session of allSessions) {
@@ -117,8 +117,9 @@ class GameStatsUseCases {
         totalCorrect += playerResult.correctAnswers || 0;
         totalWrong += playerResult.wrongAnswers || 0;
         if (playerResult.averageResponseTime > 0) {
-          totalResponseTime += playerResult.averageResponseTime;
-          totalAnswers++;
+          const answerCount = (playerResult.correctAnswers || 0) + (playerResult.wrongAnswers || 0);
+          weightedResponseTimeSum += playerResult.averageResponseTime * answerCount;
+          totalAnswerCount += answerCount;
         }
         if (playerResult.rank < bestRank) bestRank = playerResult.rank;
       }
@@ -131,7 +132,7 @@ class GameStatsUseCases {
       gamesPlayed: playerSessions.length,
       totalScore,
       accuracy,
-      averageResponseTime: totalAnswers > 0 ? Math.round(totalResponseTime / totalAnswers) : 0,
+      averageResponseTime: totalAnswerCount > 0 ? Math.round(weightedResponseTimeSum / totalAnswerCount) : 0,
       bestRank: bestRank === Infinity ? null : bestRank,
       sessions: playerSessions.sort((a, b) => new Date(b.date) - new Date(a.date))
     };

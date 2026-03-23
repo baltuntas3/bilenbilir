@@ -6,7 +6,7 @@ const { authenticate, optionalAuthenticate } = require('../middlewares/authMiddl
 const { ValidationError } = require('../../shared/errors');
 const { quizCreationLimiter, searchLimiter } = require('../middlewares/rateLimiter');
 const { QUIZ_CATEGORIES } = require('../../infrastructure/db/models/Quiz');
-const { parsePagination, checkQuizAccess } = require('../helpers/routeHelpers');
+const { parsePagination } = require('../helpers/routeHelpers');
 
 const router = express.Router();
 const quizUseCases = new QuizUseCases(mongoQuizRepository, null, null, quizRatingRepository);
@@ -143,13 +143,9 @@ router.get('/my', authenticate, async (req, res, next) => {
 router.get('/:id', optionalAuthenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const result = await quizUseCases.getQuiz({ quizId: id });
-    const quiz = result.quiz;
+    const result = await quizUseCases.getQuiz({ quizId: id, requesterId: req.user?.id || null });
 
-    // Check access for private quizzes
-    checkQuizAccess(quiz, req.user?.id);
-
-    res.json(quiz);
+    res.json(result.quiz);
   } catch (error) {
     next(error);
   }
@@ -203,17 +199,11 @@ router.delete('/:id', authenticate, async (req, res, next) => {
  * Public quizzes: questions accessible to everyone
  * Private quizzes: questions only accessible to owner
  */
-router.get('/:id/questions', optionalAuthenticate, async (req, res, next) => {
+router.get('/:id/questions', authenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // First check quiz access
-    const quizResult = await quizUseCases.getQuiz({ quizId: id });
-    const quiz = quizResult.quiz;
-
-    checkQuizAccess(quiz, req.user?.id);
-
-    const result = await quizUseCases.getQuestions({ quizId: id });
+    const result = await quizUseCases.getQuestions({ quizId: id, requesterId: req.user.id });
     res.json(result.questions);
   } catch (error) {
     next(error);

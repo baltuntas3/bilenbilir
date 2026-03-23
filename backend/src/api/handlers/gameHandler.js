@@ -182,12 +182,20 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       timerService.stopTimer(pin);
 
-      const result = await gameUseCases.endAnsweringPhase({
-        pin,
-        requesterId: socket.id
-      });
+      // Check lock to prevent race with timer callback auto-transition
+      if (endAnsweringLocks.has(pin)) return;
+      endAnsweringLocks.add(pin);
 
-      io.to(pin).emit('show_results', toShowResultsDTO(result));
+      try {
+        const result = await gameUseCases.endAnsweringPhase({
+          pin,
+          requesterId: socket.id
+        });
+
+        io.to(pin).emit('show_results', toShowResultsDTO(result));
+      } finally {
+        endAnsweringLocks.delete(pin);
+      }
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -332,7 +340,11 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         const { method, args } = emitActions.timerAction;
         const allowedTimerMethods = ['extendTimer', 'stopTimer'];
         if (allowedTimerMethods.includes(method)) {
-          timerService[method](pin, ...args);
+          try {
+            timerService[method](pin, ...args);
+          } catch (timerErr) {
+            console.error(`Timer action '${method}' failed for pin ${pin}:`, timerErr.message);
+          }
         }
       }
 

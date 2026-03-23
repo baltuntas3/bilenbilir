@@ -33,9 +33,14 @@ describe('Question', () => {
         .toThrow('At least 2 options required');
     });
 
-    it('should throw error for more than 4 options', () => {
-      expect(() => new Question({ ...validQuestionData, options: ['1', '2', '3', '4', '5'] }))
-        .toThrow('Maximum 4 options allowed');
+    it('should throw error for more than 6 options', () => {
+      expect(() => new Question({ ...validQuestionData, options: ['1', '2', '3', '4', '5', '6', '7'] }))
+        .toThrow('Maximum 6 options allowed');
+    });
+
+    it('should allow up to 6 options', () => {
+      expect(() => new Question({ ...validQuestionData, options: ['1', '2', '3', '4', '5', '6'] }))
+        .not.toThrow();
     });
 
     it('should throw error for invalid correct answer index', () => {

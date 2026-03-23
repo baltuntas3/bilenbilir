@@ -37,6 +37,23 @@ export function TimerProvider({ children }) {
       endTimeRef.current += extraTimeMs;
       // Update timeLimit so progress ring stays proportional
       setTimeLimit(prev => prev + Math.ceil(extraTimeMs / 1000));
+
+      // Restart interval if it was cleared (timer had expired)
+      if (!timerRef.current) {
+        const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+        setRemainingTime(remaining);
+        if (remaining > 0) {
+          timerRef.current = setInterval(() => {
+            const now = Date.now();
+            const r = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
+            setRemainingTime(r);
+            if (r <= 0) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+          }, 100);
+        }
+      }
     }
   }, []);
 

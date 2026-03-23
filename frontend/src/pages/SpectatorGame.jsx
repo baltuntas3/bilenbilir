@@ -44,7 +44,7 @@ export default function SpectatorGame() {
     answerDistribution,
     answeredCount,
     explanation,
-    leaveRoom,
+    leaveSpectator,
     teamMode,
     teamLeaderboard,
     teamPodium,
@@ -59,7 +59,7 @@ export default function SpectatorGame() {
   }, [roomPin, isSpectator, navigate]);
 
   const handleLeave = () => {
-    leaveRoom();
+    leaveSpectator();
     navigate('/');
   };
 

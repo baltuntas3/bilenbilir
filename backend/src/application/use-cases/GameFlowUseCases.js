@@ -39,7 +39,12 @@ class GameFlowUseCases extends SharedUseCases {
     room.setQuizSnapshot(quizSnapshot);
     room.setState(RoomState.QUESTION_INTRO);
     await this.roomRepository.save(room);
-    await this.quizRepository.incrementPlayCount(room.quizId);
+    // Non-critical: increment play count. Failure should not affect game start.
+    try {
+      await this.quizRepository.incrementPlayCount(room.quizId);
+    } catch (err) {
+      console.error('Failed to increment play count:', err.message);
+    }
 
     const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
     return {
