@@ -353,38 +353,45 @@ export function GameProvider({ children }) {
   }, [room.isHost, room.roomPin, state.hasAnswered]);
 
   const powerUpPendingRef = useRef(false);
+  const powerUpCleanupRef = useRef(null);
   const usePowerUp = useCallback((type) => {
     if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
     powerUpPendingRef.current = true;
 
     socketService.emit('use_power_up', { pin: room.roomPin, powerUpType: type });
-    // Optimistic update with error rollback
-    const previousCount = state.powerUps[type] || 0;
-    setState(prev => ({
-      ...prev,
-      powerUps: { ...prev.powerUps, [type]: Math.max(0, (prev.powerUps[type] || 0) - 1) },
-    }));
+    // Capture previous count from current state for accurate rollback
+    let previousCount;
+    setState(prev => {
+      previousCount = prev.powerUps[type] || 0;
+      return {
+        ...prev,
+        powerUps: { ...prev.powerUps, [type]: Math.max(0, (prev.powerUps[type] || 0) - 1) },
+      };
+    });
 
     let settled = false;
     const cleanup = () => {
       if (settled) return;
       settled = true;
       powerUpPendingRef.current = false;
+      powerUpCleanupRef.current = null;
       clearTimeout(rollbackTimeout);
       socketService.off('error', onError);
       socketService.off('power_up_activated', onSuccess);
     };
     const onError = () => {
+      const countToRestore = previousCount;
       cleanup();
       setState(prev => ({
         ...prev,
-        powerUps: { ...prev.powerUps, [type]: previousCount },
+        powerUps: { ...prev.powerUps, [type]: countToRestore },
       }));
     };
     const onSuccess = () => {
       cleanup();
     };
     const rollbackTimeout = setTimeout(cleanup, 5000);
+    powerUpCleanupRef.current = cleanup;
     socketService.on('error', onError);
     socketService.on('power_up_activated', onSuccess);
   }, [room.roomPin, room.isHost, state.hasAnswered, state.powerUps]);
@@ -458,6 +465,8 @@ export function GameProvider({ children }) {
       cleanupGameListeners();
       listenersSetupRef.current = false;
       lastSocketIdRef.current = null;
+      // Clean up any pending power-up timeout to prevent state updates after unmount
+      if (powerUpCleanupRef.current) powerUpCleanupRef.current();
     };
   }, [cleanupGameListeners]);
 

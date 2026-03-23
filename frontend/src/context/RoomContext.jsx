@@ -477,6 +477,9 @@ export function RoomProvider({ children }) {
 
   // Auto-reconnection
   const reconnectingRef = useRef(false);
+  const roomPinRef = useRef(roomState.roomPin);
+  roomPinRef.current = roomState.roomPin;
+
   useEffect(() => {
     const attemptReconnection = async () => {
       if (reconnectingRef.current) return;
@@ -510,14 +513,15 @@ export function RoomProvider({ children }) {
 
     socketService.setReconnectCallback(() => attemptReconnection());
     socketService.setDisconnectCallback((reason) => {
-      if (roomState.roomPin && reason !== 'io client disconnect') {
+      // Use ref to avoid stale closure — roomPin changes shouldn't re-run this effect
+      if (roomPinRef.current && reason !== 'io client disconnect') {
         showToast.warning('Connection lost. Attempting to reconnect...');
       }
     });
 
     const session = getSession();
-    if (session && !roomState.roomPin) attemptReconnection();
-  }, [isAuthenticated, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState, roomState.roomPin]);
+    if (session && !roomPinRef.current) attemptReconnection();
+  }, [isAuthenticated, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState]);
 
   const value = useMemo(() => ({
     ...roomState,

@@ -31,7 +31,7 @@ class GameUseCases {
     const player = room.getPlayer(socketId);
     if (player) return player.nickname;
     if (room.isHost(socketId)) return 'Host';
-    const spectator = room.getSpectator?.(socketId);
+    const spectator = room.getSpectator(socketId);
     if (spectator) return spectator.nickname;
     return null;
   }

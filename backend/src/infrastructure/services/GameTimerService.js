@@ -78,7 +78,7 @@ class GameTimerService {
         return;
       }
 
-      const syncData = this._buildTimerSync(endTime);
+      const syncData = this._buildTimerSync(currentTimer.endTime);
       this.io.to(pin).emit('timer_tick', syncData);
 
       // Clean up interval when timer expires
