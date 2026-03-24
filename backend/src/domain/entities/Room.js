@@ -308,10 +308,17 @@ class Room {
   }
 
   /**
-   * Get count of connected players who have answered
+   * Get count of connected players who have answered (used for auto-advance checks)
    */
   getAnsweredCount() {
     return this.players.filter(p => !p.isDisconnected() && p.hasAnswered()).length;
+  }
+
+  /**
+   * Get count of all players who have answered, including disconnected (used for reporting)
+   */
+  getTotalAnsweredCount() {
+    return this.players.filter(p => p.hasAnswered()).length;
   }
 
   isHost(socketId) {

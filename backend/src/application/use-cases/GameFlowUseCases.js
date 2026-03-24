@@ -57,8 +57,8 @@ class GameFlowUseCases extends SharedUseCases {
   async startAnsweringPhase({ pin, requesterId, pendingAnswers }) {
     const room = await this._getRoomOrThrow(pin);
     this._throwIfNotHost(room, requesterId);
-    room.setState(RoomState.ANSWERING_PHASE);
     room.clearAllAnswerAttempts();
+    room.setState(RoomState.ANSWERING_PHASE);
     await this.roomRepository.save(room);
     if (pendingAnswers) pendingAnswers.clearByPrefix(`${pin}:`);
 
@@ -92,8 +92,8 @@ class GameFlowUseCases extends SharedUseCases {
       correctAnswerIndex: currentQuestion.correctAnswerIndex,
       distribution,
       correctCount,
-      answeredCount: room.getAnsweredCount(),
-      totalPlayers: room.getConnectedPlayerCount(),
+      answeredCount: room.getTotalAnsweredCount(),
+      totalPlayers: room.answeringPhasePlayerCount,
       explanation: currentQuestion.explanation || null
     };
   }

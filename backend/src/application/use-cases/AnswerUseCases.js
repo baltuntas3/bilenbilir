@@ -70,11 +70,13 @@ class AnswerUseCases extends SharedUseCases {
 
       if (answer.isCorrect) {
         player.incrementStreak();
-        const totalScore = answer.getTotalScore();
+        const baseScore = answer.score;
+        const streakBonus = answer.streakBonus;
         if (hasDoublePoints) {
-          actualScore = Math.min(totalScore * 2, MAX_ANSWER_SCORE);
+          // Only double the base score; streak bonus is a fixed reward, not subject to multipliers
+          actualScore = Math.min(baseScore * 2 + streakBonus, MAX_ANSWER_SCORE);
         } else {
-          actualScore = totalScore;
+          actualScore = answer.getTotalScore();
         }
         player.addScore(actualScore);
       } else {

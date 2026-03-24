@@ -1,6 +1,5 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO } = require('./socketHandlerUtils');
-const { ValidationError, NotFoundError, ConflictError } = require('../../shared/errors');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults } = require('./socketHandlerUtils');
 const { MAX_TIMER_EXTENSION_MS, LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 const { LockManager } = require('../../shared/utils/LockManager');
 
@@ -63,31 +62,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       });
       // Start server-side timer
       timerService.startTimer(pin, result.timeLimit, async () => {
-        timerService.stopTimer(pin);
-        // Lock prevents race with all-answered auto-transition
-        if (!endAnsweringLocks.acquire(pin)) return;
-        try {
-          const isInAnsweringPhase = await gameUseCases.isInState(pin, 'ANSWERING_PHASE');
-          if (!isInAnsweringPhase) return;
-
-          const endResult = await gameUseCases.endAnsweringPhase({
-            pin,
-            requesterId: 'server'
-          });
-
-          if (endResult) {
-            io.to(pin).emit('time_expired');
-            io.to(pin).emit('show_results', toShowResultsDTO(endResult));
-          }
-        } catch (err) {
-          // Expected errors when room state has changed (e.g. host already ended, room deleted)
-          const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
-          if (!isExpected) {
-            console.error('Auto-end error:', err.message);
-          }
-        } finally {
-          endAnsweringLocks.release(pin);
-        }
+        // Timer expired — emit time_expired before auto-advancing
+        io.to(pin).emit('time_expired');
+        await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
       });
 
       io.to(pin).emit('answering_started', {
@@ -141,31 +118,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       });
 
       if (result.allAnswered) {
-        timerService.stopTimer(pin);
-        io.to(pin).emit('all_players_answered');
-
-        // Lock prevents race with timer expiry auto-transition
-        if (!endAnsweringLocks.acquire(pin)) return;
-
-        // Auto-transition to results when all players have answered
-        try {
-          const endResult = await gameUseCases.endAnsweringPhase({
-            pin,
-            requesterId: 'server'
-          });
-
-          if (endResult) {
-            io.to(pin).emit('show_results', toShowResultsDTO(endResult));
-          }
-        } catch (err) {
-          // ConflictError/ValidationError/NotFoundError are expected if host already ended or room changed
-          const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
-          if (!isExpected) {
-            console.error('Auto-end after all answered error:', err.message);
-          }
-        } finally {
-          endAnsweringLocks.release(pin);
-        }
+        await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
       }
     } catch (error) {
       handleSocketError(socket, error);

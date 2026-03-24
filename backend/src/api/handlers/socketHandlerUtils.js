@@ -1,4 +1,4 @@
-const { UnauthorizedError } = require('../../shared/errors');
+const { UnauthorizedError, ValidationError, NotFoundError, ConflictError } = require('../../shared/errors');
 const { socketRateLimiter } = require('../middlewares/socketRateLimiter');
 
 /**
@@ -87,4 +87,35 @@ const validateToken = (socket, token, tokenName) => {
   return true;
 };
 
-module.exports = { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken };
+/**
+ * Auto-transition from ANSWERING_PHASE to SHOW_RESULTS.
+ * Acquires endAnsweringLocks, stops the timer, ends the phase, and emits results.
+ * Silently returns if lock is already held (another path is handling it).
+ *
+ * @param {Object} params
+ * @param {Object} params.io - Socket.IO server
+ * @param {string} params.pin - Room PIN
+ * @param {Object} params.endAnsweringLocks - LockManager for end-answering locks
+ * @param {Object} params.timerService - GameTimerService (optional)
+ * @param {Object} params.gameUseCases - GameUseCases instance
+ */
+const autoAdvanceToResults = async ({ io, pin, endAnsweringLocks, timerService, gameUseCases }) => {
+  if (!endAnsweringLocks.acquire(pin)) return;
+  try {
+    if (timerService) timerService.stopTimer(pin);
+    io.to(pin).emit('all_players_answered');
+    const endResult = await gameUseCases.endAnsweringPhase({ pin, requesterId: 'server' });
+    if (endResult) {
+      io.to(pin).emit('show_results', toShowResultsDTO(endResult));
+    }
+  } catch (err) {
+    const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
+    if (!isExpected) {
+      console.error('Auto-advance to results error:', err.message);
+    }
+  } finally {
+    endAnsweringLocks.release(pin);
+  }
+};
+
+module.exports = { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults };

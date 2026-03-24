@@ -1,7 +1,7 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { ConflictError, ValidationError, NotFoundError } = require('../../shared/errors');
+const { ConflictError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
-const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults } = require('./socketHandlerUtils');
 const { endAnsweringLocks } = require('./gameHandler');
 
 /**
@@ -37,36 +37,35 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   };
 
   /**
+   * Stop timer and archive game before room deletion.
+   * Called from any code path that closes/deletes a room.
+   * @private
+   */
+  const cleanupBeforeRoomClose = async (pin, room) => {
+    if (timerService) timerService.stopTimer(pin);
+    if (gameUseCases && room && room.hasQuizSnapshot && room.hasQuizSnapshot()) {
+      try {
+        await gameUseCases.saveInterruptedGame({ pin, reason: 'host_closed' });
+      } catch (err) {
+        // Best-effort: archival failure should not block room closure
+        console.error(`Failed to archive game on room close ${pin}:`, err.message);
+      }
+    }
+  };
+
+  /**
    * Check if all connected players have answered after a player is removed/left during ANSWERING_PHASE.
    * If so, auto-transition to results to prevent the game from getting stuck.
    * @private
    */
   const checkAllAnsweredAfterRemoval = async (room) => {
     if (!gameUseCases) return;
-    const pin = room.pin;
-    const isAnswering = room.state === 'ANSWERING_PHASE';
-    if (!isAnswering) return;
+    if (room.state !== 'ANSWERING_PHASE') return;
 
     const noConnectedPlayers = room.getConnectedPlayerCount() === 0;
-    const allAnswered = room.haveAllPlayersAnswered() || noConnectedPlayers;
-    if (!allAnswered) return;
+    if (!room.haveAllPlayersAnswered() && !noConnectedPlayers) return;
 
-    if (!endAnsweringLocks.acquire(pin)) return;
-    try {
-      if (timerService) timerService.stopTimer(pin);
-      io.to(pin).emit('all_players_answered');
-      const endResult = await gameUseCases.endAnsweringPhase({ pin, requesterId: 'server' });
-      if (endResult) {
-        io.to(pin).emit('show_results', toShowResultsDTO(endResult));
-      }
-    } catch (err) {
-      const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
-      if (!isExpected) {
-        console.error('Auto-end after player removal error:', err.message);
-      }
-    } finally {
-      endAnsweringLocks.release(pin);
-    }
+    await autoAdvanceToResults({ io, pin: room.pin, endAnsweringLocks, timerService, gameUseCases });
   };
 
   // Host creates a room (requires authentication)
@@ -152,6 +151,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       // If host is leaving, close the room
       if (room.isHost(socket.id)) {
+        await cleanupBeforeRoomClose(pin, room);
         await roomUseCases.closeRoom({
           pin,
           requesterId: socket.id
@@ -213,6 +213,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin } = data || {};
+
+      const { room } = await roomUseCases.getRoom({ pin });
+      await cleanupBeforeRoomClose(pin, room);
 
       await roomUseCases.closeRoom({
         pin,
@@ -363,7 +366,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         eliminatedOptions: result.player.eliminatedOptions || [],
         hasAnswered: result.player.hasAnswered(),
         answeredCount: result.room.getAnsweredCount(),
-        totalPlayersInPhase: result.room.getConnectedPlayerCount()
+        totalPlayersInPhase: result.room.answeringPhasePlayerCount
       };
 
       // Include results data if in SHOW_RESULTS or later phases
@@ -415,6 +418,13 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
     try {
       if (!checkRateLimit('force_close_room')) return;
       requireAuth();
+
+      // Lookup room before deletion to run cleanup
+      const hostRoom = await roomUseCases.getHostRoom({ hostUserId: socket.user.userId });
+      if (hostRoom) {
+        const { room } = await roomUseCases.getRoom({ pin: hostRoom.pin });
+        await cleanupBeforeRoomClose(hostRoom.pin, room);
+      }
 
       const result = await roomUseCases.forceCloseHostRoom({
         hostUserId: socket.user.userId
