@@ -45,9 +45,16 @@ describe('Nickname', () => {
     });
 
     it('should throw error for invalid characters', () => {
-      expect(() => new Nickname('Player 1')).toThrow('Nickname can only contain letters, numbers, underscores and hyphens');
-      expect(() => new Nickname('Player@1')).toThrow('Nickname can only contain letters, numbers, underscores and hyphens');
-      expect(() => new Nickname('Плейер')).toThrow('Nickname can only contain letters, numbers, underscores and hyphens');
+      expect(() => new Nickname('Player 1')).toThrow('Nickname can only contain letters');
+      expect(() => new Nickname('Player@1')).toThrow('Nickname can only contain letters');
+      expect(() => new Nickname('Плейер')).toThrow('Nickname can only contain letters');
+    });
+
+    it('should accept Turkish characters', () => {
+      expect(new Nickname('Güneş').toString()).toBe('Güneş');
+      expect(new Nickname('Çınar').toString()).toBe('Çınar');
+      expect(new Nickname('Şükrü').toString()).toBe('Şükrü');
+      expect(new Nickname('İstanbul').toString()).toBe('İstanbul');
     });
   });
 

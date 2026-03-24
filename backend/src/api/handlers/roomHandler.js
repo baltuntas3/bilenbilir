@@ -110,6 +110,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Player or host leaves room
   socket.on('leave_room', async (data) => {
     try {
+      if (!checkRateLimit('leave_room')) return;
+
       const { pin } = data || {};
 
       const { room } = await roomUseCases.getRoom({ pin });
@@ -147,6 +149,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Get players list (requires room membership)
   socket.on('get_players', async (data) => {
     try {
+      if (!checkRateLimit('get_players')) return;
       const { pin } = data || {};
       if (!pin || !socket.rooms.has(pin)) {
         socket.emit('error', { error: 'Not in this room' });
@@ -166,9 +169,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
     }
   });
 
-  // Host closes room
+  // Host closes room - requires authentication
   socket.on('close_room', async (data) => {
     try {
+      if (!checkRateLimit('close_room')) return;
+      requireAuth();
+
       const { pin } = data || {};
 
       await roomUseCases.closeRoom({
@@ -249,7 +255,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         }
       }
 
-      socket.emit('player_reconnected', {
+      // Build reconnect payload with phase-specific data
+      const reconnectPayload = {
         pin: result.room.pin,
         playerId: result.player.id,
         nickname: result.player.nickname,
@@ -263,8 +270,26 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         playerToken: result.newPlayerToken, // New rotated token for security
         powerUps: result.player.getAllPowerUps(),
         eliminatedOptions: result.player.eliminatedOptions || [],
-        hasAnswered: result.player.hasAnswered()
-      });
+        hasAnswered: result.player.hasAnswered(),
+        answeredCount: result.room.getAnsweredCount(),
+        totalPlayersInPhase: result.room.getConnectedPlayerCount()
+      };
+
+      // Include results data if in SHOW_RESULTS or later phases
+      if (result.room.state === 'SHOW_RESULTS' && snapshot) {
+        const question = snapshot.getQuestion(result.room.currentQuestionIndex);
+        if (question) {
+          const { distribution } = result.room.getAnswerDistribution(
+            question.options.length,
+            (idx) => question.isCorrect(idx)
+          );
+          reconnectPayload.correctAnswerIndex = question.correctAnswerIndex;
+          reconnectPayload.answerDistribution = distribution;
+          reconnectPayload.explanation = question.explanation || null;
+        }
+      }
+
+      socket.emit('player_reconnected', reconnectPayload);
 
       socket.to(pin).emit('player_returned', {
         playerId: result.player.id,
@@ -430,6 +455,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Get banned nicknames
   socket.on('get_banned_nicknames', async (data) => {
     try {
+      if (!checkRateLimit('get_banned_nicknames')) return;
       const { pin } = data || {};
 
       const result = await roomUseCases.getBannedNicknames({ pin });
@@ -496,6 +522,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Leave as spectator
   socket.on('leave_spectator', async (data) => {
     try {
+      if (!checkRateLimit('leave_spectator')) return;
       const { pin } = data || {};
 
       const result = await roomUseCases.leaveAsSpectator({
@@ -554,6 +581,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
   // Get spectators list (requires room membership)
   socket.on('get_spectators', async (data) => {
     try {
+      if (!checkRateLimit('get_spectators')) return;
       const { pin } = data || {};
       if (!pin || !socket.rooms.has(pin)) {
         socket.emit('error', { error: 'Not in this room' });

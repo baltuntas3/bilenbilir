@@ -1,5 +1,7 @@
 const { SharedUseCases } = require('./SharedUseCases');
 const { LockManager } = require('../../shared/utils/LockManager');
+const { RoomState } = require('../../domain/entities');
+const { ValidationError } = require('../../shared/errors');
 const { LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 
 class GameArchiveUseCases extends SharedUseCases {
@@ -87,6 +89,9 @@ class GameArchiveUseCases extends SharedUseCases {
 
     return this.pendingArchives.withLock(pin, 'Game archival already in progress', async () => {
       const room = await this._getRoomOrThrow(pin);
+      if (room.state !== RoomState.PODIUM) {
+        throw new ValidationError(`Cannot archive game: room is in ${room.state} state, expected PODIUM`);
+      }
       const sessionData = this._buildSessionData(room, 'completed');
       const session = await this.gameSessionRepository.save(sessionData);
       if (pendingAnswers) pendingAnswers.clearByPrefix(`${pin}:`);

@@ -27,6 +27,11 @@ class SharedUseCases {
       throw new ForbiddenError('Only host can perform this action');
     }
   }
+
+  async isInState(pin, state) {
+    const room = await this.roomRepository.findByPin(pin);
+    return room ? room.state === state : false;
+  }
 }
 
 module.exports = { SharedUseCases };

@@ -1,9 +1,5 @@
 const validator = require('validator');
-
-// Nickname validation constants (must match Nickname value object)
-const NICKNAME_MIN_LENGTH = 2;
-const NICKNAME_MAX_LENGTH = 15;
-const NICKNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const { Nickname } = require('../../domain/value-objects/Nickname');
 
 // Maximum recursion depth for object sanitization
 const MAX_SANITIZE_DEPTH = 10;
@@ -67,8 +63,7 @@ const sanitizeEmail = (email) => {
 };
 
 /**
- * Validate nickname (alphanumeric, underscore, hyphen)
- * Uses same validation rules as Nickname value object
+ * Validate nickname using the Nickname value object's rules (single source of truth).
  * @param {string} nickname - Nickname to validate
  * @returns {string|null} - Validated nickname or null if invalid
  */
@@ -76,14 +71,11 @@ const sanitizeNickname = (nickname) => {
   if (typeof nickname !== 'string') return null;
   const trimmed = nickname.trim();
 
-  // Validate length
-  if (trimmed.length < NICKNAME_MIN_LENGTH || trimmed.length > NICKNAME_MAX_LENGTH) {
+  if (trimmed.length < Nickname.MIN_LENGTH || trimmed.length > Nickname.MAX_LENGTH) {
     return null;
   }
 
-  // Validate pattern - only allows safe characters (a-z, A-Z, 0-9, _, -)
-  // No escaping needed since pattern guarantees safe characters
-  if (!NICKNAME_PATTERN.test(trimmed)) {
+  if (!Nickname.ALLOWED_PATTERN.test(trimmed)) {
     return null;
   }
 

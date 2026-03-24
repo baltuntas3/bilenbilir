@@ -21,6 +21,7 @@ module.exports = {
 
   // Power-ups
   TIME_EXTENSION_MS: 10000,                   // 10 seconds
+  MAX_TIMER_EXTENSION_MS: 30000,              // 30 seconds max (safety cap)
 
   // Pagination
   DEFAULT_PAGE: 1,

@@ -65,10 +65,11 @@ class AnswerUseCases extends SharedUseCases {
       let actualScore = 0;
       if (answer.isCorrect) {
         player.incrementStreak();
+        const totalScore = answer.getTotalScore();
         if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) {
-          actualScore = Math.min(answer.score * 2 + answer.streakBonus, MAX_ANSWER_SCORE);
+          actualScore = Math.min(totalScore * 2, MAX_ANSWER_SCORE);
         } else {
-          actualScore = answer.getTotalScore();
+          actualScore = totalScore;
         }
         player.addScore(actualScore);
       } else {

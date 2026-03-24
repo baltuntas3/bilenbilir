@@ -560,7 +560,9 @@ class Room {
     try {
       return new Nickname(nickname).normalized();
     } catch {
-      return nickname.toLowerCase().trim();
+      // Invalid nicknames cannot be normalized consistently — return empty
+      // to avoid mismatches between ban check and Nickname VO validation
+      return '';
     }
   }
 
@@ -592,8 +594,8 @@ class Room {
   // ==================== SPECTATOR METHODS (delegated to SpectatorManager) ====================
 
   addSpectator(spectator) {
-    if (this.state === RoomState.PODIUM || this.state === RoomState.PAUSED) {
-      throw new ValidationError('Spectators cannot join a finished or paused game');
+    if (this.state === RoomState.PODIUM) {
+      throw new ValidationError('Spectators cannot join a finished game');
     }
     this._spectatorManager.add(spectator, this.players, this.bannedNicknames);
   }

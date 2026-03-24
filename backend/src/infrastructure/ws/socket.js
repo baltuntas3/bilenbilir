@@ -104,8 +104,7 @@ const initializeSocket = (server) => {
           // Auto-advance if remaining connected players have all answered
           if (result.allAnswered) {
             const pin = result.pin;
-            if (!endAnsweringLocks.has(pin)) {
-              endAnsweringLocks.add(pin);
+            if (endAnsweringLocks.acquire(pin)) {
               try {
                 if (timerService) timerService.stopTimer(pin);
                 io.to(pin).emit('all_players_answered');
@@ -119,7 +118,7 @@ const initializeSocket = (server) => {
                   console.error('Auto-end after disconnect all-answered error:', err.message);
                 }
               } finally {
-                endAnsweringLocks.delete(pin);
+                endAnsweringLocks.release(pin);
               }
             }
           }

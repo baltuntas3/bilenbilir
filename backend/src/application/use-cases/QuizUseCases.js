@@ -1,6 +1,8 @@
 const { Quiz, Question } = require('../../domain/entities');
 const { generateId } = require('../../shared/utils/generateId');
+const { LockManager } = require('../../shared/utils/LockManager');
 const { NotFoundError, ForbiddenError, ConflictError, ValidationError } = require('../../shared/errors');
+const { LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 
 // Current export format version
 const EXPORT_VERSION = '1.0';
@@ -11,6 +13,7 @@ class QuizUseCases {
     this.roomRepository = roomRepository;
     this.gameSessionRepository = gameSessionRepository;
     this.quizRatingRepository = quizRatingRepository;
+    this.deleteLocks = new LockManager(LOCK_TIMEOUT_MS);
   }
 
   /**
@@ -197,22 +200,31 @@ class QuizUseCases {
 
   /**
    * Delete quiz
-   * Checks for active games using this quiz before deletion
-   * Also deletes related game sessions (cascade delete)
+   * Uses lock to prevent race condition between in-use check and deletion.
+   * Deletes quiz first, then cascades to game sessions.
    */
   async deleteQuiz({ quizId, requesterId }) {
     const quiz = await this._getQuizOrThrow(quizId);
     this._validateQuizOwnership(quiz, requesterId);
-    await this._throwIfQuizInUse(quizId);
 
-    // Cascade delete: remove all game sessions for this quiz
-    let deletedSessionsCount = 0;
-    if (this.gameSessionRepository) {
-      deletedSessionsCount = await this.gameSessionRepository.deleteByQuiz(quizId);
-    }
+    return this.deleteLocks.withLock(`quiz:${quizId}`, 'Quiz deletion in progress', async () => {
+      await this._throwIfQuizInUse(quizId);
 
-    await this.quizRepository.delete(quizId);
-    return { success: true, deletedSessionsCount };
+      // Delete quiz first to prevent new rooms from referencing it
+      await this.quizRepository.delete(quizId);
+
+      // Cascade delete: remove related game sessions
+      let deletedSessionsCount = 0;
+      if (this.gameSessionRepository) {
+        try {
+          deletedSessionsCount = await this.gameSessionRepository.deleteByQuiz(quizId);
+        } catch (err) {
+          console.error(`Failed to cascade-delete sessions for quiz ${quizId}:`, err.message);
+        }
+      }
+
+      return { success: true, deletedSessionsCount };
+    });
   }
 
   /**

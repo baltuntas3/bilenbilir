@@ -4,18 +4,18 @@ const { Room, RoomState, Player, Spectator, Team, TEAM_COLORS } = require('../..
 const { PIN, Nickname } = require('../../domain/value-objects');
 const { generateId } = require('../../shared/utils/generateId');
 const { ValidationError, ConflictError } = require('../../shared/errors');
-
-// Default grace period for player reconnection (2 minutes)
-const DEFAULT_PLAYER_GRACE_PERIOD = 120000;
-
-// Default grace period for host reconnection (5 minutes - longer since host is more critical)
-const DEFAULT_HOST_GRACE_PERIOD = 300000;
+const {
+  PLAYER_GRACE_PERIOD_MS,
+  HOST_GRACE_PERIOD_MS,
+  SPECTATOR_GRACE_PERIOD_MS
+} = require('../../shared/config/constants');
 
 class RoomUseCases extends SharedUseCases {
   constructor(roomRepository, quizRepository, options = {}) {
     super(roomRepository, quizRepository);
-    this.playerGracePeriod = options.playerGracePeriod || DEFAULT_PLAYER_GRACE_PERIOD;
-    this.hostGracePeriod = options.hostGracePeriod || DEFAULT_HOST_GRACE_PERIOD;
+    this.playerGracePeriod = options.playerGracePeriod || PLAYER_GRACE_PERIOD_MS;
+    this.hostGracePeriod = options.hostGracePeriod || HOST_GRACE_PERIOD_MS;
+    this.spectatorGracePeriod = options.spectatorGracePeriod || SPECTATOR_GRACE_PERIOD_MS;
 
     // Lock to prevent nickname collision race conditions (60s TTL)
     this.joinLocks = new LockManager(60000);
@@ -70,13 +70,7 @@ class RoomUseCases extends SharedUseCases {
   }
 
   async joinRoom({ pin, nickname, socketId }) {
-    let normalizedNickname;
-    try {
-      normalizedNickname = new Nickname(nickname).normalized();
-    } catch (error) {
-      throw error;
-    }
-
+    const normalizedNickname = new Nickname(nickname).normalized();
     const lockKey = `${pin}:${normalizedNickname}`;
     return this.joinLocks.withLock(lockKey, 'Join in progress. Please try again.', async () => {
       const room = await this._getRoomOrThrow(pin);
@@ -164,7 +158,10 @@ class RoomUseCases extends SharedUseCases {
       await this.roomRepository.save(room);
 
       // Check if remaining connected players have all answered (auto-advance trigger)
-      const allAnswered = room.state === RoomState.ANSWERING_PHASE && room.haveAllPlayersAnswered();
+      // Also trigger when no connected players remain to prevent stuck ANSWERING_PHASE
+      const isAnswering = room.state === RoomState.ANSWERING_PHASE;
+      const noConnectedPlayers = room.getConnectedPlayerCount() === 0;
+      const allAnswered = isAnswering && (room.haveAllPlayersAnswered() || noConnectedPlayers);
 
       return {
         type: 'player_disconnected',
@@ -345,7 +342,7 @@ class RoomUseCases extends SharedUseCases {
     const spectator = room.reconnectSpectator(
       spectatorToken,
       newSocketId,
-      this.playerGracePeriod,
+      this.spectatorGracePeriod,
       newSpectatorToken
     );
     await this.roomRepository.save(room);

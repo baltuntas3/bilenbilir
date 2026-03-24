@@ -95,6 +95,9 @@ class Tournament {
     if (roundIndex !== this.currentRoundIndex) {
       throw new ValidationError('Can only complete the current round');
     }
+    if (this.rounds[roundIndex].status === 'completed') {
+      throw new ValidationError('Round has already been completed');
+    }
     this.rounds[roundIndex].status = 'completed';
     this.rounds[roundIndex].results = results;
 

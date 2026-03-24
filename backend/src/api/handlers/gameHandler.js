@@ -1,13 +1,15 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO } = require('./socketHandlerUtils');
 const { ValidationError, NotFoundError, ConflictError } = require('../../shared/errors');
+const { MAX_TIMER_EXTENSION_MS, LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
+const { LockManager } = require('../../shared/utils/LockManager');
 
 /**
  * Game WebSocket Handler
  * Handles game flow: start, questions, answers, results
  */
 // Per-room lock to prevent concurrent endAnsweringPhase calls (timer expiry vs all-answered race)
-const endAnsweringLocks = new Set();
+const endAnsweringLocks = new LockManager(LOCK_TIMEOUT_MS);
 
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
   const checkRateLimit = createRateLimiter(socket);
@@ -62,11 +64,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       // Start server-side timer
       timerService.startTimer(pin, result.timeLimit, async () => {
         // Lock prevents race with all-answered auto-transition
-        if (endAnsweringLocks.has(pin)) return;
-        endAnsweringLocks.add(pin);
+        if (!endAnsweringLocks.acquire(pin)) return;
         try {
-          const roomExists = await gameUseCases.roomExists(pin);
-          if (!roomExists) return;
+          const isInAnsweringPhase = await gameUseCases.isInState(pin, 'ANSWERING_PHASE');
+          if (!isInAnsweringPhase) return;
 
           const endResult = await gameUseCases.endAnsweringPhase({
             pin,
@@ -79,12 +80,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           }
         } catch (err) {
           // Expected errors when room state has changed (e.g. host already ended, room deleted)
-          const isExpected = err instanceof ValidationError || err instanceof NotFoundError;
+          const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
           if (!isExpected) {
             console.error('Auto-end error:', err.message);
           }
         } finally {
-          endAnsweringLocks.delete(pin);
+          endAnsweringLocks.release(pin);
         }
       });
 
@@ -143,8 +144,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         io.to(pin).emit('all_players_answered');
 
         // Lock prevents race with timer expiry auto-transition
-        if (endAnsweringLocks.has(pin)) return;
-        endAnsweringLocks.add(pin);
+        if (!endAnsweringLocks.acquire(pin)) return;
 
         // Auto-transition to results when all players have answered
         try {
@@ -163,7 +163,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
             console.error('Auto-end after all answered error:', err.message);
           }
         } finally {
-          endAnsweringLocks.delete(pin);
+          endAnsweringLocks.release(pin);
         }
       }
     } catch (error) {
@@ -183,8 +183,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       timerService.stopTimer(pin);
 
       // Check lock to prevent race with timer callback auto-transition
-      if (endAnsweringLocks.has(pin)) return;
-      endAnsweringLocks.add(pin);
+      if (!endAnsweringLocks.acquire(pin)) return;
 
       try {
         const result = await gameUseCases.endAnsweringPhase({
@@ -194,7 +193,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
         io.to(pin).emit('show_results', toShowResultsDTO(result));
       } finally {
-        endAnsweringLocks.delete(pin);
+        endAnsweringLocks.release(pin);
       }
     } catch (error) {
       handleSocketError(socket, error);
@@ -254,6 +253,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           await gameUseCases.archiveGame({ pin });
         } catch (archiveError) {
           console.error('Failed to archive game:', archiveError.message);
+          // Ensure room is cleaned up even if archiving fails to prevent stuck PODIUM state
+          try {
+            await gameUseCases.roomRepository.delete(pin);
+          } catch (cleanupErr) {
+            console.error('Failed to cleanup room after archive failure:', cleanupErr.message);
+          }
         }
       } else {
         // Send to host with full question data
@@ -275,9 +280,11 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
     }
   });
 
-  // Get final results
+  // Get final results - rate limited to prevent spam
   socket.on('get_results', async (data) => {
     try {
+      if (!checkRateLimit('get_results')) return;
+
       const { pin } = data || {};
 
       const result = await gameUseCases.getResults({ pin });
@@ -298,9 +305,11 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
     }
   });
 
-  // Request timer sync (for clients that need to resync)
+  // Request timer sync (for clients that need to resync) - rate limited
   socket.on('request_timer_sync', (data) => {
     try {
+      if (!checkRateLimit('request_timer_sync')) return;
+
       const { pin } = data || {};
 
       const timerSync = timerService.getTimerSync(pin);
@@ -340,8 +349,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         const { method, args } = emitActions.timerAction;
         const allowedTimerMethods = ['extendTimer', 'stopTimer'];
         if (allowedTimerMethods.includes(method) && Array.isArray(args)) {
-          // Validate args are safe primitives (numbers/strings only)
-          const safeArgs = args.filter(a => typeof a === 'number' || typeof a === 'string');
+          const safeArgs = args
+            .filter(a => typeof a === 'number')
+            .map(a => Math.min(Math.max(0, a), MAX_TIMER_EXTENSION_MS));
           try {
             timerService[method](pin, ...safeArgs);
           } catch (timerErr) {

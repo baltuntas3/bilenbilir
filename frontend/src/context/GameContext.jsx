@@ -6,6 +6,21 @@ import { showToast } from '../utils/toast';
 
 const GameContext = createContext(null);
 
+/**
+ * Calculate clock-skew-adjusted end time from server timer sync data.
+ * Clamps the result so the effective remaining time stays within
+ * [0, remainingMs + 2000ms] to prevent extreme skew from breaking the timer.
+ */
+function calcAdjustedEndTime(endTime, serverTime, remainingMs) {
+  const clockOffset = Date.now() - serverTime;
+  const adjusted = endTime + clockOffset;
+  // Clamp: don't let adjusted time drift more than 2s beyond expected
+  const now = Date.now();
+  const maxEnd = now + remainingMs + 2000;
+  const minEnd = now;
+  return Math.max(minEnd, Math.min(adjusted, maxEnd));
+}
+
 export const GAME_STATES = {
   IDLE: 'IDLE',
   WAITING_PLAYERS: 'WAITING_PLAYERS',
@@ -106,7 +121,11 @@ export function GameProvider({ children }) {
 
     // Restore game state on player reconnect
     socketService.on('player_reconnected', (data) => {
-      const { state, score, streak, powerUps, eliminatedOptions, hasAnswered, currentQuestionIndex, totalQuestions, currentQuestion, timerSync, playerToken } = data || {};
+      const {
+        state, score, streak, powerUps, eliminatedOptions, hasAnswered,
+        currentQuestionIndex, totalQuestions, currentQuestion, timerSync, playerToken,
+        answeredCount, totalPlayersInPhase, correctAnswerIndex, answerDistribution, explanation
+      } = data || {};
       const updates = {};
       if (state && GAME_STATES[state]) updates.gameState = state;
       if (typeof score === 'number') updates.score = score;
@@ -117,12 +136,17 @@ export function GameProvider({ children }) {
       if (typeof currentQuestionIndex === 'number') updates.currentQuestionIndex = currentQuestionIndex;
       if (typeof totalQuestions === 'number') updates.totalQuestions = totalQuestions;
       if (currentQuestion) updates.currentQuestion = currentQuestion;
+      if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
+      if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
+      if (typeof correctAnswerIndex === 'number') updates.correctAnswerIndex = correctAnswerIndex;
+      if (answerDistribution) updates.answerDistribution = answerDistribution;
+      if (explanation !== undefined) updates.explanation = explanation;
       if (Object.keys(updates).length > 0) updateState(updates);
 
       // Restore timer if in answering phase
       if (timerSync && timerSync.remainingMs > 0) {
         try {
-          const adjustedEndTime = timerSync.endTime + (Date.now() - timerSync.serverTime);
+          const adjustedEndTime = calcAdjustedEndTime(timerSync.endTime, timerSync.serverTime, timerSync.remainingMs);
           timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime);
         } catch { /* timer may be unavailable */ }
       }
@@ -199,6 +223,7 @@ export function GameProvider({ children }) {
         correctAnswerIndex,
         answerDistribution: distribution,
         answeredCount: answeredCount ?? totalPlayers,
+        totalPlayersInPhase: totalPlayers,
         explanation: explanation || null,
       });
     });
@@ -248,7 +273,7 @@ export function GameProvider({ children }) {
     // Timer events
     socketService.on('timer_started', ({ duration, endTime, serverTime }) => {
       try {
-        const adjustedEndTime = endTime + (Date.now() - serverTime);
+        const adjustedEndTime = calcAdjustedEndTime(endTime, serverTime, duration * 1000);
         timerRef.current.startTimer(duration, adjustedEndTime);
       } catch { /* timer may be unavailable */ }
     });
@@ -262,7 +287,7 @@ export function GameProvider({ children }) {
         if (!data || data.active === false) return;
         const { remainingMs, endTime, serverTime } = data;
         if (typeof remainingMs !== 'number' || typeof endTime !== 'number' || typeof serverTime !== 'number') return;
-        const adjustedEndTime = endTime + (Date.now() - serverTime);
+        const adjustedEndTime = calcAdjustedEndTime(endTime, serverTime, remainingMs);
         timerRef.current.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
       } catch { /* timer may be unavailable */ }
     });
@@ -367,6 +392,7 @@ export function GameProvider({ children }) {
   const mountedRef = useRef(true);
   const usePowerUp = useCallback((type) => {
     if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
+    if ((state.powerUps[type] || 0) <= 0) return;
     powerUpPendingRef.current = true;
 
     const previousCount = state.powerUps[type] || 0;
@@ -377,7 +403,13 @@ export function GameProvider({ children }) {
     }));
 
     let settled = false;
-    const cleanup = () => {
+    const rollback = () => {
+      setState(prev => ({
+        ...prev,
+        powerUps: { ...prev.powerUps, [type]: previousCount },
+      }));
+    };
+    const cleanup = (shouldRollback) => {
       if (settled) return;
       settled = true;
       powerUpPendingRef.current = false;
@@ -385,24 +417,19 @@ export function GameProvider({ children }) {
       clearTimeout(rollbackTimeout);
       socketService.off('error', onError);
       socketService.off('power_up_activated', onSuccess);
+      socketService.off('answer_received', onAnswer);
+      if (shouldRollback) rollback();
     };
-    const onError = () => {
-      const countToRestore = previousCount;
-      cleanup();
-      if (mountedRef.current) {
-        setState(prev => ({
-          ...prev,
-          powerUps: { ...prev.powerUps, [type]: countToRestore },
-        }));
-      }
-    };
-    const onSuccess = () => {
-      cleanup();
-    };
-    const rollbackTimeout = setTimeout(cleanup, 5000);
-    powerUpCleanupRef.current = cleanup;
+    const onError = () => cleanup(true);
+    const onSuccess = () => cleanup(false);
+    // If player answers before confirmation, stop waiting — no rollback needed
+    // because power-up state is already applied server-side during answer processing
+    const onAnswer = () => cleanup(false);
+    const rollbackTimeout = setTimeout(() => cleanup(true), 5000);
+    powerUpCleanupRef.current = () => cleanup(true);
     socketService.on('error', onError);
     socketService.on('power_up_activated', onSuccess);
+    socketService.on('answer_received', onAnswer);
   }, [room.roomPin, room.isHost, state.hasAnswered, state.powerUps]);
 
   const endAnswering = useCallback(() => room.hostEmit('end_answering'), [room]);
