@@ -115,6 +115,29 @@ class SocketService {
     this.socket.emit(event, data);
   }
 
+  emitWithAck(event, data, timeoutMs = 5000) {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error(`Socket not connected, cannot emit: ${event}`));
+        return;
+      }
+
+      this.socket.timeout(timeoutMs).emit(event, data, (err, response) => {
+        if (err) {
+          reject(new Error(`${event} timed out. Please try again.`));
+          return;
+        }
+
+        if (response && response.ok === false) {
+          reject(new Error(response.error || `${event} failed`));
+          return;
+        }
+
+        resolve(response || { ok: true });
+      });
+    });
+  }
+
   on(event, callback) {
     if (!this.socket) {
       console.error('Socket not initialized');

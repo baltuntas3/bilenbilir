@@ -24,6 +24,9 @@ const toTeamDTO = (team) => ({
 const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUseCases = null) => {
   const checkRateLimit = createRateLimiter(socket);
   const requireAuth = createAuthChecker(socket);
+  const sendAck = (ack, payload) => {
+    if (typeof ack === 'function') ack(payload);
+  };
 
   /**
    * Ensure socket is not already in a room
@@ -473,9 +476,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   // ==================== LIGHTNING ROUND ====================
 
   // Host sets lightning round configuration
-  socket.on('set_lightning_round', async (data) => {
+  socket.on('set_lightning_round', async (data, ack) => {
     try {
-      if (!checkRateLimit('set_lightning_round')) return;
+      if (!checkRateLimit('set_lightning_round')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin, enabled, questionCount } = data || {};
@@ -491,7 +497,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         enabled: !!enabled,
         questionCount: questionCount ? parseInt(questionCount, 10) : 3
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -499,9 +507,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   // ==================== KICK/BAN EVENTS ====================
 
   // Host kicks a player
-  socket.on('kick_player', async (data) => {
+  socket.on('kick_player', async (data, ack) => {
     try {
-      if (!checkRateLimit('kick_player')) return;
+      if (!checkRateLimit('kick_player')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin, playerId } = data || {};
@@ -529,15 +540,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       // Auto-advance if remaining connected players have all answered
       await checkAllAnsweredAfterRemoval(result.room);
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host bans a player
-  socket.on('ban_player', async (data) => {
+  socket.on('ban_player', async (data, ack) => {
     try {
-      if (!checkRateLimit('ban_player')) return;
+      if (!checkRateLimit('ban_player')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin, playerId } = data || {};
@@ -565,15 +581,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       // Auto-advance if remaining connected players have all answered
       await checkAllAnsweredAfterRemoval(result.room);
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host unbans a nickname
-  socket.on('unban_nickname', async (data) => {
+  socket.on('unban_nickname', async (data, ack) => {
     try {
-      if (!checkRateLimit('unban_nickname')) return;
+      if (!checkRateLimit('unban_nickname')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin, nickname } = data || {};
@@ -585,7 +606,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       });
 
       socket.emit('nickname_unbanned', { nickname });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -743,9 +766,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   // ==================== TEAM MODE EVENTS ====================
 
   // Host enables team mode
-  socket.on('enable_team_mode', async (data) => {
+  socket.on('enable_team_mode', async (data, ack) => {
     try {
-      if (!checkRateLimit('enable_team_mode')) return;
+      if (!checkRateLimit('enable_team_mode')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin } = data || {};
@@ -759,15 +785,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         teamMode: true,
         teams: result.room.getAllTeams().map(toTeamDTO)
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host disables team mode
-  socket.on('disable_team_mode', async (data) => {
+  socket.on('disable_team_mode', async (data, ack) => {
     try {
-      if (!checkRateLimit('disable_team_mode')) return;
+      if (!checkRateLimit('disable_team_mode')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin } = data || {};
@@ -781,15 +812,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         teamMode: false,
         teams: []
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host adds a team
-  socket.on('add_team', async (data) => {
+  socket.on('add_team', async (data, ack) => {
     try {
-      if (!checkRateLimit('add_team')) return;
+      if (!checkRateLimit('add_team')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin, name } = sanitizeObject(data || {});
@@ -803,15 +839,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.to(pin).emit('teams_updated', {
         teams: result.room.getAllTeams().map(toTeamDTO)
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host removes a team
-  socket.on('remove_team', async (data) => {
+  socket.on('remove_team', async (data, ack) => {
     try {
-      if (!checkRateLimit('remove_team')) return;
+      if (!checkRateLimit('remove_team')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin, teamId } = data || {};
@@ -825,15 +866,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.to(pin).emit('teams_updated', {
         teams: result.room.getAllTeams().map(toTeamDTO)
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Assign player to team
-  socket.on('assign_team', async (data) => {
+  socket.on('assign_team', async (data, ack) => {
     try {
-      if (!checkRateLimit('assign_team')) return;
+      if (!checkRateLimit('assign_team')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin, playerId, teamId } = data || {};
@@ -848,7 +894,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.to(pin).emit('teams_updated', {
         teams: result.room.getAllTeams().map(toTeamDTO)
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });

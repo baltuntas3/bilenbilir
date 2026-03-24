@@ -109,24 +109,7 @@ export function RoomProvider({ children }) {
     if (!roomState.isHost || !roomState.roomPin) {
       return Promise.reject(new Error('Not authorized'));
     }
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const onError = ({ error }) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        socketService.off('error', onError);
-        reject(new Error(error));
-      };
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        socketService.off('error', onError);
-        reject(new Error(`${event} timed out. Please try again.`));
-      }, 5000);
-      socketService.on('error', onError);
-      socketService.emit(event, { pin: roomState.roomPin, ...extraData });
-    });
+    return socketService.emitWithAck(event, { pin: roomState.roomPin, ...extraData }, 5000);
   }, [roomState.isHost, roomState.roomPin]);
 
   const connectSocket = useCallback(async () => {

@@ -14,12 +14,18 @@ const endAnsweringLocks = new LockManager(LOCK_TIMEOUT_MS);
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
   const checkRateLimit = createRateLimiter(socket);
   const requireAuth = createAuthChecker(socket);
+  const sendAck = (ack, payload) => {
+    if (typeof ack === 'function') ack(payload);
+  };
 
   // Host starts the game (requires authentication)
-  socket.on('start_game', async (data) => {
+  socket.on('start_game', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('start_game')) return;
+      if (!checkRateLimit('start_game')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       requireAuth(); // JWT required for host
       const { pin, questionCount } = data || {};
@@ -45,16 +51,21 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         questionIndex: 0,
         powerUps: DEFAULT_POWER_UPS
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host triggers answering phase (after intro countdown) - requires authentication
-  socket.on('start_answering', async (data) => {
+  socket.on('start_answering', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('start_answering')) return;
+      if (!checkRateLimit('start_answering')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
@@ -75,7 +86,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         optionCount: result.optionCount,
         isLightning: result.isLightning || false
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -130,10 +143,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   });
 
   // Host ends answering phase (timer expired or manual) - requires authentication
-  socket.on('end_answering', async (data) => {
+  socket.on('end_answering', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('end_answering')) return;
+      if (!checkRateLimit('end_answering')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
@@ -141,7 +157,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       timerService.stopTimer(pin);
 
       // Check lock to prevent race with timer callback auto-transition
-      if (!endAnsweringLocks.acquire(pin)) return;
+      if (!endAnsweringLocks.acquire(pin)) {
+        sendAck(ack, { ok: true });
+        return;
+      }
 
       try {
         const result = await gameUseCases.endAnsweringPhase({
@@ -150,19 +169,24 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         });
 
         io.to(pin).emit('show_results', toShowResultsDTO(result));
+        sendAck(ack, { ok: true });
       } finally {
         endAnsweringLocks.release(pin);
       }
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host shows leaderboard - requires authentication
-  socket.on('show_leaderboard', async (data) => {
+  socket.on('show_leaderboard', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('show_leaderboard')) return;
+      if (!checkRateLimit('show_leaderboard')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
@@ -179,16 +203,21 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         leaderboardPayload.teamLeaderboard = result.teamLeaderboard;
       }
       io.to(pin).emit('leaderboard', leaderboardPayload);
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host moves to next question - requires authentication
-  socket.on('next_question', async (data) => {
+  socket.on('next_question', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('next_question')) return;
+      if (!checkRateLimit('next_question')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
@@ -214,6 +243,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         } catch (archiveError) {
           console.error('Failed to archive game:', archiveError.message);
         }
+        sendAck(ack, { ok: true, isGameOver: true });
       } else {
         // Send to host with full question data
         socket.emit('question_intro', {
@@ -228,8 +258,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           totalQuestions: result.totalQuestions,
           currentQuestion: toPlayerQuestionDTO(result.currentQuestion)
         });
+        sendAck(ack, { ok: true, isGameOver: false });
       }
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -336,9 +368,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   // ==================== PAUSE/RESUME EVENTS ====================
 
   // Host pauses the game (only from LEADERBOARD state)
-  socket.on('pause_game', async (data) => {
+  socket.on('pause_game', async (data, ack) => {
     try {
-      if (!checkRateLimit('pause_game')) return;
+      if (!checkRateLimit('pause_game')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin } = data || {};
@@ -354,15 +389,20 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       io.to(pin).emit('game_paused', {
         pausedAt: result.pausedAt
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host resumes the game
-  socket.on('resume_game', async (data) => {
+  socket.on('resume_game', async (data, ack) => {
     try {
-      if (!checkRateLimit('resume_game')) return;
+      if (!checkRateLimit('resume_game')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin } = data || {};
@@ -376,7 +416,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         state: result.resumedState,
         pauseDuration: result.pauseDuration
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
