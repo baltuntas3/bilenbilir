@@ -144,7 +144,7 @@ export function RoomProvider({ children }) {
   const lastRoomSocketIdRef = useRef(null);
 
   const roomEvents = [
-    'player_joined', 'player_left', 'player_kicked', 'player_banned',
+    'player_joined', 'player_left', 'player_removed', 'player_kicked', 'player_banned',
     'player_returned', 'spectator_joined', 'spectator_left', 'spectator_returned',
     'team_mode_updated', 'teams_updated', 'lightning_round_updated',
     'banned_nicknames', 'nickname_unbanned',
@@ -179,6 +179,15 @@ export function RoomProvider({ children }) {
         ...prev,
         players: prev.players.filter(p => p.id !== playerId),
       }));
+    });
+
+    // Cleanup service removes stale disconnected players after grace period
+    socketService.on('player_removed', ({ playerId, nickname }) => {
+      setRoomState(prev => ({
+        ...prev,
+        players: prev.players.filter(p => p.id !== playerId),
+      }));
+      if (nickname) showToast.info(`${nickname} removed (reconnection timeout)`);
     });
 
     socketService.on('player_kicked', ({ nickname }) => {

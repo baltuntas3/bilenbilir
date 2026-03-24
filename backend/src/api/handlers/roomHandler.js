@@ -173,7 +173,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.to(pin).emit('player_left', {
         playerId: result.removedPlayer?.id || socket.id,
         nickname: result.removedPlayer?.nickname || null,
-        playerCount: result.room.getPlayerCount()
+        playerCount: result.room.getPlayerCount(),
+        connectedPlayerCount: result.room.getConnectedPlayerCount()
       });
 
       // Auto-advance if remaining connected players have all answered
@@ -278,6 +279,11 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       // Include phase-specific data
       const roomState = result.room.state;
+      if (roomState === 'ANSWERING_PHASE') {
+        reconnectPayload.answeredCount = result.room.getAnsweredCount();
+        reconnectPayload.totalPlayers = result.room.answeringPhasePlayerCount;
+      }
+
       if (roomState === 'SHOW_RESULTS' && snapshot) {
         const question = snapshot.getQuestion(result.room.currentQuestionIndex);
         if (question) {
@@ -288,7 +294,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
           reconnectPayload.correctAnswerIndex = question.correctAnswerIndex;
           reconnectPayload.answerDistribution = distribution;
           reconnectPayload.explanation = question.explanation || null;
-          reconnectPayload.answeredCount = result.room.getAnsweredCount();
+          reconnectPayload.answeredCount = result.room.getTotalAnsweredCount();
+          reconnectPayload.totalPlayers = result.room.answeringPhasePlayerCount;
         }
       }
 
@@ -369,8 +376,10 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         totalPlayersInPhase: result.room.answeringPhasePlayerCount
       };
 
-      // Include results data if in SHOW_RESULTS or later phases
-      if (result.room.state === 'SHOW_RESULTS' && snapshot) {
+      // Include phase-specific data for reconnection
+      const playerRoomState = result.room.state;
+
+      if (playerRoomState === 'SHOW_RESULTS' && snapshot) {
         const question = snapshot.getQuestion(result.room.currentQuestionIndex);
         if (question) {
           const { distribution, correctCount } = result.room.getAnswerDistribution(
@@ -381,6 +390,21 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
           reconnectPayload.answerDistribution = distribution;
           reconnectPayload.correctCount = correctCount;
           reconnectPayload.explanation = question.explanation || null;
+        }
+      }
+
+      if (playerRoomState === 'LEADERBOARD' || playerRoomState === 'PAUSED') {
+        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
+        if (result.room.isTeamMode()) {
+          reconnectPayload.teamLeaderboard = result.room.getTeamLeaderboard();
+        }
+      }
+
+      if (playerRoomState === 'PODIUM') {
+        reconnectPayload.podium = result.room.getPodium().map(toPlayerDTO);
+        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
+        if (result.room.isTeamMode()) {
+          reconnectPayload.teamPodium = result.room.getTeamPodium();
         }
       }
 
@@ -419,24 +443,28 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       if (!checkRateLimit('force_close_room')) return;
       requireAuth();
 
-      // Lookup room before deletion to run cleanup
       const hostRoom = await roomUseCases.getHostRoom({ hostUserId: socket.user.userId });
-      if (hostRoom) {
-        const { room } = await roomUseCases.getRoom({ pin: hostRoom.pin });
-        await cleanupBeforeRoomClose(hostRoom.pin, room);
+      if (!hostRoom) {
+        socket.emit('room_force_closed', { closed: false, reason: 'No active room found' });
+        return;
       }
 
+      const { pin } = hostRoom;
+
+      // Notify players BEFORE cleanup (which may delete the room)
+      io.to(pin).emit('room_closed', { reason: 'Host closed the room' });
+      io.in(pin).socketsLeave(pin);
+
+      // Archive interrupted game and clean up
+      const { room } = await roomUseCases.getRoom({ pin });
+      await cleanupBeforeRoomClose(pin, room);
+
+      // Delete room if saveInterruptedGame didn't already delete it
       const result = await roomUseCases.forceCloseHostRoom({
         hostUserId: socket.user.userId
       });
 
-      if (result.closed) {
-        // Notify all players in the room
-        io.to(result.pin).emit('room_closed', { reason: 'Host closed the room' });
-        io.in(result.pin).socketsLeave(result.pin);
-      }
-
-      socket.emit('room_force_closed', result);
+      socket.emit('room_force_closed', { closed: true, pin, ...result });
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -495,7 +523,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.to(pin).emit('player_kicked', {
         playerId: result.player.id,
         nickname: result.player.nickname,
-        playerCount: result.room.getPlayerCount()
+        playerCount: result.room.getPlayerCount(),
+        connectedPlayerCount: result.room.getConnectedPlayerCount()
       });
 
       // Auto-advance if remaining connected players have all answered
@@ -530,7 +559,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.to(pin).emit('player_banned', {
         playerId: result.player.id,
         nickname: result.player.nickname,
-        playerCount: result.room.getPlayerCount()
+        playerCount: result.room.getPlayerCount(),
+        connectedPlayerCount: result.room.getConnectedPlayerCount()
       });
 
       // Auto-advance if remaining connected players have all answered

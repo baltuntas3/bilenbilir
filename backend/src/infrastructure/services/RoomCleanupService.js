@@ -1,4 +1,6 @@
 const { RoomState } = require('../../domain/entities');
+const { autoAdvanceToResults } = require('../../api/handlers/socketHandlerUtils');
+const { endAnsweringLocks } = require('../../api/handlers/gameHandler');
 
 /**
  * Room Cleanup Service
@@ -21,6 +23,7 @@ class RoomCleanupService {
     this.emptyRoomTimeout = options.emptyRoomTimeout || 300000; // 5 minutes for empty rooms
     this.idleRoomTimeout = options.idleRoomTimeout || 3600000; // 1 hour for idle rooms
     this.maxPauseDuration = options.maxPauseDuration || 1800000; // 30 minutes max pause
+    this.podiumTimeout = options.podiumTimeout || 300000; // 5 minutes for finished games
 
     // States that indicate an active game (should not be cleaned up aggressively)
     this.activeGameStates = [
@@ -54,6 +57,25 @@ class RoomCleanupService {
    */
   _isActiveGame(room) {
     return this.activeGameStates.includes(room.state);
+  }
+
+  /**
+   * After removing stale players, check if remaining connected players have all answered.
+   * If so, auto-advance to prevent the game from getting stuck in ANSWERING_PHASE.
+   * @private
+   */
+  async _checkAutoAdvanceAfterRemoval(room) {
+    if (!this.gameUseCases || !this.io) return;
+    if (room.state !== RoomState.ANSWERING_PHASE) return;
+    const noConnected = room.getConnectedPlayerCount() === 0;
+    if (!room.haveAllPlayersAnswered() && !noConnected) return;
+    await autoAdvanceToResults({
+      io: this.io,
+      pin: room.pin,
+      endAnsweringLocks,
+      timerService: this.timerService,
+      gameUseCases: this.gameUseCases
+    });
   }
 
   /**
@@ -112,6 +134,12 @@ class RoomCleanupService {
                 });
               }
               await this.roomRepository.save(room);
+              await this._checkAutoAdvanceAfterRemoval(room);
+            }
+            // Also clean up stale spectators in fast path
+            const staleSpecsFast = room.removeStaleDisconnectedSpectators(this.playerGracePeriod);
+            if (staleSpecsFast.length > 0) {
+              await this.roomRepository.save(room);
             }
             continue;
           }
@@ -135,6 +163,14 @@ class RoomCleanupService {
               });
             }
 
+            await this.roomRepository.save(room);
+            await this._checkAutoAdvanceAfterRemoval(room);
+          }
+
+          // Clean up stale disconnected spectators to prevent memory leak
+          const staleSpectators = room.removeStaleDisconnectedSpectators(this.playerGracePeriod);
+          if (staleSpectators.length > 0) {
+            console.log(`Removed ${staleSpectators.length} stale spectators from room ${room.pin}`);
             await this.roomRepository.save(room);
           }
 
@@ -191,6 +227,17 @@ class RoomCleanupService {
                 }
                 console.log(`Auto-resumed room ${room.pin} after ${Math.round(pauseDuration / 1000)}s pause`);
               }
+            }
+          }
+
+          // Clean up finished games (PODIUM) after podiumTimeout
+          if (!shouldDelete && room.state === RoomState.PODIUM) {
+            const podiumAge = room.podiumReachedAt
+              ? Date.now() - room.podiumReachedAt.getTime()
+              : roomAge;
+            if (podiumAge > this.podiumTimeout) {
+              shouldDelete = true;
+              reason = 'Finished game cleanup (PODIUM timeout)';
             }
           }
 

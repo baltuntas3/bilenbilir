@@ -168,6 +168,7 @@ class RoomUseCases extends SharedUseCases {
         pin: room.pin,
         player,
         playerCount: room.getPlayerCount(),
+        connectedPlayerCount: room.getConnectedPlayerCount(),
         canReconnect: room.state !== RoomState.WAITING_PLAYERS,
         allAnswered
       };

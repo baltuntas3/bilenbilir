@@ -109,8 +109,10 @@ class AnswerUseCases extends SharedUseCases {
   }
 
   async usePowerUp({ pin, socketId, powerUpType }) {
-    const powerUpKey = `${pin}:${socketId}:powerup`;
-    return this.pendingAnswers.withLock(powerUpKey, 'Power-up usage in progress', async () => {
+    // Use same lock key as submitAnswer to prevent race condition where
+    // power-up is consumed but not applied because answer runs concurrently
+    const playerKey = `${pin}:${socketId}`;
+    return this.pendingAnswers.withLock(playerKey, 'Power-up usage in progress', async () => {
       const room = await this._getRoomOrThrow(pin);
       if (room.state !== RoomState.ANSWERING_PHASE) throw new ValidationError('Power-ups can only be used during answering phase');
 

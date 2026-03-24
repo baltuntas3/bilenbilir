@@ -203,16 +203,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         }
         io.to(pin).emit('game_over', gameOverPayload);
 
+        // Archive game but keep room in PODIUM state for late reconnects/get_results.
+        // RoomCleanupService will remove the room after idle timeout.
         try {
           await gameUseCases.archiveGame({ pin });
         } catch (archiveError) {
           console.error('Failed to archive game:', archiveError.message);
-          // Ensure room is cleaned up even if archiving fails to prevent stuck PODIUM state
-          try {
-            await gameUseCases.roomRepository.delete(pin);
-          } catch (cleanupErr) {
-            console.error('Failed to cleanup room after archive failure:', cleanupErr.message);
-          }
         }
       } else {
         // Send to host with full question data

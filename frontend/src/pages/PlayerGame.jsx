@@ -190,7 +190,7 @@ export default function PlayerGame() {
                       {lastAnswer.isCorrect ? 'Correct!' : 'Wrong!'}
                     </Text>
                     <Text size="xl" fw={700} c={lastAnswer.isCorrect ? 'green' : 'dimmed'}>
-                      +{lastAnswer.isCorrect ? lastAnswer.score + (lastAnswer.streakBonus || 0) : 0} pts
+                      +{lastAnswer.isCorrect ? lastAnswer.score : 0} pts
                     </Text>
                   </Stack>
                 </Group>

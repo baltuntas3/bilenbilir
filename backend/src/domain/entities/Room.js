@@ -60,6 +60,8 @@ class Room {
     this.quizSnapshot = null;
     // Track when game actually started (for accurate archiving)
     this.gameStartedAt = null;
+    // Track when game reached PODIUM state (for cleanup timeout)
+    this.podiumReachedAt = null;
     // Managers for delegated concerns
     this._spectatorManager = new SpectatorManager();
     this._teamManager = new TeamManager();
@@ -372,6 +374,9 @@ class Room {
       throw new ValidationError(`Invalid state transition: ${this.state} \u2192 ${newState}`);
     }
     this.state = newState;
+    if (newState === RoomState.PODIUM) {
+      this.podiumReachedAt = new Date();
+    }
   }
 
   /**

@@ -96,14 +96,9 @@ class GameArchiveUseCases extends SharedUseCases {
       const session = await this.gameSessionRepository.save(sessionData);
       if (pendingAnswers) pendingAnswers.clearByPrefix(`${pin}:`);
 
-      let roomDeleted = true;
-      try { await this.roomRepository.delete(pin); }
-      catch (deleteError) {
-        roomDeleted = false;
-        console.error(`Failed to delete room ${pin} after archiving:`, deleteError.message);
-      }
-
-      return { session, roomDeleted };
+      // Room stays in PODIUM state for late reconnects/get_results.
+      // RoomCleanupService will clean it up after idle timeout.
+      return { session };
     });
   }
 

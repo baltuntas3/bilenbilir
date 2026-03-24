@@ -97,7 +97,8 @@ const initializeSocket = (server) => {
           io.to(result.pin).emit('player_left', {
             playerId: result.player.id,
             nickname: result.player.nickname,
-            playerCount: result.playerCount
+            playerCount: result.playerCount,
+            connectedPlayerCount: result.connectedPlayerCount
           });
 
           // Auto-advance if remaining connected players have all answered
