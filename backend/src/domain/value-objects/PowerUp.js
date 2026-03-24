@@ -120,10 +120,11 @@ powerUpRegistry.register(PowerUpType.TIME_EXTENSION, {
   getEmitActions(result) {
     return {
       playerEmits: [
-        { event: 'power_up_activated', data: { type: 'TIME_EXTENSION' } },
+        { event: 'power_up_activated', data: { type: 'TIME_EXTENSION' } }
+      ],
+      roomEmits: [
         { event: 'time_extended', data: { extraTimeMs: result.extraTimeMs } }
       ],
-      roomEmits: [],
       timerAction: { method: 'extendTimer', args: [result.extraTimeMs] },
     };
   }

@@ -417,8 +417,7 @@ class Room {
       }
     }
 
-    const connectedCount = this.getConnectedPlayerCount();
-    const unansweredCount = Math.max(0, connectedCount - answerSnapshots.length);
+    const unansweredCount = this.players.filter(p => !p.isDisconnected() && !p.hasAnswered()).length;
 
     return { distribution, correctCount, skippedCount, unansweredCount };
   }
@@ -657,7 +656,7 @@ class Room {
       [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS],
       RoomState.PAUSED
     );
-    this.state = newState;
+    this.setState(newState);
   }
 
   resume(requesterId) {
@@ -667,7 +666,7 @@ class Room {
       RoomState.PAUSED,
       RoomState.LEADERBOARD
     );
-    this.state = newState;
+    this.setState(newState);
   }
 
   isPaused() {

@@ -1,7 +1,8 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { ConflictError } = require('../../shared/errors');
+const { ConflictError, ValidationError, NotFoundError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
 const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken } = require('./socketHandlerUtils');
+const { endAnsweringLocks } = require('./gameHandler');
 
 /**
  * Map team data for client consumption
@@ -20,7 +21,7 @@ const toTeamDTO = (team) => ({
  * Room WebSocket Handler
  * Handles room creation, joining, and leaving
  */
-const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
+const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUseCases = null) => {
   const checkRateLimit = createRateLimiter(socket);
   const requireAuth = createAuthChecker(socket);
 
@@ -32,6 +33,39 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
     const existingRoom = await roomUseCases.findRoomBySocketId({ socketId: socket.id });
     if (existingRoom) {
       throw new ConflictError('Already in a room. Leave current room first.');
+    }
+  };
+
+  /**
+   * Check if all connected players have answered after a player is removed/left during ANSWERING_PHASE.
+   * If so, auto-transition to results to prevent the game from getting stuck.
+   * @private
+   */
+  const checkAllAnsweredAfterRemoval = async (room) => {
+    if (!gameUseCases) return;
+    const pin = room.pin;
+    const isAnswering = room.state === 'ANSWERING_PHASE';
+    if (!isAnswering) return;
+
+    const noConnectedPlayers = room.getConnectedPlayerCount() === 0;
+    const allAnswered = room.haveAllPlayersAnswered() || noConnectedPlayers;
+    if (!allAnswered) return;
+
+    if (!endAnsweringLocks.acquire(pin)) return;
+    try {
+      if (timerService) timerService.stopTimer(pin);
+      io.to(pin).emit('all_players_answered');
+      const endResult = await gameUseCases.endAnsweringPhase({ pin, requesterId: 'server' });
+      if (endResult) {
+        io.to(pin).emit('show_results', toShowResultsDTO(endResult));
+      }
+    } catch (err) {
+      const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
+      if (!isExpected) {
+        console.error('Auto-end after player removal error:', err.message);
+      }
+    } finally {
+      endAnsweringLocks.release(pin);
     }
   };
 
@@ -141,6 +175,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         nickname: result.removedPlayer?.nickname || null,
         playerCount: result.room.getPlayerCount()
       });
+
+      // Auto-advance if remaining connected players have all answered
+      await checkAllAnsweredAfterRemoval(result.room);
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -333,12 +370,13 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
       if (result.room.state === 'SHOW_RESULTS' && snapshot) {
         const question = snapshot.getQuestion(result.room.currentQuestionIndex);
         if (question) {
-          const { distribution } = result.room.getAnswerDistribution(
+          const { distribution, correctCount } = result.room.getAnswerDistribution(
             question.options.length,
             (idx) => question.isCorrect(idx)
           );
           reconnectPayload.correctAnswerIndex = question.correctAnswerIndex;
           reconnectPayload.answerDistribution = distribution;
+          reconnectPayload.correctCount = correctCount;
           reconnectPayload.explanation = question.explanation || null;
         }
       }
@@ -449,6 +487,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         nickname: result.player.nickname,
         playerCount: result.room.getPlayerCount()
       });
+
+      // Auto-advance if remaining connected players have all answered
+      await checkAllAnsweredAfterRemoval(result.room);
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -481,6 +522,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
         nickname: result.player.nickname,
         playerCount: result.room.getPlayerCount()
       });
+
+      // Auto-advance if remaining connected players have all answered
+      await checkAllAnsweredAfterRemoval(result.room);
     } catch (error) {
       handleSocketError(socket, error);
     }

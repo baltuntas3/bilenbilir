@@ -77,7 +77,7 @@ const initializeSocket = (server) => {
     console.log('User connected:', socket.id, socket.isAuthenticated && socket.user ? `(authenticated: ${socket.user.userId})` : '(guest)');
 
     // Register handlers
-    createRoomHandler(io, socket, roomUseCases, timerService);
+    createRoomHandler(io, socket, roomUseCases, timerService, gameUseCases);
     createGameHandler(io, socket, gameUseCases, timerService);
 
     socket.on('disconnect', async () => {

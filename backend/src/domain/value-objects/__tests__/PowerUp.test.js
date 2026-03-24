@@ -163,7 +163,10 @@ describe('PowerUpRegistry', () => {
       const { result, emitActions } = powerUpRegistry.execute(PowerUpType.TIME_EXTENSION, {});
       expect(result.type).toBe('TIME_EXTENSION');
       expect(result.extraTimeMs).toBe(10000);
-      expect(emitActions.playerEmits).toHaveLength(2);
+      expect(emitActions.playerEmits).toHaveLength(1);
+      expect(emitActions.playerEmits[0].event).toBe('power_up_activated');
+      expect(emitActions.roomEmits).toHaveLength(1);
+      expect(emitActions.roomEmits[0]).toEqual({ event: 'time_extended', data: { extraTimeMs: 10000 } });
       expect(emitActions.timerAction).toEqual({ method: 'extendTimer', args: [10000] });
     });
   });

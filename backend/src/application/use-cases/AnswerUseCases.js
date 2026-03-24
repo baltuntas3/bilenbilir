@@ -51,6 +51,7 @@ class AnswerUseCases extends SharedUseCases {
       }
       if (answerIndex >= currentQuestion.options.length) throw new ValidationError('Answer index out of bounds');
 
+      const streakBeforeAnswer = player.streak;
       const answer = Answer.create({
         playerId: player.id,
         questionId: currentQuestion.id,
@@ -58,7 +59,7 @@ class AnswerUseCases extends SharedUseCases {
         answerIndex,
         question: currentQuestion,
         elapsedTimeMs: validElapsedTime,
-        currentStreak: player.streak
+        currentStreak: streakBeforeAnswer
       });
 
       player.submitAnswer(answerIndex, validElapsedTime);
@@ -88,7 +89,8 @@ class AnswerUseCases extends SharedUseCases {
         isCorrect: answer.isCorrect,
         elapsedTimeMs: validElapsedTime,
         score: actualScore,
-        streak: player.streak,
+        streak: streakBeforeAnswer,
+        streakBonus: answer.streakBonus,
         optionCount: currentQuestion.options.length
       });
 
