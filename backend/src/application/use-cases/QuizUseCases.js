@@ -2,7 +2,7 @@ const { Quiz, Question } = require('../../domain/entities');
 const { generateId } = require('../../shared/utils/generateId');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { NotFoundError, ForbiddenError, ConflictError, ValidationError } = require('../../shared/errors');
-const { LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
+const { LOCK_TIMEOUT_MS, MAX_OPTIONS, MIN_OPTIONS } = require('../../shared/config/constants');
 
 // Current export format version
 const EXPORT_VERSION = '1.0';
@@ -147,6 +147,9 @@ class QuizUseCases {
     const quiz = await this.quizRepository.findBySlug(slug);
     if (!quiz) {
       throw new NotFoundError('Quiz not found');
+    }
+    if (!quiz.isPublic) {
+      throw new ForbiddenError('Not authorized to view this quiz');
     }
     return { quiz };
   }
@@ -420,8 +423,8 @@ class QuizUseCases {
         throw new ValidationError(`Invalid question at index ${index}: missing text`);
       }
 
-      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) {
-        throw new ValidationError(`Invalid question at index ${index}: must have 2-4 options`);
+      if (!Array.isArray(q.options) || q.options.length < MIN_OPTIONS || q.options.length > MAX_OPTIONS) {
+        throw new ValidationError(`Invalid question at index ${index}: must have ${MIN_OPTIONS}-${MAX_OPTIONS} options`);
       }
 
       for (let i = 0; i < q.options.length; i++) {

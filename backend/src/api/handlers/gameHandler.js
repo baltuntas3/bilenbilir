@@ -63,6 +63,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       });
       // Start server-side timer
       timerService.startTimer(pin, result.timeLimit, async () => {
+        timerService.stopTimer(pin);
         // Lock prevents race with all-answered auto-transition
         if (!endAnsweringLocks.acquire(pin)) return;
         try {

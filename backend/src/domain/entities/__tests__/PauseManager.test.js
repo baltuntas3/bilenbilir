@@ -19,8 +19,8 @@ describe('PauseManager', () => {
       expect(() => pm.pause('LEADERBOARD', false, 'LEADERBOARD', 'PAUSED')).toThrow('Only host can pause');
     });
 
-    it('should throw if not in leaderboard state', () => {
-      expect(() => pm.pause('ANSWERING', true, 'LEADERBOARD', 'PAUSED')).toThrow('only be paused from leaderboard');
+    it('should throw if not in allowed state', () => {
+      expect(() => pm.pause('ANSWERING', true, 'LEADERBOARD', 'PAUSED')).toThrow('Game can only be paused from');
     });
   });
 

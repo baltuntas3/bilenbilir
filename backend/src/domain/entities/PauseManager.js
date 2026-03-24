@@ -6,10 +6,11 @@ class PauseManager {
     this.pausedFromState = null;
   }
 
-  pause(currentState, isHost, leaderboardState, pausedState) {
+  pause(currentState, isHost, allowedStates, pausedState) {
     if (!isHost) throw new ForbiddenError('Only host can pause the game');
-    if (currentState !== leaderboardState) {
-      throw new ValidationError('Game can only be paused from leaderboard');
+    const allowed = Array.isArray(allowedStates) ? allowedStates : [allowedStates];
+    if (!allowed.includes(currentState)) {
+      throw new ValidationError(`Game can only be paused from: ${allowed.join(', ')}`);
     }
     this.pausedFromState = currentState;
     this.pausedAt = new Date();

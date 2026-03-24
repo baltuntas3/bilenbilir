@@ -747,7 +747,7 @@ describe('QuizUseCases', () => {
           }
         },
         requesterId: userId
-      })).rejects.toThrow('Invalid question at index 0: must have 2-4 options');
+      })).rejects.toThrow('Invalid question at index 0: must have 2-6 options');
     });
 
     it('should throw error for invalid correctAnswerIndex', async () => {

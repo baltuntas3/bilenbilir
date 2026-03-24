@@ -1,7 +1,7 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { ConflictError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
-const { createRateLimiter, createAuthChecker, toPlayerQuestionDTO, validateToken } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken } = require('./socketHandlerUtils');
 
 /**
  * Map team data for client consumption
@@ -208,12 +208,66 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null) => {
 
       socket.join(pin);
 
-      socket.emit('host_reconnected', {
+      // Build full reconnect payload so host can resume from any state
+      const reconnectPayload = {
         pin: result.room.pin,
         state: result.room.state,
         playerCount: result.room.getPlayerCount(),
-        currentQuestionIndex: result.room.currentQuestionIndex
-      });
+        connectedPlayerCount: result.room.getConnectedPlayerCount(),
+        currentQuestionIndex: result.room.currentQuestionIndex,
+        players: result.room.getAllPlayers().map(toPlayerDTO),
+      };
+
+      // Include quiz snapshot data if game has started
+      const snapshot = result.room.getQuizSnapshot();
+      if (snapshot) {
+        reconnectPayload.totalQuestions = snapshot.getTotalQuestions();
+        const question = snapshot.getQuestion(result.room.currentQuestionIndex);
+        if (question) {
+          reconnectPayload.currentQuestion = question.getHostData();
+        }
+      }
+
+      // Include timer sync if in answering phase
+      if (timerService) {
+        const timerSync = timerService.getTimerSync(pin);
+        if (timerSync) {
+          reconnectPayload.timerSync = timerSync;
+        }
+      }
+
+      // Include phase-specific data
+      const roomState = result.room.state;
+      if (roomState === 'SHOW_RESULTS' && snapshot) {
+        const question = snapshot.getQuestion(result.room.currentQuestionIndex);
+        if (question) {
+          const { distribution, correctCount } = result.room.getAnswerDistribution(
+            question.options.length,
+            (idx) => question.isCorrect(idx)
+          );
+          reconnectPayload.correctAnswerIndex = question.correctAnswerIndex;
+          reconnectPayload.answerDistribution = distribution;
+          reconnectPayload.explanation = question.explanation || null;
+          reconnectPayload.answeredCount = result.room.getAnsweredCount();
+        }
+      }
+
+      if (roomState === 'LEADERBOARD' || roomState === 'PAUSED') {
+        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
+        if (result.room.isTeamMode()) {
+          reconnectPayload.teamLeaderboard = result.room.getTeamLeaderboard();
+        }
+      }
+
+      if (roomState === 'PODIUM') {
+        reconnectPayload.podium = result.room.getPodium().map(toPlayerDTO);
+        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
+        if (result.room.isTeamMode()) {
+          reconnectPayload.teamPodium = result.room.getTeamPodium();
+        }
+      }
+
+      socket.emit('host_reconnected', reconnectPayload);
 
       socket.to(pin).emit('host_returned');
     } catch (error) {

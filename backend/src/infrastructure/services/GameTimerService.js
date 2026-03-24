@@ -184,9 +184,13 @@ class GameTimerService {
       return; // No active timer to extend
     }
 
+    // Cap extension to prevent abuse (30s max per call)
+    const MAX_EXTENSION_MS = 30000;
+    const safeExtraMs = Math.min(Math.max(0, extraMs), MAX_EXTENSION_MS);
+
     // Extend the end time
-    timer.endTime += extraMs;
-    timer.duration += extraMs;
+    timer.endTime += safeExtraMs;
+    timer.duration += safeExtraMs;
 
     // Reschedule the main timeout with stored onExpire callback
     if (timer.timerId) {

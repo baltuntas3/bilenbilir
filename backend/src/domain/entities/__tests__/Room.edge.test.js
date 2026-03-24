@@ -271,12 +271,11 @@ describe('Room edge cases', () => {
       expect(opts).not.toContain(1); // correct answer not eliminated
     });
 
-    it('should return empty for 2 options', () => {
+    it('should throw for 2 options (TRUE_FALSE)', () => {
       const room = createRoom();
       room.addPlayer(createPlayer());
-      const opts = room.getFiftyFiftyOptions('s1', 0, 2);
-      // With 2 options, only 1 wrong option, maxToEliminate = 0
-      expect(opts.length).toBeLessThanOrEqual(1);
+      expect(() => room.getFiftyFiftyOptions('s1', 0, 2))
+        .toThrow('50:50 cannot be used on questions with 2 or fewer options');
     });
   });
 

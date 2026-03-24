@@ -1,7 +1,8 @@
 const { ValidationError } = require('../../shared/errors');
 
 const MAX_STREAK_BONUS = 500;
-// Maximum possible score per answer with DOUBLE_POINTS: (MAX_POINTS * 2) + MAX_STREAK_BONUS
+// Hard cap per answer — applies to all cases including DOUBLE_POINTS.
+// Prevents score inflation: even with DOUBLE_POINTS, a single answer cannot exceed this.
 const MAX_ANSWER_SCORE = 20500;
 
 class Answer {

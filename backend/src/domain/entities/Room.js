@@ -27,9 +27,9 @@ const validTransitions = {
   [RoomState.WAITING_PLAYERS]: [RoomState.QUESTION_INTRO],
   [RoomState.QUESTION_INTRO]: [RoomState.ANSWERING_PHASE],
   [RoomState.ANSWERING_PHASE]: [RoomState.SHOW_RESULTS],
-  [RoomState.SHOW_RESULTS]: [RoomState.LEADERBOARD],
+  [RoomState.SHOW_RESULTS]: [RoomState.LEADERBOARD, RoomState.PAUSED],
   [RoomState.LEADERBOARD]: [RoomState.QUESTION_INTRO, RoomState.PODIUM, RoomState.PAUSED],
-  [RoomState.PAUSED]: [RoomState.LEADERBOARD],
+  [RoomState.PAUSED]: [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS],
   [RoomState.PODIUM]: [] // Terminal state
 };
 
@@ -66,6 +66,9 @@ class Room {
     this._pauseManager = new PauseManager();
     // Lightning round
     this.lightningRound = { enabled: false, questionCount: 3 };
+    // Snapshot of connected player count at the start of answering phase
+    // Used for consistent progress reporting (answeredCount / totalPlayersInPhase)
+    this.answeringPhasePlayerCount = 0;
   }
 
   // Backward compatibility getters for managers' internal state
@@ -286,6 +289,7 @@ class Room {
    * Maintains Aggregate Root encapsulation
    */
   clearAllAnswerAttempts() {
+    this.answeringPhasePlayerCount = this.getConnectedPlayerCount();
     this.players.forEach(player => {
       player.clearAnswerAttempt();
     });
@@ -509,7 +513,7 @@ class Room {
     const eliminateCount = Math.min(2, maxToEliminate);
 
     if (eliminateCount === 0) {
-      return [];
+      throw new ValidationError('50:50 cannot be used on questions with 2 or fewer options');
     }
 
     // Shuffle and pick
@@ -650,7 +654,7 @@ class Room {
     const newState = this._pauseManager.pause(
       this.state,
       this.isHost(requesterId),
-      RoomState.LEADERBOARD,
+      [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS],
       RoomState.PAUSED
     );
     this.state = newState;

@@ -777,9 +777,9 @@ describe('Room', () => {
       expect(leaderboardRoom.pausedFromState).toBe(RoomState.LEADERBOARD);
     });
 
-    it('should throw error when pausing from non-leaderboard state', () => {
+    it('should throw error when pausing from non-pausable state', () => {
       expect(() => room.pause('host-socket-id'))
-        .toThrow('Game can only be paused from leaderboard');
+        .toThrow('Game can only be paused from');
     });
 
     it('should throw error when non-host tries to pause', () => {

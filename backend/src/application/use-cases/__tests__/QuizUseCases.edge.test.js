@@ -163,7 +163,7 @@ describe('QuizUseCases edge cases', () => {
     });
 
     it('should throw for invalid options count', () => {
-      expect(() => uc._validateImportData({ version: '1.0', quiz: { title: 'T', questions: [{ text: 'Q', options: ['A'], correctAnswerIndex: 0 }] } })).toThrow('2-4 options');
+      expect(() => uc._validateImportData({ version: '1.0', quiz: { title: 'T', questions: [{ text: 'Q', options: ['A'], correctAnswerIndex: 0 }] } })).toThrow('2-6 options');
     });
 
     it('should throw for empty option', () => {
@@ -210,9 +210,14 @@ describe('QuizUseCases edge cases', () => {
 
   describe('getQuizBySlug', () => {
     it('should return quiz by slug', async () => {
-      mocks.quizRepo.findBySlug.mockResolvedValue({ id: 'q1', title: 'Test' });
+      mocks.quizRepo.findBySlug.mockResolvedValue({ id: 'q1', title: 'Test', isPublic: true });
       const result = await uc.getQuizBySlug({ slug: 'test-slug' });
       expect(result.quiz.id).toBe('q1');
+    });
+
+    it('should throw for private quiz by slug', async () => {
+      mocks.quizRepo.findBySlug.mockResolvedValue({ id: 'q1', title: 'Test', isPublic: false });
+      await expect(uc.getQuizBySlug({ slug: 'test-slug' })).rejects.toThrow('Not authorized');
     });
 
     it('should throw if quiz not found by slug', async () => {

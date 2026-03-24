@@ -63,10 +63,14 @@ class AnswerUseCases extends SharedUseCases {
 
       player.submitAnswer(answerIndex, validElapsedTime);
       let actualScore = 0;
+      const hasDoublePoints = player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS);
+      // Clear active power-up immediately after checking — it's been consumed
+      player.clearActivePowerUp();
+
       if (answer.isCorrect) {
         player.incrementStreak();
         const totalScore = answer.getTotalScore();
-        if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) {
+        if (hasDoublePoints) {
           actualScore = Math.min(totalScore * 2, MAX_ANSWER_SCORE);
         } else {
           actualScore = totalScore;
@@ -95,7 +99,7 @@ class AnswerUseCases extends SharedUseCases {
         actualScore,
         allAnswered: room.haveAllPlayersAnswered(),
         answeredCount: room.getAnsweredCount(),
-        totalPlayers: room.getConnectedPlayerCount()
+        totalPlayers: room.answeringPhasePlayerCount
       };
     });
   }
