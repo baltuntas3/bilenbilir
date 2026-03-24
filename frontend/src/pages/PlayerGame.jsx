@@ -9,9 +9,11 @@ import {
   Badge,
   Center,
   Button,
-  ThemeIcon,
+  Box,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { IconDoorExit, IconCheck, IconX } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
@@ -26,9 +28,12 @@ import PowerUpBar from '../components/game/PowerUpBar';
 import AnswerDistribution from '../components/game/AnswerDistribution';
 import GamePausedBanner from '../components/game/GamePausedBanner';
 import { showToast } from '../utils/toast';
+import { fireCorrectAnswer, fireStreakConfetti } from '../utils/confetti';
 
 export default function PlayerGame() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const isMobile = useMediaQuery('(max-width: 48em)');
   const {
     roomPin,
     isHost,
@@ -62,19 +67,27 @@ export default function PlayerGame() {
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showScorePop, setShowScorePop] = useState(false);
 
-  // Reset selected answer on new question
   useEffect(() => {
     setSelectedAnswer(null);
   }, [currentQuestionIndex]);
 
-
-  // Redirect if not in a game
   useEffect(() => {
     if (!roomPin || isHost) {
       navigate('/join');
     }
   }, [roomPin, isHost, navigate]);
+
+  // Confetti on correct answer
+  useEffect(() => {
+    if (lastAnswer?.isCorrect && gameState === GAME_STATES.SHOW_RESULTS) {
+      fireCorrectAnswer();
+      if (streak > 2) {
+        setTimeout(() => fireStreakConfetti(streak), 300);
+      }
+    }
+  }, [lastAnswer, gameState, streak]);
 
   const handleAnswerSelect = async (answerIndex) => {
     if (hasAnswered || submitting) return;
@@ -97,7 +110,6 @@ export default function PlayerGame() {
     navigate('/');
   };
 
-  // Render based on game state
   const renderContent = () => {
     switch (gameState) {
       case GAME_STATES.WAITING_PLAYERS:
@@ -105,7 +117,7 @@ export default function PlayerGame() {
 
       case GAME_STATES.QUESTION_INTRO:
         return (
-          <Stack gap="xl">
+          <Stack gap="lg" className="fade-slide-in">
             <QuestionDisplay
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
@@ -113,9 +125,26 @@ export default function PlayerGame() {
               isLightning={isLightning}
             />
             <Center>
-              <Paper p="xl" radius="md" withBorder>
-                <Text size="lg" ta="center" c="dimmed">
-                  Get ready! The question will start soon...
+              <Paper
+                p="xl"
+                radius="md"
+                style={{
+                  background: 'var(--theme-surface)',
+                  border: '1px solid var(--theme-primary)',
+                  boxShadow: 'var(--theme-glow-primary)',
+                }}
+              >
+                <Text
+                  ta="center"
+                  className="anim-pulse"
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.6rem',
+                    color: 'var(--theme-primary)',
+                    textShadow: 'var(--theme-glow-primary)',
+                  }}
+                >
+                  {t('game.getReady')}
                 </Text>
               </Paper>
             </Center>
@@ -124,21 +153,54 @@ export default function PlayerGame() {
 
       case GAME_STATES.ANSWERING_PHASE:
         return (
-          <Stack gap="xl">
-            <Group justify="space-between" align="flex-start">
-              <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} />
-              <Paper p="md" radius="md" withBorder>
-                <Stack gap="xs" align="center">
-                  <Text size="xs" c="dimmed">Your Score</Text>
-                  <Text size="xl" fw={700}>{score.toLocaleString()}</Text>
+          <Stack gap="md" className="fade-slide-in">
+            {/* Timer + Score bar */}
+            <Paper
+              p="sm"
+              radius="md"
+              style={{
+                background: 'var(--theme-surface)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
+              <Group justify="space-between" align="center" wrap="nowrap">
+                <Box style={{ flex: 1, maxWidth: isMobile ? '50%' : 'auto' }}>
+                  <Timer
+                    remaining={remainingTime}
+                    total={timeLimit}
+                    isLightning={isLightning}
+                    compact={isMobile}
+                  />
+                </Box>
+                <Stack gap={2} align="center">
+                  <Text
+                    fw={700}
+                    className={showScorePop ? 'score-pop' : ''}
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: isMobile ? '0.7rem' : '1rem',
+                      color: 'var(--theme-warning)',
+                      textShadow: 'var(--theme-glow-warning)',
+                    }}
+                  >
+                    {score.toLocaleString()}
+                  </Text>
                   {streak > 0 && (
-                    <Badge color="orange" size="sm">
-                      {streak} streak
+                    <Badge
+                      size="xs"
+                      color="orange"
+                      variant="filled"
+                      style={{
+                        fontFamily: 'var(--theme-font-display)',
+                        fontSize: '0.4rem',
+                      }}
+                    >
+                      {t('game.streakCount', { count: streak })}
                     </Badge>
                   )}
                 </Stack>
-              </Paper>
-            </Group>
+              </Group>
+            </Paper>
 
             <QuestionDisplay
               question={currentQuestion}
@@ -172,25 +234,61 @@ export default function PlayerGame() {
 
       case GAME_STATES.SHOW_RESULTS:
         return (
-          <Stack gap="xl">
-            {/* Your result */}
+          <Stack gap="lg" className="fade-slide-in">
             {lastAnswer && (
-              <Paper p="lg" radius="md" withBorder bg={lastAnswer.isCorrect ? 'green.0' : 'red.0'}>
+              <Paper
+                p="lg"
+                radius="md"
+                className={lastAnswer.isCorrect ? 'score-pop' : 'shake'}
+                style={{
+                  background: lastAnswer.isCorrect
+                    ? 'rgba(57, 255, 20, 0.08)'
+                    : 'rgba(255, 45, 149, 0.08)',
+                  border: `2px solid ${lastAnswer.isCorrect ? 'var(--theme-success)' : 'var(--theme-secondary)'}`,
+                  boxShadow: lastAnswer.isCorrect
+                    ? 'var(--theme-glow-success)'
+                    : 'var(--theme-glow-secondary)',
+                }}
+              >
                 <Group justify="center" gap="md">
-                  <ThemeIcon
-                    size={40}
-                    radius="xl"
-                    color={lastAnswer.isCorrect ? 'green' : 'red'}
-                    variant="filled"
+                  <Box
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: `2px solid ${lastAnswer.isCorrect ? 'var(--theme-success)' : 'var(--theme-secondary)'}`,
+                    }}
                   >
-                    {lastAnswer.isCorrect ? <IconCheck size={24} /> : <IconX size={24} />}
-                  </ThemeIcon>
+                    {lastAnswer.isCorrect
+                      ? <IconCheck size={24} style={{ color: 'var(--theme-success)' }} />
+                      : <IconX size={24} style={{ color: 'var(--theme-secondary)' }} />}
+                  </Box>
                   <Stack gap={0}>
-                    <Text size="lg" fw={600}>
-                      {lastAnswer.isCorrect ? 'Correct!' : 'Wrong!'}
+                    <Text
+                      fw={700}
+                      style={{
+                        fontFamily: 'var(--theme-font-display)',
+                        fontSize: '0.7rem',
+                        color: lastAnswer.isCorrect ? 'var(--theme-success)' : 'var(--theme-secondary)',
+                        textShadow: lastAnswer.isCorrect
+                          ? 'var(--theme-glow-success)'
+                          : 'var(--theme-glow-secondary)',
+                      }}
+                    >
+                      {lastAnswer.isCorrect ? t('game.correct') : t('game.wrong')}
                     </Text>
-                    <Text size="xl" fw={700} c={lastAnswer.isCorrect ? 'green' : 'dimmed'}>
-                      +{lastAnswer.isCorrect ? lastAnswer.score : 0} pts
+                    <Text
+                      fw={700}
+                      style={{
+                        fontFamily: 'var(--theme-font-display)',
+                        fontSize: '0.6rem',
+                        color: lastAnswer.isCorrect ? 'var(--theme-warning)' : 'var(--theme-text-dim)',
+                      }}
+                    >
+                      +{lastAnswer.isCorrect ? lastAnswer.score : 0} {t('game.pts')}
                     </Text>
                   </Stack>
                 </Group>
@@ -204,7 +302,6 @@ export default function PlayerGame() {
               isLightning={isLightning}
             />
 
-            {/* Answer distribution */}
             <AnswerDistribution
               distribution={answerDistribution}
               correctAnswerIndex={correctAnswerIndex}
@@ -216,15 +313,33 @@ export default function PlayerGame() {
 
       case GAME_STATES.LEADERBOARD:
         return (
-          <Stack gap="xl">
-            <Group justify="center" gap="md">
-              <Paper p="md" radius="md" withBorder>
-                <Stack gap="xs" align="center">
-                  <Text size="xs" c="dimmed">Your Score</Text>
-                  <Text size="xl" fw={700}>{score.toLocaleString()}</Text>
+          <Stack gap="lg" className="fade-slide-in">
+            <Center>
+              <Paper
+                p="md"
+                radius="md"
+                style={{
+                  background: 'var(--theme-surface)',
+                  border: '1px solid var(--theme-warning)',
+                  boxShadow: 'var(--theme-glow-warning)',
+                }}
+              >
+                <Stack gap={2} align="center">
+                  <Text size="xs" style={{ color: 'var(--theme-text-dim)' }}>{t('game.yourScore')}</Text>
+                  <Text
+                    fw={700}
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '1rem',
+                      color: 'var(--theme-warning)',
+                      textShadow: 'var(--theme-glow-warning)',
+                    }}
+                  >
+                    {score.toLocaleString()}
+                  </Text>
                 </Stack>
               </Paper>
-            </Group>
+            </Center>
 
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
@@ -234,7 +349,16 @@ export default function PlayerGame() {
             />
 
             <Center>
-              <Text c="dimmed">Waiting for next question...</Text>
+              <Text
+                className="anim-pulse"
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.5rem',
+                  color: 'var(--theme-text-dim)',
+                }}
+              >
+                {t('game.nextLoading')}
+              </Text>
             </Center>
           </Stack>
         );
@@ -244,14 +368,32 @@ export default function PlayerGame() {
           <Stack gap="xl">
             <GamePausedBanner />
 
-            <Group justify="center" gap="md">
-              <Paper p="md" radius="md" withBorder>
-                <Stack gap="xs" align="center">
-                  <Text size="xs" c="dimmed">Your Score</Text>
-                  <Text size="xl" fw={700}>{score.toLocaleString()}</Text>
+            <Center>
+              <Paper
+                p="md"
+                radius="md"
+                style={{
+                  background: 'var(--theme-surface)',
+                  border: '1px solid var(--theme-warning)',
+                  boxShadow: 'var(--theme-glow-warning)',
+                }}
+              >
+                <Stack gap={2} align="center">
+                  <Text size="xs" style={{ color: 'var(--theme-text-dim)' }}>{t('game.yourScore')}</Text>
+                  <Text
+                    fw={700}
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '1rem',
+                      color: 'var(--theme-warning)',
+                      textShadow: 'var(--theme-glow-warning)',
+                    }}
+                  >
+                    {score.toLocaleString()}
+                  </Text>
                 </Stack>
               </Paper>
-            </Group>
+            </Center>
           </Stack>
         );
 
@@ -269,10 +411,15 @@ export default function PlayerGame() {
               <Button
                 size="lg"
                 variant="light"
+                color="red"
                 leftSection={<IconDoorExit size={20} />}
                 onClick={handleLeave}
+                style={{
+                  border: '1px solid var(--theme-secondary)',
+                  boxShadow: 'var(--theme-glow-secondary)',
+                }}
               >
-                Leave Game
+                {t('game.leaveGame')}
               </Button>
             </Center>
           </Stack>
@@ -281,7 +428,16 @@ export default function PlayerGame() {
       default:
         return (
           <Center>
-            <Text c="dimmed">Waiting for the game to continue...</Text>
+            <Text
+              className="anim-pulse"
+              style={{
+                fontFamily: 'var(--theme-font-display)',
+                fontSize: '0.5rem',
+                color: 'var(--theme-text-dim)',
+              }}
+            >
+              {t('game.waitingSignal')}
+            </Text>
           </Center>
         );
     }
@@ -294,28 +450,57 @@ export default function PlayerGame() {
   return (
     <>
       <ReactionOverlay />
-      <Container size="sm" py="xl" pb={80}>
-        <Stack gap="xl">
-          {/* Header */}
+      <Container size="sm" py="md" pb={80}>
+        <Stack gap="md">
+          {/* Header bar */}
           {gameState !== GAME_STATES.WAITING_PLAYERS && (
-            <Paper p="sm" radius="md" withBorder>
-              <Group justify="space-between">
-                <Group gap="xs">
-                  <Badge size="lg" variant="light">
+            <Paper
+              p="xs"
+              radius="md"
+              style={{
+                background: 'var(--theme-surface)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
+              <Group justify="space-between" wrap="nowrap">
+                <Group gap={6} wrap="nowrap" style={{ overflow: 'hidden' }}>
+                  <Badge
+                    size="md"
+                    variant="light"
+                    
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '0.45rem',
+                    }}
+                  >
                     {nickname}
                   </Badge>
-                  <Badge size="lg" variant="light" color="blue">
-                    {score.toLocaleString()} pts
+                  <Badge
+                    size="md"
+                    variant="light"
+                    color="yellow"
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '0.45rem',
+                    }}
+                  >
+                    {score.toLocaleString()}
                   </Badge>
                 </Group>
-                <Badge size="lg">
-                  {currentQuestionIndex + 1} / {totalQuestions}
+                <Badge
+                  size="md"
+                  color="violet"
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.45rem',
+                  }}
+                >
+                  {currentQuestionIndex + 1}/{totalQuestions}
                 </Badge>
               </Group>
             </Paper>
           )}
 
-          {/* Main content */}
           {renderContent()}
         </Stack>
       </Container>

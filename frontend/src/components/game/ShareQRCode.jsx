@@ -1,13 +1,15 @@
 import { Modal, Stack, Text, Button, Group, CopyButton, TextInput, ActionIcon, Paper, Tooltip } from '@mantine/core';
 import { IconCopy, IconCheck, IconShare } from '@tabler/icons-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useTranslation } from 'react-i18next';
 
 export default function ShareQRCode({ pin, isOpen, onClose }) {
+  const { t } = useTranslation();
   const joinUrl = `${window.location.origin}/join?pin=${pin}`;
   const spectateUrl = `${window.location.origin}/join?pin=${pin}&spectate=true`;
 
   return (
-    <Modal opened={isOpen} onClose={onClose} title="Oyuna Davet Et" size="md" centered>
+    <Modal opened={isOpen} onClose={onClose} title={t('share.inviteTitle')} size="md" centered>
       <Stack align="center" gap="lg">
         <Paper p="lg" withBorder radius="md" bg="white">
           <QRCodeSVG
@@ -23,7 +25,7 @@ export default function ShareQRCode({ pin, isOpen, onClose }) {
         </Text>
 
         <Stack w="100%" gap="xs">
-          <Text size="sm" fw={500}>Oyuncu Linki:</Text>
+          <Text size="sm" fw={500}>{t('share.playerLink')}:</Text>
           <Group gap="xs">
             <TextInput
               value={joinUrl}
@@ -33,7 +35,7 @@ export default function ShareQRCode({ pin, isOpen, onClose }) {
             />
             <CopyButton value={joinUrl} timeout={2000}>
               {({ copied, copy }) => (
-                <Tooltip label={copied ? 'Kopyalandı!' : 'Kopyala'}>
+                <Tooltip label={copied ? t('common.copied') : t('common.copy')}>
                   <ActionIcon color={copied ? 'teal' : 'blue'} variant="filled" onClick={copy} size="lg">
                     {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
                   </ActionIcon>
@@ -42,7 +44,7 @@ export default function ShareQRCode({ pin, isOpen, onClose }) {
             </CopyButton>
           </Group>
 
-          <Text size="sm" fw={500} mt="xs">İzleyici Linki:</Text>
+          <Text size="sm" fw={500} mt="xs">{t('share.spectatorLink')}:</Text>
           <Group gap="xs">
             <TextInput
               value={spectateUrl}
@@ -52,7 +54,7 @@ export default function ShareQRCode({ pin, isOpen, onClose }) {
             />
             <CopyButton value={spectateUrl} timeout={2000}>
               {({ copied, copy }) => (
-                <Tooltip label={copied ? 'Kopyalandı!' : 'Kopyala'}>
+                <Tooltip label={copied ? t('common.copied') : t('common.copy')}>
                   <ActionIcon color={copied ? 'teal' : 'blue'} variant="filled" onClick={copy} size="lg">
                     {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
                   </ActionIcon>
@@ -69,13 +71,13 @@ export default function ShareQRCode({ pin, isOpen, onClose }) {
             fullWidth
             onClick={() => {
               navigator.share({
-                title: 'BilenBilir Oyununa Katıl!',
-                text: `PIN: ${pin} ile oyuna katıl!`,
+                title: t('share.inviteTitle'),
+                text: t('share.inviteMessage', { pin }),
                 url: joinUrl,
               }).catch(() => {});
             }}
           >
-            Paylaş
+            {t('share.shareButton')}
           </Button>
         )}
       </Stack>

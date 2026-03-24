@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
@@ -14,11 +15,31 @@ import { GameProvider } from './context/GameContext';
 import AppRoutes from './routes';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
-import { theme } from './theme';
+import { darkTheme, lightTheme } from './theme';
+
+function getSavedScheme() {
+  try {
+    return localStorage.getItem('mantine-color-scheme-value') || 'dark';
+  } catch {
+    return 'dark';
+  }
+}
 
 export default function App() {
+  const [colorScheme, setColorScheme] = useState(getSavedScheme);
+
+  const toggleColorScheme = useCallback(() => {
+    setColorScheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('mantine-color-scheme-value', next); } catch {}
+      return next;
+    });
+  }, []);
+
+  const theme = colorScheme === 'light' ? lightTheme : darkTheme;
+
   return (
-    <MantineProvider theme={theme} defaultColorScheme="auto">
+    <MantineProvider theme={theme} forceColorScheme={colorScheme}>
       <Notifications position="top-right" />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
@@ -27,7 +48,7 @@ export default function App() {
               <TimerProvider>
                 <GameProvider>
                   <ErrorBoundary>
-                    <Layout>
+                    <Layout onToggleTheme={toggleColorScheme} colorScheme={colorScheme}>
                       <AppRoutes />
                     </Layout>
                   </ErrorBoundary>

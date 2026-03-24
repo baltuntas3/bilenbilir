@@ -1,6 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { TextInput, Button, Stack, Title, Text, Paper, Container, Center, PinInput, Group, Divider } from '@mantine/core';
+import {
+  TextInput,
+  Button,
+  Stack,
+  Title,
+  Text,
+  Paper,
+  Container,
+  Center,
+  PinInput,
+  Group,
+  Divider,
+  Box,
+} from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconUsers, IconEye } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
@@ -15,11 +28,10 @@ export default function JoinGame() {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [spectatorLoading, setSpectatorLoading] = useState(false);
-  const [step, setStep] = useState('pin'); // 'pin' or 'nickname'
+  const [step, setStep] = useState('pin');
   const [pin, setPin] = useState('');
   const [autoSpectate, setAutoSpectate] = useState(false);
 
-  // Handle PIN and spectate mode from URL search params (share link / QR code)
   useEffect(() => {
     const pinFromUrl = searchParams.get('pin');
     const spectateFromUrl = searchParams.get('spectate');
@@ -59,7 +71,7 @@ export default function JoinGame() {
     setLoading(true);
     try {
       await joinRoom(pin, values.nickname.trim());
-      showToast.success('Joined game successfully!');
+      showToast.success(t('game.joinedSuccess'));
       navigate('/play');
     } catch (error) {
       showToast.error(error.message || 'Failed to join game');
@@ -76,7 +88,7 @@ export default function JoinGame() {
     setSpectatorLoading(true);
     try {
       await joinAsSpectator(pin, values.nickname.trim());
-      showToast.success('Joined as spectator!');
+      showToast.success(t('game.joinedSpectator'));
       navigate('/spectate');
     } catch (error) {
       showToast.error(error.message || 'Failed to join as spectator');
@@ -90,32 +102,83 @@ export default function JoinGame() {
   };
 
   return (
-    <Container size="xs" py="xl">
+    <Container size="xs" py="xl" className="crt-on">
       <Center>
-        <Paper shadow="md" p="xl" radius="md" withBorder style={{ width: '100%', maxWidth: 400 }}>
+        <Paper
+          shadow="md"
+          p="xl"
+          radius="md"
+          style={{
+            width: '100%',
+            maxWidth: 420,
+            background: 'var(--theme-surface)',
+            border: '1px solid var(--theme-primary)',
+            boxShadow: 'var(--theme-glow-primary)',
+          }}
+        >
           <Stack align="center" gap="lg">
-            <IconUsers size={48} stroke={1.5} />
-            <Title order={2}>{t('game.joinAsPlayer')}</Title>
+            <Box
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid var(--theme-primary)',
+                boxShadow: 'var(--theme-glow-primary)',
+                background: 'rgba(0, 240, 255, 0.05)',
+              }}
+            >
+              <IconUsers size={40} style={{ color: 'var(--theme-primary)' }} />
+            </Box>
+
+            <Title
+              order={3}
+              className="theme-text-primary display-font display-font-sm"
+              ta="center"
+            >
+              {t('game.joinAsPlayer')}
+            </Title>
 
             {step === 'pin' ? (
               <Stack align="center" gap="md" style={{ width: '100%' }}>
-                <Text c="dimmed" ta="center">
+                <Text style={{ color: 'var(--theme-text-dim)' }} ta="center">
                   {t('game.enterPin')}
                 </Text>
                 <PinInput
                   length={6}
-                  size="xl"
+                  size="lg"
                   type="number"
                   value={pin}
                   onChange={setPin}
                   onComplete={handlePinSubmit}
                   placeholder=""
+                  styles={{
+                    input: {
+                      background: 'var(--theme-bg)',
+                      border: '1px solid var(--theme-primary)',
+                      color: 'var(--theme-primary)',
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '1rem',
+                      caretColor: 'var(--theme-primary)',
+                      '&:focus': {
+                        borderColor: 'var(--theme-primary)',
+                        boxShadow: 'var(--theme-glow-primary)',
+                      },
+                    },
+                  }}
                 />
                 <Button
                   fullWidth
                   size="md"
                   onClick={handlePinSubmit}
                   disabled={pin.length !== 6}
+                  
+                  style={{
+                    boxShadow: pin.length === 6 ? 'var(--theme-glow-primary)' : 'none',
+                    transition: 'box-shadow 0.3s ease',
+                  }}
                 >
                   {t('game.continue')}
                 </Button>
@@ -124,11 +187,22 @@ export default function JoinGame() {
               <form onSubmit={form.onSubmit(handleJoin)} style={{ width: '100%' }}>
                 <Stack gap="md">
                   <Group justify="center" gap="xs">
-                    <Text c="dimmed">{t('game.pin')}:</Text>
-                    <Text fw={600}>{pin}</Text>
+                    <Text style={{ color: 'var(--theme-text-dim)' }}>{t('game.pin')}:</Text>
+                    <Text
+                      fw={700}
+                      style={{
+                        fontFamily: 'var(--theme-font-display)',
+                        fontSize: '0.8rem',
+                        color: 'var(--theme-primary)',
+                        textShadow: 'var(--theme-glow-primary)',
+                      }}
+                    >
+                      {pin}
+                    </Text>
                     <Button
                       variant="subtle"
                       size="xs"
+                      
                       onClick={() => {
                         setStep('pin');
                         setPin('');
@@ -144,13 +218,35 @@ export default function JoinGame() {
                     size="md"
                     {...form.getInputProps('nickname')}
                     autoFocus
+                    styles={{
+                      input: {
+                        background: 'var(--theme-bg)',
+                        border: '1px solid var(--theme-border)',
+                        color: 'var(--theme-text)',
+                        '&:focus': {
+                          borderColor: 'var(--theme-primary)',
+                        },
+                      },
+                      label: { color: 'var(--theme-text-dim)' },
+                    }}
                   />
 
                   {form.values.nickname.trim().length >= 2 && (
-                    <Center>
+                    <Center className="slide-up">
                       <Stack align="center" gap={4}>
-                        <PlayerAvatar nickname={form.values.nickname.trim()} size="lg" />
-                        <Text size="xs" c="dimmed">Avatarın</Text>
+                        <Box
+                          style={{
+                            border: '2px solid var(--theme-accent)',
+                            borderRadius: '50%',
+                            padding: 3,
+                            boxShadow: 'var(--theme-glow-accent)',
+                          }}
+                        >
+                          <PlayerAvatar nickname={form.values.nickname.trim()} size="lg" />
+                        </Box>
+                        <Text size="xs" style={{ color: 'var(--theme-text-dim)' }}>
+                          {t('game.yourAvatar')}
+                        </Text>
                       </Stack>
                     </Center>
                   )}
@@ -160,11 +256,18 @@ export default function JoinGame() {
                     fullWidth
                     size="md"
                     loading={loading}
+                    
+                    style={{ boxShadow: 'var(--theme-glow-primary)' }}
                   >
                     {t('game.joinAsPlayer')}
                   </Button>
 
-                  <Divider label={t('game.or')} labelPosition="center" />
+                  <Divider
+                    label={t('game.or')}
+                    labelPosition="center"
+                    color="var(--theme-border)"
+                    styles={{ label: { color: 'var(--theme-text-dim)' } }}
+                  />
 
                   <Button
                     variant="light"
@@ -172,7 +275,9 @@ export default function JoinGame() {
                     size="md"
                     loading={spectatorLoading}
                     leftSection={<IconEye size={18} />}
+                    color="violet"
                     onClick={() => form.onSubmit(handleJoinAsSpectator)()}
+                    style={{ borderColor: 'var(--theme-accent)' }}
                   >
                     {t('game.joinAsSpectator')}
                   </Button>

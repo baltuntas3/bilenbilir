@@ -332,7 +332,7 @@ class RoomRepository {
     if (!hostUserId) return null;
 
     for (const room of this.rooms.values()) {
-      if (room.hostUserId === hostUserId) {
+      if (room.hostUserId === hostUserId && room.state !== 'PODIUM') {
         return room;
       }
     }

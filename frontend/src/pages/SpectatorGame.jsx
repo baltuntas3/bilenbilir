@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -11,8 +12,8 @@ import {
   Button,
   SimpleGrid,
   Progress,
-  ThemeIcon,
   Alert,
+  Box,
 } from '@mantine/core';
 import { IconDoorExit, IconEye, IconUsers, IconInfoCircle } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
@@ -25,7 +26,10 @@ import ReactionPicker from '../components/game/ReactionPicker';
 import AnswerDistribution from '../components/game/AnswerDistribution';
 import GamePausedBanner from '../components/game/GamePausedBanner';
 
+const OPTION_COLORS = ['var(--theme-primary)', 'var(--theme-secondary)', 'var(--theme-success)', 'var(--theme-warning)', 'var(--theme-accent)', 'var(--theme-primary)'];
+
 export default function SpectatorGame() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const {
     roomPin,
@@ -52,7 +56,6 @@ export default function SpectatorGame() {
     isLightning,
   } = useGame();
 
-  // Redirect if not a spectator
   useEffect(() => {
     if (!roomPin || !isSpectator) {
       navigate('/join');
@@ -66,23 +69,59 @@ export default function SpectatorGame() {
 
   const connectedPlayers = players.filter((p) => !p.disconnected);
 
-  // Render based on game state
   const renderContent = () => {
     switch (gameState) {
       case GAME_STATES.WAITING_PLAYERS:
         return (
-          <Center style={{ minHeight: 300 }}>
-            <Paper p="xl" radius="md" withBorder>
+          <Center style={{ minHeight: 300 }} className="crt-on">
+            <Paper
+              p="xl"
+              radius="md"
+              style={{
+                background: 'var(--theme-surface)',
+                border: '1px solid var(--theme-primary)',
+                boxShadow: 'var(--theme-glow-primary)',
+              }}
+            >
               <Stack align="center" gap="md">
-                <ThemeIcon size={60} radius="xl" variant="light" color="blue">
-                  <IconEye size={32} />
-                </ThemeIcon>
-                <Text size="xl" fw={600}>Watching as Spectator</Text>
-                <Text c="dimmed" ta="center">
-                  Waiting for the host to start the game...
+                <Box
+                  style={{
+                    width: 60,
+                    height: 60,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid var(--theme-primary)',
+                    boxShadow: 'var(--theme-glow-primary)',
+                  }}
+                >
+                  <IconEye size={32} style={{ color: 'var(--theme-primary)' }} />
+                </Box>
+                <Text
+                  fw={700}
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.6rem',
+                    color: 'var(--theme-primary)',
+                    textShadow: 'var(--theme-glow-primary)',
+                  }}
+                >
+                  {t('game.spectatorMode')}
                 </Text>
-                <Badge size="lg" variant="light">
-                  {connectedPlayers.length} players joined
+                <Text style={{ color: 'var(--theme-text-dim)' }} ta="center">
+                  {t('game.hostWillStart')}
+                </Text>
+                <Badge
+                  size="lg"
+                  variant="light"
+                  
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.45rem',
+                  }}
+                >
+                  {t('game.onlineCount', { count: connectedPlayers.length })}
                 </Badge>
               </Stack>
             </Paper>
@@ -91,7 +130,7 @@ export default function SpectatorGame() {
 
       case GAME_STATES.QUESTION_INTRO:
         return (
-          <Stack gap="xl">
+          <Stack gap="xl" className="fade-slide-in">
             <QuestionDisplay
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
@@ -99,9 +138,26 @@ export default function SpectatorGame() {
               isLightning={isLightning}
             />
             <Center>
-              <Paper p="xl" radius="md" withBorder>
-                <Text size="lg" ta="center" c="dimmed">
-                  Get ready! The question will start soon...
+              <Paper
+                p="xl"
+                radius="md"
+                style={{
+                  background: 'var(--theme-surface)',
+                  border: '1px solid var(--theme-primary)',
+                  boxShadow: 'var(--theme-glow-primary)',
+                }}
+              >
+                <Text
+                  ta="center"
+                  className="anim-pulse"
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.6rem',
+                    color: 'var(--theme-primary)',
+                    textShadow: 'var(--theme-glow-primary)',
+                  }}
+                >
+                  {t('game.getReady')}
                 </Text>
               </Paper>
             </Center>
@@ -110,26 +166,40 @@ export default function SpectatorGame() {
 
       case GAME_STATES.ANSWERING_PHASE:
         return (
-          <Stack gap="xl">
-            <Group justify="space-between" align="flex-start">
-              <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} />
-              <Paper p="md" radius="md" withBorder>
-                <Stack gap="xs" align="center">
+          <Stack gap="lg" className="fade-slide-in">
+            <Paper
+              p="md"
+              radius="md"
+              style={{
+                background: 'var(--theme-surface)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
+              <Group justify="space-between" align="center" wrap="nowrap">
+                <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} compact />
+                <Stack gap={4} align="center">
                   <Group gap="xs">
-                    <IconUsers size={20} />
-                    <Text fw={600}>
-                      {answeredCount} / {totalPlayersInPhase || connectedPlayers.length}
+                    <IconUsers size={18} style={{ color: 'var(--theme-primary)' }} />
+                    <Text
+                      fw={700}
+                      style={{
+                        fontFamily: 'var(--theme-font-display)',
+                        fontSize: '0.6rem',
+                        color: 'var(--theme-primary)',
+                      }}
+                    >
+                      {answeredCount}/{totalPlayersInPhase || connectedPlayers.length}
                     </Text>
                   </Group>
-                  <Text size="xs" c="dimmed">answered</Text>
                   <Progress
                     value={(answeredCount / Math.max(totalPlayersInPhase || connectedPlayers.length, 1)) * 100}
-                    size="sm"
-                    style={{ width: 100 }}
+                    size="xs"
+                    
+                    style={{ width: 80 }}
                   />
                 </Stack>
-              </Paper>
-            </Group>
+              </Group>
+            </Paper>
 
             <QuestionDisplay
               question={currentQuestion}
@@ -138,23 +208,62 @@ export default function SpectatorGame() {
               isLightning={isLightning}
             />
 
-            {/* Show options without ability to answer */}
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              {currentQuestion?.options?.map((option, index) => (
-                <Paper key={index} p="md" radius="md" withBorder>
-                  <Group gap="sm">
-                    <Badge>{String.fromCharCode(65 + index)}</Badge>
-                    <Text>{option}</Text>
-                  </Group>
-                </Paper>
-              ))}
+            <SimpleGrid cols={{ base: 2, sm: 2 }} spacing="sm">
+              {currentQuestion?.options?.map((option, index) => {
+                const color = OPTION_COLORS[index];
+                return (
+                  <Paper
+                    key={index}
+                    p="md"
+                    radius="md"
+                    style={{
+                      background: 'var(--theme-surface)',
+                      border: `1px solid ${color}`,
+                    }}
+                  >
+                    <Group gap="sm">
+                      <Box
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 6,
+                          border: `1px solid ${color}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text
+                          fw={700}
+                          style={{
+                            fontFamily: 'var(--theme-font-display)',
+                            fontSize: '0.5rem',
+                            color,
+                          }}
+                        >
+                          {String.fromCharCode(65 + index)}
+                        </Text>
+                      </Box>
+                      <Text size="sm" style={{ color: 'var(--theme-text)', flex: 1 }}>{option}</Text>
+                    </Group>
+                  </Paper>
+                );
+              })}
             </SimpleGrid>
 
             <Center>
-              <Badge size="lg" variant="light" color="blue">
+              <Badge
+                size="lg"
+                variant="light"
+                
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.4rem',
+                }}
+              >
                 <Group gap="xs">
-                  <IconEye size={16} />
-                  <Text size="sm">Watching</Text>
+                  <IconEye size={14} />
+                  <Text size="xs">{t('game.watching')}</Text>
                 </Group>
               </Badge>
             </Center>
@@ -163,7 +272,7 @@ export default function SpectatorGame() {
 
       case GAME_STATES.SHOW_RESULTS:
         return (
-          <Stack gap="xl">
+          <Stack gap="xl" className="fade-slide-in">
             <QuestionDisplay
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
@@ -171,7 +280,6 @@ export default function SpectatorGame() {
               isLightning={isLightning}
             />
 
-            {/* Answer distribution */}
             <AnswerDistribution
               distribution={answerDistribution}
               correctAnswerIndex={correctAnswerIndex}
@@ -182,9 +290,13 @@ export default function SpectatorGame() {
             {explanation && (
               <Alert
                 icon={<IconInfoCircle size={16} />}
-                color="blue"
+                
                 variant="light"
-                title="Explanation"
+                title={t('quiz.explanation')}
+                style={{
+                  background: 'rgba(0, 240, 255, 0.05)',
+                  border: '1px solid var(--theme-primary)',
+                }}
               >
                 {explanation}
               </Alert>
@@ -194,14 +306,23 @@ export default function SpectatorGame() {
 
       case GAME_STATES.LEADERBOARD:
         return (
-          <Stack gap="xl">
+          <Stack gap="xl" className="fade-slide-in">
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
               teamMode={teamMode}
               teamLeaderboard={teamLeaderboard}
             />
             <Center>
-              <Text c="dimmed">Waiting for next question...</Text>
+              <Text
+                className="anim-pulse"
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.5rem',
+                  color: 'var(--theme-text-dim)',
+                }}
+              >
+                {t('game.nextLoading')}
+              </Text>
             </Center>
           </Stack>
         );
@@ -210,7 +331,6 @@ export default function SpectatorGame() {
         return (
           <Stack gap="xl">
             <GamePausedBanner />
-
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
               teamMode={teamMode}
@@ -234,8 +354,13 @@ export default function SpectatorGame() {
                 variant="light"
                 leftSection={<IconDoorExit size={20} />}
                 onClick={handleLeave}
+                color="red"
+                style={{
+                  border: '1px solid var(--theme-secondary)',
+                  boxShadow: 'var(--theme-glow-secondary)',
+                }}
               >
-                Leave Game
+                {t('game.leaveGame')}
               </Button>
             </Center>
           </Stack>
@@ -244,7 +369,16 @@ export default function SpectatorGame() {
       default:
         return (
           <Center>
-            <Text c="dimmed">Waiting for the game to continue...</Text>
+            <Text
+              className="anim-pulse"
+              style={{
+                fontFamily: 'var(--theme-font-display)',
+                fontSize: '0.5rem',
+                color: 'var(--theme-text-dim)',
+              }}
+            >
+              {t('game.waitingSignal')}
+            </Text>
           </Center>
         );
     }
@@ -257,28 +391,58 @@ export default function SpectatorGame() {
   return (
     <>
       <ReactionOverlay />
-      <Container size="md" py="xl" pb={80}>
-        <Stack gap="xl">
+      <Container size="md" py="md" pb={80}>
+        <Stack gap="md">
           {/* Header */}
-          <Paper p="sm" radius="md" withBorder>
-            <Group justify="space-between">
-              <Group gap="md">
-                <Badge size="lg" color="blue" variant="light" leftSection={<IconEye size={14} />}>
-                  Spectator: {nickname}
+          <Paper
+            p="sm"
+            radius="md"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-border)',
+            }}
+          >
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap="sm" wrap="nowrap">
+                <Badge
+                  size="md"
+                  color="violet"
+                  variant="light"
+                  leftSection={<IconEye size={12} />}
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.4rem',
+                  }}
+                >
+                  {nickname}
                 </Badge>
-                <Badge size="lg" variant="light">
-                  {connectedPlayers.length} players
+                <Badge
+                  size="md"
+                  variant="light"
+                  
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.4rem',
+                  }}
+                >
+                  {t('game.onlineCount', { count: connectedPlayers.length })}
                 </Badge>
               </Group>
               {gameState !== GAME_STATES.WAITING_PLAYERS && (
-                <Badge size="lg">
-                  {currentQuestionIndex + 1} / {totalQuestions}
+                <Badge
+                  size="md"
+                  color="violet"
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.4rem',
+                  }}
+                >
+                  {t('game.questionOf', { current: currentQuestionIndex + 1, total: totalQuestions })}
                 </Badge>
               )}
             </Group>
           </Paper>
 
-          {/* Main content */}
           {renderContent()}
         </Stack>
       </Container>

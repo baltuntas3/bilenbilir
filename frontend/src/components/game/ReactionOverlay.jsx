@@ -18,26 +18,9 @@ export default function ReactionOverlay() {
       zIndex: 1000,
       overflow: 'hidden',
     }}>
-      <style>{`
-        @keyframes reaction-float {
-          0% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-          70% {
-            opacity: 0.8;
-            transform: translateY(-60vh) scale(1.1);
-          }
-          100% {
-            opacity: 0;
-            transform: translateY(-80vh) scale(0.8);
-          }
-        }
-      `}</style>
       {reactions.map((r) => {
-        // Deterministic horizontal position from id
         const hash = r.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        const left = 10 + (hash % 80); // 10% to 90%
+        const left = 10 + (hash % 80);
 
         return (
           <div
@@ -46,7 +29,7 @@ export default function ReactionOverlay() {
               position: 'absolute',
               bottom: 0,
               left: `${left}%`,
-              animation: `reaction-float ${ANIMATION_DURATION}ms ease-out forwards`,
+              animation: `reaction-float-cyber ${ANIMATION_DURATION}ms ease-out forwards`,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -55,16 +38,18 @@ export default function ReactionOverlay() {
           >
             <span style={{ fontSize: '2rem' }}>{r.reaction}</span>
             <span style={{
-              fontSize: '0.65rem',
-              color: 'var(--mantine-color-dimmed)',
-              backgroundColor: 'var(--mantine-color-body)',
-              padding: '1px 6px',
-              borderRadius: 8,
+              fontSize: '0.55rem',
+              fontFamily: 'var(--theme-font-display)',
+              color: 'var(--theme-primary)',
+              textShadow: 'var(--theme-glow-primary)',
+              backgroundColor: 'var(--theme-surface)',
+              padding: '2px 6px',
+              borderRadius: 6,
+              border: '1px solid var(--theme-border)',
               whiteSpace: 'nowrap',
               maxWidth: 80,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              opacity: 0.8,
             }}>
               {r.nickname}
             </span>

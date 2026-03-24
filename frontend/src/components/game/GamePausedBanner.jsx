@@ -1,16 +1,50 @@
-import { Center, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
+import { Center, Paper, Stack, Text, Box } from '@mantine/core';
 import { IconPlayerPause } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 
-export default function GamePausedBanner({ message = 'The host has paused the game. Please wait...' }) {
+export default function GamePausedBanner({ message }) {
+  const { t } = useTranslation();
+
   return (
     <Center>
-      <Paper p="xl" radius="md" withBorder bg="yellow.0">
+      <Paper
+        p="xl"
+        radius="md"
+        className="anim-pulse"
+        style={{
+          background: 'var(--theme-surface)',
+          border: '1px solid var(--theme-warning)',
+          boxShadow: 'var(--theme-glow-warning)',
+        }}
+      >
         <Stack align="center" gap="md">
-          <ThemeIcon size={60} radius="xl" color="yellow" variant="light">
-            <IconPlayerPause size={32} />
-          </ThemeIcon>
-          <Text size="xl" fw={600}>Game Paused</Text>
-          <Text c="dimmed">{message}</Text>
+          <Box
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '2px solid var(--theme-warning)',
+              boxShadow: 'var(--theme-glow-warning)',
+              background: 'rgba(255, 230, 0, 0.05)',
+            }}
+          >
+            <IconPlayerPause size={32} style={{ color: 'var(--theme-warning)' }} />
+          </Box>
+          <Text
+            fw={700}
+            style={{
+              fontFamily: 'var(--theme-font-display)',
+              fontSize: '0.7rem',
+              color: 'var(--theme-warning)',
+              textShadow: 'var(--theme-glow-warning)',
+            }}
+          >
+            {t('game.gamePaused')}
+          </Text>
+          <Text style={{ color: 'var(--theme-text-dim)' }}>{message || t('game.gamePausedMsg')}</Text>
         </Stack>
       </Paper>
     </Center>

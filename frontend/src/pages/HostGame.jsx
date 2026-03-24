@@ -7,12 +7,12 @@ import {
   Button,
   Paper,
   Text,
-  Title,
   Badge,
   Progress,
   Center,
   SimpleGrid,
   Alert,
+  Box,
 } from '@mantine/core';
 import {
   IconPlayerPlay,
@@ -23,6 +23,7 @@ import {
   IconUsers,
   IconPlayerPause,
 } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import { useGameAction } from '../hooks/useGameAction';
 import Timer from '../components/game/Timer';
@@ -33,8 +34,11 @@ import ReactionOverlay from '../components/game/ReactionOverlay';
 import AnswerDistribution from '../components/game/AnswerDistribution';
 import GamePausedBanner from '../components/game/GamePausedBanner';
 
+const OPTION_COLORS = ['var(--theme-primary)', 'var(--theme-secondary)', 'var(--theme-success)', 'var(--theme-warning)', 'var(--theme-accent)', 'var(--theme-primary)'];
+
 export default function HostGame() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const {
     roomPin,
     isHost,
@@ -65,7 +69,6 @@ export default function HostGame() {
     isLightning,
   } = useGame();
 
-  // Redirect if not host
   useEffect(() => {
     if (!isHost || !roomPin) {
       navigate('/');
@@ -82,13 +85,11 @@ export default function HostGame() {
 
   const connectedPlayers = players.filter((p) => !p.disconnected);
 
-
-  // Render based on game state
   const renderContent = () => {
     switch (gameState) {
       case GAME_STATES.QUESTION_INTRO:
         return (
-          <Stack gap="xl">
+          <Stack gap="xl" className="fade-slide-in">
             <QuestionDisplay
               question={currentQuestion}
               questionIndex={currentQuestionIndex}
@@ -101,8 +102,14 @@ export default function HostGame() {
                 size="xl"
                 leftSection={<IconPlayerPlay size={24} />}
                 onClick={handleStartAnswering}
+                
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.7rem',
+                  boxShadow: 'var(--theme-glow-primary)',
+                }}
               >
-                Start Timer
+                {t('game.startTimer')}
               </Button>
             </Center>
           </Stack>
@@ -110,26 +117,40 @@ export default function HostGame() {
 
       case GAME_STATES.ANSWERING_PHASE:
         return (
-          <Stack gap="xl">
-            <Group justify="space-between" align="flex-start">
-              <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} />
-              <Paper p="md" radius="md" withBorder>
-                <Stack gap="xs" align="center">
+          <Stack gap="lg" className="fade-slide-in">
+            <Paper
+              p="md"
+              radius="md"
+              style={{
+                background: 'var(--theme-surface)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
+              <Group justify="space-between" align="center" wrap="nowrap">
+                <Timer remaining={remainingTime} total={timeLimit} isLightning={isLightning} compact />
+                <Stack gap={4} align="center">
                   <Group gap="xs">
-                    <IconUsers size={20} />
-                    <Text fw={600}>
-                      {answeredCount} / {totalPlayersInPhase || connectedPlayers.length}
+                    <IconUsers size={18} style={{ color: 'var(--theme-primary)' }} />
+                    <Text
+                      fw={700}
+                      style={{
+                        fontFamily: 'var(--theme-font-display)',
+                        fontSize: '0.6rem',
+                        color: 'var(--theme-primary)',
+                      }}
+                    >
+                      {answeredCount}/{totalPlayersInPhase || connectedPlayers.length}
                     </Text>
                   </Group>
-                  <Text size="xs" c="dimmed">answered</Text>
                   <Progress
                     value={(answeredCount / Math.max(totalPlayersInPhase || connectedPlayers.length, 1)) * 100}
-                    size="sm"
-                    style={{ width: 100 }}
+                    size="xs"
+                    
+                    style={{ width: 80 }}
                   />
                 </Stack>
-              </Paper>
-            </Group>
+              </Group>
+            </Paper>
 
             <QuestionDisplay
               question={currentQuestion}
@@ -138,22 +159,50 @@ export default function HostGame() {
               showImage={false}
             />
 
-            {/* Show options for host reference */}
-            <SimpleGrid cols={2} spacing="md">
-              {currentQuestion?.options?.map((option, index) => (
-                <Paper
-                  key={index}
-                  p="md"
-                  radius="md"
-                  withBorder
-                  bg={index === currentQuestion?.correctAnswerIndex ? 'green.1' : undefined}
-                >
-                  <Group gap="sm">
-                    <Badge>{String.fromCharCode(65 + index)}</Badge>
-                    <Text>{option}</Text>
-                  </Group>
-                </Paper>
-              ))}
+            <SimpleGrid cols={2} spacing="sm">
+              {currentQuestion?.options?.map((option, index) => {
+                const isCorrect = index === currentQuestion?.correctAnswerIndex;
+                const color = OPTION_COLORS[index];
+
+                return (
+                  <Paper
+                    key={index}
+                    p="md"
+                    radius="md"
+                    style={{
+                      background: isCorrect ? 'rgba(57, 255, 20, 0.08)' : 'var(--theme-surface)',
+                      border: `1px solid ${isCorrect ? 'var(--theme-success)' : color}`,
+                      boxShadow: isCorrect ? 'var(--theme-glow-success)' : 'none',
+                    }}
+                  >
+                    <Group gap="sm">
+                      <Box
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 6,
+                          border: `1px solid ${isCorrect ? 'var(--theme-success)' : color}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text
+                          fw={700}
+                          style={{
+                            fontFamily: 'var(--theme-font-display)',
+                            fontSize: '0.5rem',
+                            color: isCorrect ? 'var(--theme-success)' : color,
+                          }}
+                        >
+                          {String.fromCharCode(65 + index)}
+                        </Text>
+                      </Box>
+                      <Text size="sm" style={{ color: 'var(--theme-text)' }}>{option}</Text>
+                    </Group>
+                  </Paper>
+                );
+              })}
             </SimpleGrid>
 
             <Center>
@@ -161,8 +210,10 @@ export default function HostGame() {
                 variant="light"
                 leftSection={<IconPlayerSkipForward size={20} />}
                 onClick={handleEndAnswering}
+                color="red"
+                style={{ border: '1px solid var(--theme-secondary)' }}
               >
-                End Early
+                {t('game.endEarly')}
               </Button>
             </Center>
           </Stack>
@@ -170,8 +221,14 @@ export default function HostGame() {
 
       case GAME_STATES.SHOW_RESULTS:
         return (
-          <Stack gap="xl">
-            <Title order={2} ta="center">Results</Title>
+          <Stack gap="xl" className="fade-slide-in">
+            <Text
+              ta="center"
+              fw={700}
+              className="theme-text-primary display-font display-font-sm"
+            >
+              {t('game.results')}
+            </Text>
 
             <QuestionDisplay
               question={currentQuestion}
@@ -180,7 +237,6 @@ export default function HostGame() {
               showImage={false}
             />
 
-            {/* Answer distribution */}
             <AnswerDistribution
               distribution={answerDistribution}
               correctAnswerIndex={correctAnswerIndex}
@@ -191,9 +247,13 @@ export default function HostGame() {
             {explanation && (
               <Alert
                 icon={<IconInfoCircle size={16} />}
-                color="blue"
+                
                 variant="light"
-                title="Explanation"
+                title={t('quiz.explanation')}
+                style={{
+                  background: 'rgba(0, 240, 255, 0.05)',
+                  border: '1px solid var(--theme-primary)',
+                }}
               >
                 {explanation}
               </Alert>
@@ -204,8 +264,14 @@ export default function HostGame() {
                 size="lg"
                 leftSection={<IconChartBar size={20} />}
                 onClick={handleShowLeaderboard}
+                
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.6rem',
+                  boxShadow: 'var(--theme-glow-primary)',
+                }}
               >
-                Show Leaderboard
+                {t('game.showLeaderboard')}
               </Button>
             </Center>
           </Stack>
@@ -213,8 +279,14 @@ export default function HostGame() {
 
       case GAME_STATES.LEADERBOARD:
         return (
-          <Stack gap="xl">
-            <Title order={2} ta="center">Leaderboard</Title>
+          <Stack gap="xl" className="fade-slide-in">
+            <Text
+              ta="center"
+              fw={700}
+              className="theme-text-warning display-font display-font-sm"
+            >
+              {t('game.leaderboard')}
+            </Text>
 
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
@@ -228,8 +300,9 @@ export default function HostGame() {
                 color="yellow"
                 leftSection={<IconPlayerPause size={20} />}
                 onClick={handlePauseGame}
+                style={{ border: '1px solid var(--theme-warning)' }}
               >
-                Pause Game
+                {t('game.pause')}
               </Button>
               <Button
                 size="lg"
@@ -239,8 +312,14 @@ export default function HostGame() {
                     : <IconPlayerSkipForward size={20} />
                 }
                 onClick={handleNextQuestion}
+                
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.6rem',
+                  boxShadow: 'var(--theme-glow-primary)',
+                }}
               >
-                {currentQuestionIndex + 1 >= totalQuestions ? 'Show Final Results' : 'Next Question'}
+                {currentQuestionIndex + 1 >= totalQuestions ? t('game.finalResults') : t('game.nextQuestion')}
               </Button>
             </Group>
           </Stack>
@@ -249,7 +328,7 @@ export default function HostGame() {
       case GAME_STATES.PAUSED:
         return (
           <Stack gap="xl">
-            <GamePausedBanner message="The game is currently paused. Players are waiting." />
+            <GamePausedBanner message={t('game.gamePausedHost')} />
 
             <Leaderboard
               players={leaderboard.length > 0 ? leaderboard : players}
@@ -263,8 +342,13 @@ export default function HostGame() {
                 color="green"
                 leftSection={<IconPlayerPlay size={20} />}
                 onClick={handleResumeGame}
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.6rem',
+                  boxShadow: 'var(--theme-glow-success)',
+                }}
               >
-                Resume Game
+                {t('game.resume')}
               </Button>
             </Center>
           </Stack>
@@ -284,8 +368,14 @@ export default function HostGame() {
                 size="lg"
                 variant="light"
                 onClick={handleEndGame}
+                color="red"
+                style={{
+                  border: '1px solid var(--theme-secondary)',
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.6rem',
+                }}
               >
-                End Game
+                {t('game.endGame')}
               </Button>
             </Center>
           </Stack>
@@ -294,7 +384,7 @@ export default function HostGame() {
       default:
         return (
           <Center>
-            <Text c="dimmed">Unknown game state: {gameState}</Text>
+            <Text style={{ color: 'var(--theme-text-dim)' }}>Unknown state: {gameState}</Text>
           </Center>
         );
     }
@@ -303,24 +393,54 @@ export default function HostGame() {
   return (
     <>
       <ReactionOverlay />
-      <Container size="md" py="xl">
-        <Stack gap="xl">
+      <Container size="md" py="md">
+        <Stack gap="md">
           {/* Header */}
-          <Paper p="sm" radius="md" withBorder>
-            <Group justify="space-between">
-              <Group gap="md">
-                <Badge size="lg">PIN: {roomPin}</Badge>
-                <Badge size="lg" variant="light" color="blue">
-                  {connectedPlayers.length} players
+          <Paper
+            p="sm"
+            radius="md"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-border)',
+            }}
+          >
+            <Group justify="space-between" wrap="nowrap">
+              <Group gap="sm" wrap="nowrap">
+                <Badge
+                  size="lg"
+                  
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.45rem',
+                  }}
+                >
+                  PIN: {roomPin}
+                </Badge>
+                <Badge
+                  size="md"
+                  variant="light"
+                  
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.4rem',
+                  }}
+                >
+                  {t('game.onlineCount', { count: connectedPlayers.length })}
                 </Badge>
               </Group>
-              <Badge size="lg" variant="light">
-                Question {currentQuestionIndex + 1} / {totalQuestions}
+              <Badge
+                size="md"
+                color="violet"
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.4rem',
+                }}
+              >
+                {t('game.questionOf', { current: currentQuestionIndex + 1, total: totalQuestions })}
               </Badge>
             </Group>
           </Paper>
 
-          {/* Main content */}
           {renderContent()}
         </Stack>
       </Container>

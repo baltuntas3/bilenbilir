@@ -312,7 +312,10 @@ export function RoomProvider({ children }) {
   const getMyRoom = useCallback(async () => {
     if (!isAuthenticated) return null;
     await connectSocket();
-    try { return await emitWithResponse('get_my_room', {}, 'my_room', 5000); }
+    try {
+      const result = await emitWithResponse('get_my_room', {}, 'my_room', 5000);
+      return result?.pin ? result : null;
+    }
     catch { return null; }
   }, [isAuthenticated, connectSocket, emitWithResponse]);
 

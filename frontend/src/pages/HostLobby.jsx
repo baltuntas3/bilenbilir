@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Container,
@@ -24,6 +25,7 @@ import {
   Select,
   Divider,
   ColorSwatch,
+  Box,
 } from '@mantine/core';
 import {
   IconCopy,
@@ -48,6 +50,7 @@ import PlayerAvatar from '../components/game/PlayerAvatar';
 import ShareButton from '../components/game/ShareButton';
 
 export default function HostLobby() {
+  const { t } = useTranslation();
   const { quizId } = useParams();
   const navigate = useNavigate();
   const {
@@ -64,7 +67,6 @@ export default function HostLobby() {
     startGame,
     kickPlayer,
     banPlayer,
-    // Team mode
     teams,
     teamMode,
     enableTeamMode,
@@ -72,7 +74,6 @@ export default function HostLobby() {
     addTeam,
     removeTeam,
     assignTeam,
-    // Lightning round
     lightningRound,
     setLightningRound,
   } = useGame();
@@ -87,7 +88,6 @@ export default function HostLobby() {
   const [lightningEnabled, setLightningEnabled] = useState(lightningRound?.enabled || false);
   const [lightningCount, setLightningCount] = useState(lightningRound?.questionCount || 3);
 
-  // Sync questionCount default when totalQuestions loads
   useEffect(() => {
     if (totalQuestions > 0 && questionCount === 0) {
       setQuestionCount(totalQuestions);
@@ -100,7 +100,6 @@ export default function HostLobby() {
       return;
     }
 
-    // If already in a room, don't create a new one
     if (roomPin && isHost) {
       setLoading(false);
       return;
@@ -108,7 +107,6 @@ export default function HostLobby() {
 
     const initRoom = async () => {
       try {
-        // First check if there's an existing room
         const existing = await getMyRoom();
         if (existing) {
           setExistingRoom(existing);
@@ -116,11 +114,9 @@ export default function HostLobby() {
           return;
         }
 
-        // No existing room, create new one
         await createRoom(quizId);
         setLoading(false);
       } catch (error) {
-        // Check if error is about existing room
         if (error.message?.includes('already have an active room')) {
           const existing = await getMyRoom();
           if (existing) {
@@ -137,7 +133,6 @@ export default function HostLobby() {
     initRoom();
   }, [quizId, roomPin, isHost, createRoom, getMyRoom, navigate]);
 
-  // Redirect to game when game starts
   useEffect(() => {
     if (gameState === GAME_STATES.QUESTION_INTRO) {
       navigate('/host');
@@ -150,8 +145,6 @@ export default function HostLobby() {
       await forceCloseExistingRoom();
       setExistingRoom(null);
       showToast.success('Previous room closed');
-
-      // Now create new room
       await createRoom(quizId);
       setLoading(false);
     } catch (error) {
@@ -162,9 +155,7 @@ export default function HostLobby() {
   };
 
   const handleRejoinExisting = () => {
-    // Navigate to the existing room's quiz host page
     navigate(`/host/${existingRoom.quizId}`);
-    // Force reload to reconnect
     window.location.reload();
   };
 
@@ -245,7 +236,7 @@ export default function HostLobby() {
 
   const handleAddTeam = async () => {
     if (!newTeamName.trim()) {
-      showToast.error('Takım adı gerekli');
+      showToast.error(t('team.teamNameRequired'));
       return;
     }
     try {
@@ -272,43 +263,70 @@ export default function HostLobby() {
     }
   };
 
-  // Show existing room options
+  // Existing room dialog
   if (existingRoom) {
     return (
-      <Container size="sm" py="xl">
+      <Container size="sm" py="xl" className="fade-slide-in">
         <Stack gap="xl">
           <Alert
             icon={<IconAlertCircle size={24} />}
-            title="You have an active room"
+            title={t('game.activeRoomDetected')}
             color="yellow"
+            style={{
+              background: 'rgba(255, 230, 0, 0.05)',
+              border: '1px solid var(--theme-warning)',
+            }}
           >
-            You already have an active game room. You can either rejoin it or close it to create a new one.
+            {t('game.activeRoomMsg')}
           </Alert>
 
-          <Paper shadow="md" p="xl" radius="md" withBorder>
+          <Paper
+            p="xl"
+            radius="md"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-border)',
+            }}
+          >
             <Stack gap="md">
               <Group justify="space-between">
-                <Text fw={500}>Existing Room</Text>
-                <Badge size="lg">PIN: {existingRoom.pin}</Badge>
+                <Text fw={500} style={{ color: 'var(--theme-text)' }}>{t('game.existingRoom')}</Text>
+                <Badge
+                  size="lg"
+                  
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.5rem',
+                  }}
+                >
+                  PIN: {existingRoom.pin}
+                </Badge>
               </Group>
 
               <SimpleGrid cols={2} spacing="xs">
                 <div>
-                  <Text size="sm" c="dimmed">State</Text>
-                  <Text fw={500}>{existingRoom.state}</Text>
+                  <Text size="sm" style={{ color: 'var(--theme-text-dim)' }}>{t('game.state')}</Text>
+                  <Text fw={500} style={{ color: 'var(--theme-text)' }}>{existingRoom.state}</Text>
                 </div>
                 <div>
-                  <Text size="sm" c="dimmed">Players</Text>
-                  <Text fw={500}>{existingRoom.connectedPlayerCount} / {existingRoom.playerCount}</Text>
+                  <Text size="sm" style={{ color: 'var(--theme-text-dim)' }}>{t('game.players')}</Text>
+                  <Text fw={500} style={{ color: 'var(--theme-text)' }}>
+                    {existingRoom.connectedPlayerCount} / {existingRoom.playerCount}
+                  </Text>
                 </div>
                 <div>
-                  <Text size="sm" c="dimmed">Question</Text>
-                  <Text fw={500}>{existingRoom.currentQuestionIndex + 1}</Text>
+                  <Text size="sm" style={{ color: 'var(--theme-text-dim)' }}>{t('game.question')}</Text>
+                  <Text fw={500} style={{ color: 'var(--theme-text)' }}>
+                    {existingRoom.currentQuestionIndex + 1}
+                  </Text>
                 </div>
                 <div>
-                  <Text size="sm" c="dimmed">Host Status</Text>
-                  <Badge color={existingRoom.isHostDisconnected ? 'red' : 'green'} size="sm">
-                    {existingRoom.isHostDisconnected ? 'Disconnected' : 'Connected'}
+                  <Text size="sm" style={{ color: 'var(--theme-text-dim)' }}>{t('game.hostStatus')}</Text>
+                  <Badge
+                    color={existingRoom.isHostDisconnected ? 'red' : 'green'}
+                    size="sm"
+                  >
+                    {existingRoom.isHostDisconnected ? t('game.disconnected') : t('game.connected')}
                   </Badge>
                 </div>
               </SimpleGrid>
@@ -322,14 +340,17 @@ export default function HostLobby() {
               leftSection={<IconDoorExit size={18} />}
               onClick={handleCloseExistingAndCreate}
               loading={closingExisting}
+              style={{ border: '1px solid var(--theme-secondary)' }}
             >
-              Close & Create New
+              {t('game.closeAndCreate')}
             </Button>
             <Button
               leftSection={<IconRefresh size={18} />}
               onClick={handleRejoinExisting}
+              
+              style={{ boxShadow: 'var(--theme-glow-primary)' }}
             >
-              Rejoin Existing Room
+              {t('game.rejoinExisting')}
             </Button>
           </Group>
         </Stack>
@@ -341,30 +362,65 @@ export default function HostLobby() {
     return (
       <Center h="50vh">
         <Stack align="center" gap="md">
-          <Loader size="lg" />
-          <Text c="dimmed">Creating room...</Text>
+          <Loader size="lg"  />
+          <Text
+            className="anim-pulse"
+            style={{
+              fontFamily: 'var(--theme-font-display)',
+              fontSize: '0.6rem',
+              color: 'var(--theme-primary)',
+              textShadow: 'var(--theme-glow-primary)',
+            }}
+          >
+            {t('game.creatingArena')}
+          </Text>
         </Stack>
       </Center>
     );
   }
 
   return (
-    <Container size="md" py="xl">
-      <Stack gap="xl">
+    <Container size="md" py="xl" className="fade-slide-in">
+      <Stack gap="lg">
         {/* PIN Display */}
-        <Paper shadow="md" p="xl" radius="md" withBorder>
+        <Paper
+          p="xl"
+          radius="md"
+          style={{
+            background: 'var(--theme-surface)',
+            border: '2px solid var(--theme-primary)',
+            boxShadow: 'var(--theme-glow-primary)',
+            textAlign: 'center',
+          }}
+        >
           <Stack align="center" gap="md">
-            <Text c="dimmed" size="sm">Game PIN</Text>
-            <Group gap="xs" align="center">
-              <Title order={1} style={{ fontSize: '3rem', letterSpacing: '0.5rem' }}>
+            <Text
+              style={{
+                fontFamily: 'var(--theme-font-display)',
+                fontSize: '0.6rem',
+                color: 'var(--theme-text-dim)',
+              }}
+            >
+              {t('game.pin')}
+            </Text>
+            <Group gap="xs" align="center" justify="center">
+              <Title
+                order={1}
+                className="theme-text-primary anim-flicker"
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: 'clamp(1.5rem, 6vw, 3rem)',
+                  letterSpacing: '0.5rem',
+                }}
+              >
                 {roomPin}
               </Title>
               <CopyButton value={roomPin} timeout={2000}>
                 {({ copied, copy }) => (
-                  <Tooltip label={copied ? 'Copied!' : 'Copy PIN'}>
+                  <Tooltip label={copied ? t('common.copied') : t('common.copy')}>
                     <ActionIcon
                       variant="subtle"
-                      color={copied ? 'teal' : 'gray'}
+                      color={copied ? 'green' : 'cyan'}
                       onClick={copy}
                       size="lg"
                     >
@@ -374,8 +430,8 @@ export default function HostLobby() {
                 )}
               </CopyButton>
             </Group>
-            <Text c="dimmed" size="sm">
-              Players join at <strong>bilenbilir.com/join</strong>
+            <Text size="sm" style={{ color: 'var(--theme-text-dim)' }}>
+              Join at <strong style={{ color: 'var(--theme-primary)' }}>bilenbilir.com/join</strong>
             </Text>
             <ShareButton pin={roomPin} />
           </Stack>
@@ -383,77 +439,132 @@ export default function HostLobby() {
 
         {/* Quiz Info */}
         {quiz && (
-          <Paper p="md" radius="md" withBorder>
+          <Paper
+            p="md"
+            radius="md"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-border)',
+            }}
+          >
             <Group justify="space-between">
               <div>
-                <Text fw={500}>{quiz.title}</Text>
-                <Text size="sm" c="dimmed">
-                  {quiz.questionCount || totalQuestions || 0} questions
+                <Text fw={500} style={{ color: 'var(--theme-text)' }}>{quiz.title}</Text>
+                <Text size="sm" style={{ color: 'var(--theme-text-dim)' }}>
+                  {t('quiz.questionCount', { count: quiz.questionCount || totalQuestions || 0 })}
                 </Text>
               </div>
-              <Badge size="lg" variant="light">
-                {players.length} players
+              <Badge
+                size="lg"
+                variant="light"
+                
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.5rem',
+                  boxShadow: 'var(--theme-glow-primary)',
+                }}
+              >
+                {t('game.onlineCount', { count: players.length })}
               </Badge>
             </Group>
           </Paper>
         )}
 
         {/* Team Mode Toggle */}
-        <Paper p="md" radius="md" withBorder>
+        <Paper
+          p="md"
+          radius="md"
+          style={{
+            background: 'var(--theme-surface)',
+            border: '1px solid var(--theme-border)',
+          }}
+        >
           <Group justify="space-between">
             <Group gap="xs">
-              <IconUsersGroup size={20} />
-              <Text fw={500}>Takım Modu</Text>
+              <IconUsersGroup size={20} style={{ color: 'var(--theme-accent)' }} />
+              <Text fw={500} style={{ color: 'var(--theme-text)' }}>{t('team.teamMode')}</Text>
             </Group>
             <Switch
               checked={teamMode}
               onChange={(e) => handleToggleTeamMode(e.currentTarget.checked)}
-              label={teamMode ? 'Aktif' : 'Kapalı'}
+              label={teamMode ? t('common.active') : t('common.inactive')}
+              color="violet"
             />
           </Group>
         </Paper>
 
-        {/* Team Management (only visible when team mode is on) */}
+        {/* Team Management */}
         {teamMode && (
-          <Paper p="md" radius="md" withBorder>
+          <Paper
+            p="md"
+            radius="md"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-accent)',
+              boxShadow: 'var(--theme-glow-accent)',
+            }}
+          >
             <Stack gap="md">
-              <Title order={4}>Takımlar ({teams.length})</Title>
+              <Text
+                fw={700}
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.6rem',
+                  color: 'var(--theme-accent)',
+                }}
+              >
+                {t('team.teamsCount', { count: teams.length })}
+              </Text>
 
-              {/* Add Team */}
               <Group gap="sm">
                 <TextInput
-                  placeholder="Takım adı"
+                  placeholder={t('team.teamNamePlaceholder')}
                   value={newTeamName}
                   onChange={(e) => setNewTeamName(e.currentTarget.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddTeam()}
                   style={{ flex: 1 }}
                   maxLength={20}
+                  styles={{
+                    input: {
+                      background: 'var(--theme-bg)',
+                      border: '1px solid var(--theme-border)',
+                      color: 'var(--theme-text)',
+                    },
+                  }}
                 />
                 <Button
                   leftSection={<IconPlus size={16} />}
                   onClick={handleAddTeam}
                   disabled={!newTeamName.trim() || teams.length >= 8}
                   variant="light"
+                  color="violet"
                 >
-                  Ekle
+                  {t('team.addTeam')}
                 </Button>
               </Group>
 
-              {/* Team List */}
               {teams.length === 0 ? (
-                <Text c="dimmed" ta="center" size="sm">
-                  Henüz takım eklenmedi
+                <Text ta="center" size="sm" style={{ color: 'var(--theme-text-dim)' }}>
+                  {t('team.noTeams')}
                 </Text>
               ) : (
                 <Stack gap="xs">
                   {teams.map((team) => (
-                    <Paper key={team.id} p="sm" radius="md" withBorder>
+                    <Paper
+                      key={team.id}
+                      p="sm"
+                      radius="md"
+                      style={{
+                        background: 'var(--theme-bg)',
+                        border: '1px solid var(--theme-border)',
+                      }}
+                    >
                       <Group justify="space-between" wrap="nowrap">
                         <Group gap="xs" wrap="nowrap">
                           <ColorSwatch color={team.color} size={18} />
-                          <Text fw={500}>{team.name}</Text>
-                          <Badge variant="light" size="sm">
-                            {team.playerCount} oyuncu
+                          <Text fw={500} style={{ color: 'var(--theme-text)' }}>{team.name}</Text>
+                          <Badge variant="light" size="sm" color="violet">
+                            {t('team.players_other', { count: team.playerCount })}
                           </Badge>
                         </Group>
                         <ActionIcon
@@ -473,29 +584,46 @@ export default function HostLobby() {
           </Paper>
         )}
 
-        {/* Lightning Round Toggle */}
-        <Paper p="md" radius="md" withBorder>
+        {/* Lightning Round */}
+        <Paper
+          p="md"
+          radius="md"
+          style={{
+            background: 'var(--theme-surface)',
+            border: '1px solid var(--theme-border)',
+          }}
+        >
           <Stack gap="sm">
             <Group justify="space-between">
               <Group gap="xs">
-                <IconBolt size={20} />
-                <Text fw={500}>Yıldırım Turu</Text>
+                <IconBolt size={20} style={{ color: 'var(--theme-warning)' }} />
+                <Text fw={500} style={{ color: 'var(--theme-text)' }}>{t('game.lightningRound')}</Text>
               </Group>
               <Switch
                 checked={lightningEnabled}
                 onChange={(e) => handleToggleLightning(e.currentTarget.checked)}
-                label={lightningEnabled ? 'Aktif' : 'Kapalı'}
+                label={lightningEnabled ? t('common.active') : t('common.inactive')}
+                color="yellow"
               />
             </Group>
             {lightningEnabled && (
               <NumberInput
-                label="Yıldırım soru sayısı"
-                description="Son sorular yarı sürede!"
+                label={t('game.lightningQuestionCount')}
+                description={t('game.lightningRoundDesc')}
                 value={lightningCount}
                 onChange={handleLightningCountChange}
                 min={1}
                 max={10}
                 leftSection={<IconBolt size={18} />}
+                styles={{
+                  input: {
+                    background: 'var(--theme-bg)',
+                    border: '1px solid var(--theme-border)',
+                    color: 'var(--theme-text)',
+                  },
+                  label: { color: 'var(--theme-text)' },
+                  description: { color: 'var(--theme-text-dim)' },
+                }}
               />
             )}
           </Stack>
@@ -503,31 +631,73 @@ export default function HostLobby() {
 
         {/* Players List */}
         <Stack gap="sm">
-          <Title order={3}>Oyuncular ({players.length})</Title>
+          <Text
+            fw={700}
+            style={{
+              fontFamily: 'var(--theme-font-display)',
+              fontSize: '0.7rem',
+              color: 'var(--theme-primary)',
+              textShadow: 'var(--theme-glow-primary)',
+            }}
+          >
+            {t('game.players')} ({players.length})
+          </Text>
 
           {players.length === 0 ? (
-            <Paper p="xl" radius="md" withBorder>
+            <Paper
+              p="xl"
+              radius="md"
+              style={{
+                background: 'var(--theme-surface)',
+                border: '1px solid var(--theme-border)',
+              }}
+            >
               <Center>
                 <Stack align="center" gap="xs">
-                  <IconUser size={48} stroke={1} color="gray" />
-                  <Text c="dimmed">Oyuncuların katılması bekleniyor...</Text>
+                  <IconUser size={48} stroke={1} style={{ color: 'var(--theme-text-dim)' }} />
+                  <Text
+                    className="anim-pulse"
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '0.5rem',
+                      color: 'var(--theme-text-dim)',
+                    }}
+                  >
+                    {t('game.waitingPlayers')}
+                  </Text>
                 </Stack>
               </Center>
             </Paper>
           ) : (
             <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="sm">
-              {players.map((player) => {
+              {players.map((player, idx) => {
                 const playerTeam = teamMode
                   ? teams.find((t) => t.playerIds?.includes(player.id))
                   : null;
 
                 return (
-                  <Card key={player.id} padding="sm" radius="md" withBorder>
+                  <Card
+                    key={player.id}
+                    padding="sm"
+                    radius="md"
+                    className={`slide-up slide-up-d${Math.min(idx + 1, 4)}`}
+                    style={{
+                      background: 'var(--theme-surface)',
+                      border: '1px solid var(--theme-border)',
+                      transition: 'border-color 0.3s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--theme-primary)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--theme-border)';
+                    }}
+                  >
                     <Stack gap={4}>
                       <Group justify="space-between" wrap="nowrap">
                         <Group gap="xs" wrap="nowrap" style={{ overflow: 'hidden' }}>
                           <PlayerAvatar nickname={player.nickname} size="sm" />
-                          <Text truncate fw={500}>
+                          <Text truncate fw={500} size="sm" style={{ color: 'var(--theme-text)' }}>
                             {player.nickname}
                           </Text>
                         </Group>
@@ -537,29 +707,33 @@ export default function HostLobby() {
                               <IconDotsVertical size={16} />
                             </ActionIcon>
                           </Menu.Target>
-                          <Menu.Dropdown>
+                          <Menu.Dropdown
+                            style={{
+                              background: 'var(--theme-surface)',
+                              border: '1px solid var(--theme-border)',
+                            }}
+                          >
                             <Menu.Item
                               leftSection={<IconUserMinus size={16} />}
                               onClick={() => handleKickPlayer(player.id, player.nickname)}
                             >
-                              Kick
+                              {t('game.kick')}
                             </Menu.Item>
                             <Menu.Item
                               leftSection={<IconBan size={16} />}
                               color="red"
                               onClick={() => handleBanPlayer(player.id, player.nickname)}
                             >
-                              Ban
+                              {t('game.ban')}
                             </Menu.Item>
                           </Menu.Dropdown>
                         </Menu>
                       </Group>
 
-                      {/* Team assignment dropdown */}
                       {teamMode && teams.length > 0 && (
                         <Select
                           size="xs"
-                          placeholder="Takım seç"
+                          placeholder={t('team.selectTeam')}
                           data={teams.map((t) => ({
                             value: t.id,
                             label: t.name,
@@ -569,6 +743,14 @@ export default function HostLobby() {
                             if (teamId) handleAssignTeam(player.id, teamId);
                           }}
                           clearable={false}
+                          styles={{
+                            input: {
+                              background: 'var(--theme-bg)',
+                              border: '1px solid var(--theme-border)',
+                              color: 'var(--theme-text)',
+                              fontSize: '0.75rem',
+                            },
+                          }}
                         />
                       )}
                     </Stack>
@@ -581,22 +763,38 @@ export default function HostLobby() {
 
         {/* Random Question Selection */}
         {totalQuestions > 1 && (
-          <Paper p="md" radius="md" withBorder>
+          <Paper
+            p="md"
+            radius="md"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-border)',
+            }}
+          >
             <Stack gap="sm">
               <Switch
-                label="Rastgele soru secimi"
+                label={t('game.randomQuestions')}
                 checked={randomEnabled}
                 onChange={(e) => setRandomEnabled(e.currentTarget.checked)}
                 size="md"
+                
               />
               {randomEnabled && (
                 <NumberInput
-                  label="Soru Sayisi"
+                  label={t('game.questionCountLabel')}
                   value={questionCount}
                   onChange={(val) => setQuestionCount(val || 1)}
                   min={1}
                   max={totalQuestions}
                   leftSection={<IconArrowsShuffle size={18} />}
+                  styles={{
+                    input: {
+                      background: 'var(--theme-bg)',
+                      border: '1px solid var(--theme-border)',
+                      color: 'var(--theme-text)',
+                    },
+                    label: { color: 'var(--theme-text)' },
+                  }}
                 />
               )}
             </Stack>
@@ -610,8 +808,9 @@ export default function HostLobby() {
             color="red"
             leftSection={<IconDoorExit size={18} />}
             onClick={handleCloseRoom}
+            style={{ border: '1px solid var(--theme-secondary)' }}
           >
-            Close Room
+            {t('game.closeRoom')}
           </Button>
           <Button
             size="lg"
@@ -619,8 +818,15 @@ export default function HostLobby() {
             onClick={handleStartGame}
             loading={starting}
             disabled={players.length === 0}
+            
+            style={{
+              boxShadow: players.length > 0 ? 'var(--theme-glow-primary)' : 'none',
+              fontFamily: 'var(--theme-font-display)',
+              fontSize: '0.7rem',
+              transition: 'box-shadow 0.3s',
+            }}
           >
-            Start Game
+            {t('game.startGame')}
           </Button>
         </Group>
       </Stack>

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Button } from '@mantine/core';
 import { IconQrcode } from '@tabler/icons-react';
+import { useTranslation } from 'react-i18next';
 import ShareQRCode from './ShareQRCode';
 
 export default function ShareButton({ pin, variant = 'light', size = 'md' }) {
   const [opened, setOpened] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <>
@@ -14,7 +16,7 @@ export default function ShareButton({ pin, variant = 'light', size = 'md' }) {
         size={size}
         onClick={() => setOpened(true)}
       >
-        QR Kod / Link Paylaş
+        {t('share.qrLink')}
       </Button>
       <ShareQRCode pin={pin} isOpen={opened} onClose={() => setOpened(false)} />
     </>
