@@ -72,10 +72,13 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   };
 
   // Host creates a room (requires authentication)
-  socket.on('create_room', async (data) => {
+  socket.on('create_room', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('create_room')) return;
+      if (!checkRateLimit('create_room')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const user = requireAuth(); // JWT required for host
       const { quizId } = data || {};
@@ -89,22 +92,28 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       socket.join(result.room.pin);
 
-      socket.emit('room_created', {
+      const payload = {
         pin: result.room.pin,
         hostToken: result.hostToken,
         quizTitle: result.quiz.title,
         totalQuestions: result.quiz.getTotalQuestions()
-      });
+      };
+      socket.emit('room_created', payload);
+      sendAck(ack, payload);
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Player joins a room
-  socket.on('join_room', async (data) => {
+  socket.on('join_room', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('join_room')) return;
+      if (!checkRateLimit('join_room')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin, nickname } = sanitizeObject(data || {});
       await ensureNotInRoom();
@@ -112,6 +121,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       // Validate and sanitize nickname
       const sanitizedNickname = sanitizeNickname(nickname);
       if (!sanitizedNickname) {
+        sendAck(ack, { ok: false, error: 'Invalid nickname format' });
         socket.emit('error', { error: 'Invalid nickname format' });
         return;
       }
@@ -124,12 +134,14 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       socket.join(pin);
 
-      socket.emit('room_joined', {
+      const payload = {
         pin,
         playerId: result.player.id,
         playerToken: result.playerToken,
         nickname: result.player.nickname
-      });
+      };
+      socket.emit('room_joined', payload);
+      sendAck(ack, payload);
 
       io.to(pin).emit('player_joined', {
         player: {
@@ -139,12 +151,13 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         playerCount: result.room.getPlayerCount()
       });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Player or host leaves room
-  socket.on('leave_room', async (data) => {
+  socket.on('leave_room', async (data, ack) => {
     try {
       if (!checkRateLimit('leave_room')) return;
 
@@ -162,6 +175,13 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
         io.to(pin).emit('room_closed', { reason: 'host_left' });
         io.in(pin).socketsLeave(pin);
+        sendAck(ack, { success: true, role: 'host' });
+        return;
+      }
+
+      if (!room.getPlayer(socket.id)) {
+        sendAck(ack, { ok: false, error: 'Player is not in this room' });
+        socket.emit('error', { error: 'Player is not in this room' });
         return;
       }
 
@@ -182,38 +202,50 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       // Auto-advance if remaining connected players have all answered
       await checkAllAnsweredAfterRemoval(result.room);
+      sendAck(ack, { success: true, role: 'player' });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Get players list (requires room membership)
-  socket.on('get_players', async (data) => {
+  socket.on('get_players', async (data, ack) => {
     try {
-      if (!checkRateLimit('get_players')) return;
+      if (!checkRateLimit('get_players')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       const { pin } = data || {};
       if (!pin || !socket.rooms.has(pin)) {
+        sendAck(ack, { ok: false, error: 'Not in this room' });
         socket.emit('error', { error: 'Not in this room' });
         return;
       }
 
       const result = await roomUseCases.getPlayers({ pin });
 
-      socket.emit('players_list', {
+      const payload = {
         players: result.players.map(p => ({
           id: p.id,
           nickname: p.nickname
         }))
-      });
+      };
+      socket.emit('players_list', payload);
+      sendAck(ack, payload);
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host closes room - requires authentication
-  socket.on('close_room', async (data) => {
+  socket.on('close_room', async (data, ack) => {
     try {
-      if (!checkRateLimit('close_room')) return;
+      if (!checkRateLimit('close_room')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const { pin } = data || {};
@@ -228,21 +260,29 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       io.to(pin).emit('room_closed');
       io.in(pin).socketsLeave(pin);
+      sendAck(ack, { success: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Host reconnects to room
-  socket.on('reconnect_host', async (data) => {
+  socket.on('reconnect_host', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('reconnect_host')) return;
+      if (!checkRateLimit('reconnect_host')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin, hostToken } = data || {};
 
       // Early token format validation
-      if (!validateToken(socket, hostToken, 'Host token')) return;
+      if (!validateToken(socket, hostToken, 'Host token')) {
+        sendAck(ack, { ok: false, error: 'Host token is required' });
+        return;
+      }
 
       const result = await roomUseCases.reconnectHost({
         pin,
@@ -318,23 +358,31 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       socket.emit('host_reconnected', reconnectPayload);
+      sendAck(ack, reconnectPayload);
 
       socket.to(pin).emit('host_returned');
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Player reconnects to room
-  socket.on('reconnect_player', async (data) => {
+  socket.on('reconnect_player', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('reconnect_player')) return;
+      if (!checkRateLimit('reconnect_player')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin, playerToken } = data || {};
 
       // Early token format validation
-      if (!validateToken(socket, playerToken, 'Player token')) return;
+      if (!validateToken(socket, playerToken, 'Player token')) {
+        sendAck(ack, { ok: false, error: 'Player token is required' });
+        return;
+      }
 
       const result = await roomUseCases.reconnectPlayer({
         pin,
@@ -412,12 +460,14 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       socket.emit('player_reconnected', reconnectPayload);
+      sendAck(ack, reconnectPayload);
 
       socket.to(pin).emit('player_returned', {
         playerId: result.player.id,
         nickname: result.player.nickname
       });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -425,9 +475,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   // ==================== HOST ROOM MANAGEMENT ====================
 
   // Get host's active room
-  socket.on('get_my_room', async () => {
+  socket.on('get_my_room', async (_data, ack) => {
     try {
-      if (!checkRateLimit('get_my_room')) return;
+      if (!checkRateLimit('get_my_room')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const result = await roomUseCases.getHostRoom({
@@ -435,20 +488,27 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       });
 
       socket.emit('my_room', result); // null if no active room
+      sendAck(ack, result);
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Force close host's existing room
-  socket.on('force_close_room', async () => {
+  socket.on('force_close_room', async (_data, ack) => {
     try {
-      if (!checkRateLimit('force_close_room')) return;
+      if (!checkRateLimit('force_close_room')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       requireAuth();
 
       const hostRoom = await roomUseCases.getHostRoom({ hostUserId: socket.user.userId });
       if (!hostRoom) {
-        socket.emit('room_force_closed', { closed: false, reason: 'No active room found' });
+        const payload = { closed: false, reason: 'No active room found' };
+        socket.emit('room_force_closed', payload);
+        sendAck(ack, payload);
         return;
       }
 
@@ -467,8 +527,11 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         hostUserId: socket.user.userId
       });
 
-      socket.emit('room_force_closed', { pin, ...result, closed: true });
+      const payload = { pin, ...result, closed: true };
+      socket.emit('room_force_closed', payload);
+      sendAck(ack, payload);
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -614,17 +677,23 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   });
 
   // Get banned nicknames
-  socket.on('get_banned_nicknames', async (data) => {
+  socket.on('get_banned_nicknames', async (data, ack) => {
     try {
-      if (!checkRateLimit('get_banned_nicknames')) return;
+      if (!checkRateLimit('get_banned_nicknames')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       const { pin } = data || {};
 
       const result = await roomUseCases.getBannedNicknames({ pin });
 
-      socket.emit('banned_nicknames', {
+      const payload = {
         bannedNicknames: result.bannedNicknames
-      });
+      };
+      socket.emit('banned_nicknames', payload);
+      sendAck(ack, payload);
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -634,9 +703,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   // Join as spectator
   // Note: Spectators do not require authentication by design (guests can watch)
   // Audit logging is enabled for tracking purposes
-  socket.on('join_as_spectator', async (data) => {
+  socket.on('join_as_spectator', async (data, ack) => {
     try {
-      if (!checkRateLimit('join_as_spectator')) return;
+      if (!checkRateLimit('join_as_spectator')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin, nickname } = sanitizeObject(data || {});
       await ensureNotInRoom();
@@ -646,6 +718,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       const sanitizedNickname = sanitizeNickname(nickname);
       if (!sanitizedNickname) {
+        sendAck(ack, { ok: false, error: 'Invalid nickname format' });
         socket.emit('error', { error: 'Invalid nickname format' });
         return;
       }
@@ -658,7 +731,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       socket.join(pin);
 
-      socket.emit('room_joined_spectator', {
+      const payload = {
         pin,
         spectatorId: result.spectator.id,
         spectatorToken: result.spectatorToken, // Token for reconnection
@@ -666,7 +739,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         state: result.room.state,
         playerCount: result.room.getPlayerCount(),
         spectatorCount: result.room.getSpectatorCount()
-      });
+      };
+      socket.emit('room_joined_spectator', payload);
+      sendAck(ack, payload);
 
       io.to(pin).emit('spectator_joined', {
         spectator: {
@@ -676,6 +751,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         spectatorCount: result.room.getSpectatorCount()
       });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -704,14 +780,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   });
 
   // Spectator reconnects to room
-  socket.on('reconnect_spectator', async (data) => {
+  socket.on('reconnect_spectator', async (data, ack) => {
     try {
-      if (!checkRateLimit('reconnect_spectator')) return;
+      if (!checkRateLimit('reconnect_spectator')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin, spectatorToken } = data || {};
 
       // Early token format validation
-      if (!validateToken(socket, spectatorToken, 'Spectator token')) return;
+      if (!validateToken(socket, spectatorToken, 'Spectator token')) {
+        sendAck(ack, { ok: false, error: 'Spectator token is required' });
+        return;
+      }
 
       const result = await roomUseCases.reconnectSpectator({
         pin,
@@ -721,7 +803,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       socket.join(pin);
 
-      socket.emit('spectator_reconnected', {
+      const payload = {
         pin: result.room.pin,
         spectatorId: result.spectator.id,
         nickname: result.spectator.nickname,
@@ -729,36 +811,46 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         playerCount: result.room.getPlayerCount(),
         spectatorCount: result.room.getSpectatorCount(),
         spectatorToken: result.newSpectatorToken // New rotated token for security
-      });
+      };
+      socket.emit('spectator_reconnected', payload);
+      sendAck(ack, payload);
 
       socket.to(pin).emit('spectator_returned', {
         spectatorId: result.spectator.id,
         nickname: result.spectator.nickname
       });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Get spectators list (requires room membership)
-  socket.on('get_spectators', async (data) => {
+  socket.on('get_spectators', async (data, ack) => {
     try {
-      if (!checkRateLimit('get_spectators')) return;
+      if (!checkRateLimit('get_spectators')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
       const { pin } = data || {};
       if (!pin || !socket.rooms.has(pin)) {
+        sendAck(ack, { ok: false, error: 'Not in this room' });
         socket.emit('error', { error: 'Not in this room' });
         return;
       }
 
       const result = await roomUseCases.getSpectators({ pin });
 
-      socket.emit('spectators_list', {
+      const payload = {
         spectators: result.spectators.map(s => ({
           id: s.id,
           nickname: s.nickname
         }))
-      });
+      };
+      socket.emit('spectators_list', payload);
+      sendAck(ack, payload);
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });

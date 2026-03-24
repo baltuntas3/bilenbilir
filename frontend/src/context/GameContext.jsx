@@ -406,38 +406,12 @@ export function GameProvider({ children }) {
     if (room.isHost || !room.roomPin || state.hasAnswered || answerSubmittingRef.current) return Promise.reject(new Error('Cannot submit answer'));
     answerSubmittingRef.current = true;
     suppressErrorToastRef.current = true;
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const cleanup = () => {
-        socketService.off('answer_received', onSuccess);
-        socketService.off('error', onError);
+    return socketService
+      .emitWithAck('submit_answer', { pin: room.roomPin, answerIndex }, 10000)
+      .finally(() => {
+        answerSubmittingRef.current = false;
         suppressErrorToastRef.current = false;
-      };
-      const settle = () => { settled = true; answerSubmittingRef.current = false; };
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settle();
-        cleanup();
-        reject(new Error('Answer submission timed out'));
-      }, 10000);
-      const onSuccess = (data) => {
-        if (settled) return;
-        settle();
-        clearTimeout(timeout);
-        cleanup();
-        resolve(data);
-      };
-      const onError = ({ error }) => {
-        if (settled) return;
-        settle();
-        clearTimeout(timeout);
-        cleanup();
-        reject(new Error(error));
-      };
-      socketService.on('answer_received', onSuccess);
-      socketService.on('error', onError);
-      socketService.emit('submit_answer', { pin: room.roomPin, answerIndex });
-    });
+      });
   }, [room.isHost, room.roomPin, state.hasAnswered]);
 
   const powerUpPendingRef = useRef(false);
@@ -494,26 +468,18 @@ export function GameProvider({ children }) {
   const resumeGame = useCallback(() => room.hostEmit('resume_game'), [room]);
 
   const requestTimerSync = useCallback(() => {
-    if (!room.roomPin) return;
-    socketService.emit('request_timer_sync', { pin: room.roomPin });
+    if (!room.roomPin) return Promise.resolve(null);
+    return socketService.emitWithAck('request_timer_sync', { pin: room.roomPin }, 5000);
   }, [room.roomPin]);
 
   const getResults = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!room.roomPin) { reject(new Error('Not in a room')); return; }
-      const timeout = setTimeout(() => {
-        socketService.off('final_results', onFinalResults);
-        reject(new Error('get_results timed out'));
-      }, 10000);
-      const onFinalResults = (response) => {
-        clearTimeout(timeout);
-        socketService.off('final_results', onFinalResults);
+    if (!room.roomPin) return Promise.reject(new Error('Not in a room'));
+    return socketService
+      .emitWithAck('get_results', { pin: room.roomPin }, 10000)
+      .then((response) => {
         updateState({ leaderboard: response.leaderboard, podium: response.podium });
-        resolve(response);
-      };
-      socketService.on('final_results', onFinalResults);
-      socketService.emit('get_results', { pin: room.roomPin });
-    });
+        return response;
+      });
   }, [room.roomPin, updateState]);
 
   const sendReaction = useCallback((reaction) => {

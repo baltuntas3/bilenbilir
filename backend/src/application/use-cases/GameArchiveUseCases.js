@@ -23,8 +23,11 @@ class GameArchiveUseCases extends SharedUseCases {
         playerStats.set(answer.playerNickname, { correctCount: 0, wrongCount: 0, totalResponseTime: 0, answerCount: 0 });
       }
       const stats = playerStats.get(answer.playerNickname);
+      const responseTimeMs = typeof answer.elapsedTimeMs === 'number'
+        ? answer.elapsedTimeMs
+        : (typeof answer.responseTimeMs === 'number' ? answer.responseTimeMs : 0);
       stats.answerCount++;
-      stats.totalResponseTime += answer.elapsedTimeMs || 0;
+      stats.totalResponseTime += Math.max(0, responseTimeMs);
       if (answer.isCorrect) stats.correctCount++;
       else stats.wrongCount++;
     }

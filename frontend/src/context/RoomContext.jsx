@@ -68,41 +68,7 @@ export function RoomProvider({ children }) {
   }, []);
 
   const emitWithResponse = useCallback((emitEvent, emitData, responseEvent, timeoutMs = 10000) => {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-
-      const cleanup = () => {
-        socketService.off(responseEvent, onResponse);
-        socketService.off('error', onError);
-      };
-
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(new Error(`${responseEvent} timed out`));
-      }, timeoutMs);
-
-      const onResponse = (response) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        cleanup();
-        resolve(response);
-      };
-
-      const onError = ({ error }) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        cleanup();
-        reject(new Error(error));
-      };
-
-      socketService.on(responseEvent, onResponse);
-      socketService.on('error', onError);
-      socketService.emit(emitEvent, emitData);
-    });
+    return socketService.emitWithAck(emitEvent, emitData, timeoutMs);
   }, []);
 
   const hostEmit = useCallback((event, extraData = {}) => {
@@ -398,78 +364,33 @@ export function RoomProvider({ children }) {
   }, [hostEmit]);
 
   const getPlayers = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
-      let settled = false;
-      const cleanup = () => { socketService.off('players_list', onPlayersList); };
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(new Error('get_players timed out'));
-      }, 10000);
-      const onPlayersList = (response) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        cleanup();
+    if (!roomState.roomPin) return Promise.reject(new Error('Not in a room'));
+    return emitWithResponse('get_players', { pin: roomState.roomPin }, 'players_list', 10000)
+      .then((response) => {
         updateRoomState({ players: response.players });
-        resolve(response.players);
-      };
-      socketService.on('players_list', onPlayersList);
-      socketService.emit('get_players', { pin: roomState.roomPin });
-    });
-  }, [roomState.roomPin, updateRoomState]);
+        return response.players;
+      });
+  }, [roomState.roomPin, updateRoomState, emitWithResponse]);
 
   const getSpectators = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
-      let settled = false;
-      const cleanup = () => { socketService.off('spectators_list', onSpectatorsList); };
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(new Error('get_spectators timed out'));
-      }, 10000);
-      const onSpectatorsList = (response) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        cleanup();
+    if (!roomState.roomPin) return Promise.reject(new Error('Not in a room'));
+    return emitWithResponse('get_spectators', { pin: roomState.roomPin }, 'spectators_list', 10000)
+      .then((response) => {
         updateRoomState({ spectators: response.spectators });
-        resolve(response.spectators);
-      };
-      socketService.on('spectators_list', onSpectatorsList);
-      socketService.emit('get_spectators', { pin: roomState.roomPin });
-    });
-  }, [roomState.roomPin, updateRoomState]);
+        return response.spectators;
+      });
+  }, [roomState.roomPin, updateRoomState, emitWithResponse]);
 
   // Ban management
   const unbanNickname = useCallback((nickname) => hostEmit('unban_nickname', { nickname }), [hostEmit]);
   const getBannedNicknames = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (!roomState.roomPin) { reject(new Error('Not in a room')); return; }
-      let settled = false;
-      const cleanup = () => { socketService.off('banned_nicknames', onBannedNicknames); };
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(new Error('get_banned_nicknames timed out'));
-      }, 10000);
-      const onBannedNicknames = (response) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        cleanup();
+    if (!roomState.roomPin) return Promise.reject(new Error('Not in a room'));
+    return emitWithResponse('get_banned_nicknames', { pin: roomState.roomPin }, 'banned_nicknames', 10000)
+      .then((response) => {
         updateRoomState({ bannedNicknames: response.bannedNicknames });
-        resolve(response.bannedNicknames);
-      };
-      socketService.on('banned_nicknames', onBannedNicknames);
-      socketService.emit('get_banned_nicknames', { pin: roomState.roomPin });
-    });
-  }, [roomState.roomPin, updateRoomState]);
+        return response.bannedNicknames;
+      });
+  }, [roomState.roomPin, updateRoomState, emitWithResponse]);
 
   // Team mode
   const enableTeamMode = useCallback(() => hostEmit('enable_team_mode'), [hostEmit]);

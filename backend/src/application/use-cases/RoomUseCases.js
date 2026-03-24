@@ -95,6 +95,9 @@ class RoomUseCases extends SharedUseCases {
   async leaveRoom({ pin, socketId }) {
     const room = await this._getRoomOrThrow(pin);
     const removedPlayer = room.removePlayer(socketId);
+    if (!removedPlayer) {
+      throw new ValidationError('Player is not in this room');
+    }
 
     await this.roomRepository.save(room);
 

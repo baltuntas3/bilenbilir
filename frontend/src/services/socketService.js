@@ -53,6 +53,7 @@ class SocketService {
 
     this.connectionPromise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
+        this.connectionPromise = null;
         reject(new Error('Connection timeout'));
       }, 10000);
 
@@ -77,6 +78,7 @@ class SocketService {
 
       this.socket.on('connect_error', (error) => {
         clearTimeout(timeout);
+        this.connectionPromise = null;
         reject(error);
       });
     });

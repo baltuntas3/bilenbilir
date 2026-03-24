@@ -169,6 +169,13 @@ describe('RoomUseCases', () => {
         socketId: 'player-socket-1'
       })).rejects.toThrow('Room not found');
     });
+
+    it('should throw error when player is not in room', async () => {
+      await expect(roomUseCases.leaveRoom({
+        pin: roomPin,
+        socketId: 'unknown-socket'
+      })).rejects.toThrow('Player is not in this room');
+    });
   });
 
   describe('getRoom', () => {

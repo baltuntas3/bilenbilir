@@ -60,6 +60,14 @@ describe('GameArchiveUseCases', () => {
       const stats = uc._calculatePlayerStats([null, { playerNickname: null }, { playerNickname: 123 }]);
       expect(stats.size).toBe(0);
     });
+
+    it('should use responseTimeMs fallback when elapsedTimeMs is missing', () => {
+      const stats = uc._calculatePlayerStats([
+        { playerNickname: 'Alice', isCorrect: true, responseTimeMs: 1500 }
+      ]);
+      expect(stats.get('Alice').totalResponseTime).toBe(1500);
+      expect(stats.get('Alice').answerCount).toBe(1);
+    });
   });
 
   describe('_buildPlayerResults', () => {

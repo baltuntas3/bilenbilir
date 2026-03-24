@@ -94,10 +94,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   });
 
   // Player submits answer
-  socket.on('submit_answer', async (data) => {
+  socket.on('submit_answer', async (data, ack) => {
     try {
       // Rate limit check
-      if (!checkRateLimit('submit_answer')) return;
+      if (!checkRateLimit('submit_answer')) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin, answerIndex } = data || {};
 
@@ -127,6 +130,15 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         streak: result.player.streak,
         streakBonus: result.answer.streakBonus
       });
+      if (typeof ack === 'function') {
+        ack({
+          isCorrect: result.answer.isCorrect,
+          score: result.actualScore,
+          totalScore: result.player.score,
+          streak: result.player.streak,
+          streakBonus: result.answer.streakBonus
+        });
+      }
 
       io.to(pin).emit('answer_count_updated', {
         answeredCount: result.answeredCount,
@@ -138,6 +150,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
       }
     } catch (error) {
+      if (typeof ack === 'function') ack({ ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
@@ -267,9 +280,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   });
 
   // Get final results - rate limited to prevent spam
-  socket.on('get_results', async (data) => {
+  socket.on('get_results', async (data, ack) => {
     try {
-      if (!checkRateLimit('get_results')) return;
+      if (!checkRateLimit('get_results')) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin } = data || {};
 
@@ -286,15 +302,20 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         finalResultsPayload.teamPodium = result.teamPodium;
       }
       socket.emit('final_results', finalResultsPayload);
+      if (typeof ack === 'function') ack(finalResultsPayload);
     } catch (error) {
+      if (typeof ack === 'function') ack({ ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
 
   // Request timer sync (for clients that need to resync) - rate limited
-  socket.on('request_timer_sync', (data) => {
+  socket.on('request_timer_sync', (data, ack) => {
     try {
-      if (!checkRateLimit('request_timer_sync')) return;
+      if (!checkRateLimit('request_timer_sync')) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin } = data || {};
 
@@ -302,10 +323,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       if (timerSync) {
         socket.emit('timer_sync', timerSync);
+        if (typeof ack === 'function') ack(timerSync);
       } else {
-        socket.emit('timer_sync', { active: false });
+        const payload = { active: false };
+        socket.emit('timer_sync', payload);
+        if (typeof ack === 'function') ack(payload);
       }
     } catch (error) {
+      if (typeof ack === 'function') ack({ ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });
