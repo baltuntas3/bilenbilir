@@ -64,6 +64,8 @@ export function GameProvider({ children }) {
   const listenersSetupRef = useRef(false);
   const lastSocketIdRef = useRef(null);
   const timerRef = useRef(timer);
+  // Suppresses global error toast when a specific operation handles its own error
+  const suppressErrorToastRef = useRef(false);
 
   timerRef.current = timer;
 
@@ -203,7 +205,7 @@ export function GameProvider({ children }) {
 
     // Game flow events
     socketService.on('game_started', (data) => {
-      const { totalQuestions, currentQuestion, questionIndex } = data || {};
+      const { totalQuestions, currentQuestion, questionIndex, powerUps } = data || {};
       setState((prev) => ({
         ...prev,
         gameState: GAME_STATES.QUESTION_INTRO,
@@ -212,7 +214,7 @@ export function GameProvider({ children }) {
         currentQuestionIndex: questionIndex ?? 0,
         hasAnswered: false,
         lastAnswer: null,
-        powerUps: { FIFTY_FIFTY: 1, DOUBLE_POINTS: 1, TIME_EXTENSION: 1 },
+        powerUps: powerUps ?? prev.powerUps,
         eliminatedOptions: [],
       }));
     });
@@ -252,9 +254,11 @@ export function GameProvider({ children }) {
       });
     });
 
-    socketService.on('answer_count_updated', ({ answeredCount, totalPlayers }) => {
+    socketService.on('answer_count_updated', ({ answeredCount, totalPlayers, connectedPlayerCount }) => {
       const updates = { answeredCount };
-      if (typeof totalPlayers === 'number') updates.totalPlayersInPhase = totalPlayers;
+      // Prefer connectedPlayerCount for accurate progress display
+      if (typeof connectedPlayerCount === 'number') updates.totalPlayersInPhase = connectedPlayerCount;
+      else if (typeof totalPlayers === 'number') updates.totalPlayersInPhase = totalPlayers;
       updateState(updates);
     });
     socketService.on('all_players_answered', () => { /* auto-transition to show_results follows */ });
@@ -374,7 +378,11 @@ export function GameProvider({ children }) {
       showToast.warning(`${message} (${remainingSeconds}s remaining)`);
     });
     socketService.on('host_returned', () => showToast.success('Host has reconnected!'));
-    socketService.on('error', ({ error, message }) => showToast.error(error || message || 'An error occurred'));
+    socketService.on('error', ({ error, message }) => {
+      // Skip toast when a specific operation (submitAnswer, usePowerUp) handles its own error
+      if (suppressErrorToastRef.current) return;
+      showToast.error(error || message || 'An error occurred');
+    });
     // Dependencies: only stable callbacks and refs. timer/room accessed via timerRef/roomRef
     // to prevent listener rebuild on every timer tick or room state change.
   }, [updateState, resetGame, cleanupGameListeners]);
@@ -397,11 +405,13 @@ export function GameProvider({ children }) {
   const submitAnswer = useCallback((answerIndex) => {
     if (room.isHost || !room.roomPin || state.hasAnswered || answerSubmittingRef.current) return Promise.reject(new Error('Cannot submit answer'));
     answerSubmittingRef.current = true;
+    suppressErrorToastRef.current = true;
     return new Promise((resolve, reject) => {
       let settled = false;
       const cleanup = () => {
         socketService.off('answer_received', onSuccess);
         socketService.off('error', onError);
+        suppressErrorToastRef.current = false;
       };
       const settle = () => { settled = true; answerSubmittingRef.current = false; };
       const timeout = setTimeout(() => {
@@ -437,6 +447,7 @@ export function GameProvider({ children }) {
     if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
     if ((state.powerUps[type] || 0) <= 0) return;
     powerUpPendingRef.current = true;
+    suppressErrorToastRef.current = true;
 
     const previousCount = state.powerUps[type] || 0;
     socketService.emit('use_power_up', { pin: room.roomPin, powerUpType: type });
@@ -457,6 +468,7 @@ export function GameProvider({ children }) {
       settled = true;
       powerUpPendingRef.current = false;
       powerUpCleanupRef.current = null;
+      suppressErrorToastRef.current = false;
       clearTimeout(rollbackTimeout);
       socketService.off('error', onError);
       socketService.off('power_up_activated', onSuccess);

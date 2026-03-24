@@ -122,7 +122,7 @@ export function RoomProvider({ children }) {
         if (settled) return;
         settled = true;
         socketService.off('error', onError);
-        resolve(); // Resolve on timeout (no error means success)
+        reject(new Error(`${event} timed out. Please try again.`));
       }, 5000);
       socketService.on('error', onError);
       socketService.emit(event, { pin: roomState.roomPin, ...extraData });
@@ -190,18 +190,18 @@ export function RoomProvider({ children }) {
       if (nickname) showToast.info(`${nickname} removed (reconnection timeout)`);
     });
 
-    socketService.on('player_kicked', ({ nickname }) => {
+    socketService.on('player_kicked', ({ playerId, nickname }) => {
       setRoomState(prev => ({
         ...prev,
-        players: prev.players.filter(p => p.nickname !== nickname),
+        players: prev.players.filter(p => p.id !== playerId),
       }));
       showToast.success(`${nickname} was kicked`);
     });
 
-    socketService.on('player_banned', ({ nickname }) => {
+    socketService.on('player_banned', ({ playerId, nickname }) => {
       setRoomState(prev => ({
         ...prev,
-        players: prev.players.filter(p => p.nickname !== nickname),
+        players: prev.players.filter(p => p.id !== playerId),
       }));
       showToast.success(`${nickname} was banned`);
     });
@@ -332,13 +332,17 @@ export function RoomProvider({ children }) {
     socketService.disconnect();
   }, [roomState.roomPin, resetRoom]);
 
-  const closeRoom = useCallback(() => {
-    if (!roomState.isHost || !roomState.roomPin) return Promise.resolve();
-    socketService.emit('close_room', { pin: roomState.roomPin });
-    resetRoom();
-    socketService.disconnect();
-    return Promise.resolve();
-  }, [roomState.isHost, roomState.roomPin, resetRoom]);
+  const closeRoom = useCallback(async () => {
+    if (!roomState.isHost || !roomState.roomPin) return;
+    try {
+      await emitWithResponse('close_room', { pin: roomState.roomPin }, 'room_closed', 5000);
+    } catch {
+      // Best-effort: even if server didn't confirm, clean up locally
+    } finally {
+      resetRoom();
+      socketService.disconnect();
+    }
+  }, [roomState.isHost, roomState.roomPin, resetRoom, emitWithResponse]);
 
   const leaveSpectator = useCallback(() => {
     if (roomState.roomPin) socketService.emit('leave_spectator', { pin: roomState.roomPin });

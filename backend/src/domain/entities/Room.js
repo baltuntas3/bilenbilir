@@ -103,6 +103,14 @@ class Room {
   }
 
   /**
+   * Get when the game reached PODIUM state
+   * @returns {Date|null}
+   */
+  getPodiumReachedAt() {
+    return this.podiumReachedAt;
+  }
+
+  /**
    * Get the quiz snapshot for game operations
    * @returns {Quiz|null} The frozen quiz or null if game hasn't started
    */
@@ -204,6 +212,9 @@ class Room {
       this._teamManager.removePlayer(player.id);
     }
     this.players = this.players.filter(p => p.socketId !== socketId);
+    if (player && this.state === RoomState.ANSWERING_PHASE) {
+      this.answeringPhasePlayerCount = Math.max(0, this.answeringPhasePlayerCount - 1);
+    }
     return player || null;
   }
 
@@ -257,9 +268,21 @@ class Room {
       p.isDisconnected() && p.getDisconnectedDuration() > gracePeriodMs
     );
 
-    this.players = this.players.filter(p =>
-      !p.isDisconnected() || p.getDisconnectedDuration() <= gracePeriodMs
-    );
+    if (stalePlayers.length > 0) {
+      // Remove team assignments for stale players
+      for (const player of stalePlayers) {
+        this._teamManager.removePlayer(player.id);
+      }
+
+      this.players = this.players.filter(p =>
+        !p.isDisconnected() || p.getDisconnectedDuration() <= gracePeriodMs
+      );
+
+      // Update answering phase count to keep progress display consistent
+      if (this.state === RoomState.ANSWERING_PHASE) {
+        this.answeringPhasePlayerCount = Math.max(0, this.answeringPhasePlayerCount - stalePlayers.length);
+      }
+    }
 
     return stalePlayers;
   }
@@ -554,6 +577,9 @@ class Room {
 
     this._teamManager.removePlayer(playerId);
     this.players = this.players.filter(p => p.id !== playerId);
+    if (this.state === RoomState.ANSWERING_PHASE) {
+      this.answeringPhasePlayerCount = Math.max(0, this.answeringPhasePlayerCount - 1);
+    }
     return player;
   }
 
@@ -616,7 +642,7 @@ class Room {
   }
 
   removeSpectator(socketId) {
-    this._spectatorManager.remove(socketId);
+    return this._spectatorManager.remove(socketId);
   }
 
   getSpectator(socketId) {

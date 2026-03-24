@@ -375,17 +375,19 @@ describe('GameUseCases', () => {
         pin: roomPin,
         requesterId: 'host-socket'
       });
-      await gameUseCases.startAnsweringPhase({
-        pin: roomPin,
-        requesterId: 'host-socket'
-      });
 
-      await gameUseCases.submitAnswer({
-        pin: roomPin,
-        socketId: 'player-socket-1',
-        answerIndex: 1,
-        elapsedTimeMs: 1000
-      });
+      // Complete question 1
+      await gameUseCases.startAnsweringPhase({ pin: roomPin, requesterId: 'host-socket' });
+      await gameUseCases.submitAnswer({ pin: roomPin, socketId: 'player-socket-1', answerIndex: 1, elapsedTimeMs: 1000 });
+      await gameUseCases.endAnsweringPhase({ pin: roomPin, requesterId: 'host-socket' });
+      await gameUseCases.showLeaderboard({ pin: roomPin, requesterId: 'host-socket' });
+
+      // Complete question 2 → game over (PODIUM)
+      await gameUseCases.nextQuestion({ pin: roomPin, requesterId: 'host-socket' });
+      await gameUseCases.startAnsweringPhase({ pin: roomPin, requesterId: 'host-socket' });
+      await gameUseCases.endAnsweringPhase({ pin: roomPin, requesterId: 'host-socket' });
+      await gameUseCases.showLeaderboard({ pin: roomPin, requesterId: 'host-socket' });
+      await gameUseCases.nextQuestion({ pin: roomPin, requesterId: 'host-socket' });
     });
 
     it('should return leaderboard and podium', async () => {

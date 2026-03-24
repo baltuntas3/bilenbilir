@@ -451,20 +451,20 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       const { pin } = hostRoom;
 
-      // Notify players BEFORE cleanup (which may delete the room)
-      io.to(pin).emit('room_closed', { reason: 'Host closed the room' });
-      io.in(pin).socketsLeave(pin);
-
-      // Archive interrupted game and clean up
+      // Archive interrupted game BEFORE notifying/disconnecting players
       const { room } = await roomUseCases.getRoom({ pin });
       await cleanupBeforeRoomClose(pin, room);
+
+      // Notify players and remove from channel
+      io.to(pin).emit('room_closed', { reason: 'Host closed the room' });
+      io.in(pin).socketsLeave(pin);
 
       // Delete room if saveInterruptedGame didn't already delete it
       const result = await roomUseCases.forceCloseHostRoom({
         hostUserId: socket.user.userId
       });
 
-      socket.emit('room_force_closed', { closed: true, pin, ...result });
+      socket.emit('room_force_closed', { pin, ...result, closed: true });
     } catch (error) {
       handleSocketError(socket, error);
     }
@@ -671,7 +671,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       socket.leave(pin);
 
       io.to(pin).emit('spectator_left', {
-        socketId: socket.id,
+        spectatorId: result.removedSpectator?.id || socket.id,
+        nickname: result.removedSpectator?.nickname || null,
         spectatorCount: result.room.getSpectatorCount()
       });
     } catch (error) {

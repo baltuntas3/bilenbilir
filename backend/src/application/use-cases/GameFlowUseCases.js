@@ -143,6 +143,9 @@ class GameFlowUseCases extends SharedUseCases {
 
   async getResults({ pin }) {
     const room = await this._getRoomOrThrow(pin);
+    if (room.state !== RoomState.PODIUM) {
+      throw new ValidationError('Results are only available after the game ends');
+    }
     const result = { leaderboard: room.getLeaderboard(), podium: room.getPodium() };
     if (room.isTeamMode()) {
       result.teamLeaderboard = room.getTeamLeaderboard();

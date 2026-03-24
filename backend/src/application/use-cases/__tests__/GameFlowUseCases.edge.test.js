@@ -71,10 +71,12 @@ describe('GameFlowUseCases edge cases', () => {
       room.assignPlayerToTeam(room.players[0].id, 't1');
       await roomRepo.save(room);
 
-      await flowUC.startGame({ pin: roomPin, requesterId: 'host-sock' });
+      // Play through 1 question to reach PODIUM
+      await flowUC.startGame({ pin: roomPin, requesterId: 'host-sock', questionCount: 1 });
       await flowUC.startAnsweringPhase({ pin: roomPin, requesterId: 'host-sock' });
       await flowUC.endAnsweringPhase({ pin: roomPin, requesterId: 'host-sock' });
       await flowUC.showLeaderboard({ pin: roomPin, requesterId: 'host-sock' });
+      await flowUC.nextQuestion({ pin: roomPin, requesterId: 'host-sock' });
 
       const result = await flowUC.getResults({ pin: roomPin });
       expect(result.teamLeaderboard).toBeDefined();

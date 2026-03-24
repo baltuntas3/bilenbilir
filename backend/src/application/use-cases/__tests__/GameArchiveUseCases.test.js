@@ -111,10 +111,11 @@ describe('GameArchiveUseCases', () => {
   });
 
   describe('archiveGame', () => {
-    it('should archive and delete room', async () => {
+    it('should archive game and keep room in PODIUM state', async () => {
       const result = await uc.archiveGame({ pin: '123456' });
       expect(result.session.id).toBe('session-1');
-      expect(mocks.roomRepo.delete).toHaveBeenCalled();
+      // Room stays in PODIUM for late reconnects/get_results — cleanup service handles deletion
+      expect(mocks.roomRepo.delete).not.toHaveBeenCalled();
     });
 
     it('should return null if no session repo', async () => {

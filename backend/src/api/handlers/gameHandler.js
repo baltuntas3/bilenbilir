@@ -2,6 +2,7 @@ const { handleSocketError } = require('../middlewares/errorHandler');
 const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults } = require('./socketHandlerUtils');
 const { MAX_TIMER_EXTENSION_MS, LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 const { LockManager } = require('../../shared/utils/LockManager');
+const { DEFAULT_POWER_UPS } = require('../../domain/value-objects/PowerUp');
 
 /**
  * Game WebSocket Handler
@@ -33,14 +34,16 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       socket.emit('game_started', {
         totalQuestions: result.totalQuestions,
         currentQuestion: result.currentQuestion,
-        questionIndex: 0
+        questionIndex: 0,
+        powerUps: DEFAULT_POWER_UPS
       });
 
       // Send to players without answer
       socket.to(pin).emit('game_started', {
         totalQuestions: result.totalQuestions,
         currentQuestion: toPlayerQuestionDTO(result.currentQuestion),
-        questionIndex: 0
+        questionIndex: 0,
+        powerUps: DEFAULT_POWER_UPS
       });
     } catch (error) {
       handleSocketError(socket, error);
@@ -112,9 +115,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         streakBonus: result.answer.streakBonus
       });
 
-      socket.to(pin).emit('answer_count_updated', {
+      io.to(pin).emit('answer_count_updated', {
         answeredCount: result.answeredCount,
-        totalPlayers: result.totalPlayers
+        totalPlayers: result.totalPlayers,
+        connectedPlayerCount: result.connectedPlayerCount
       });
 
       if (result.allAnswered) {
@@ -281,6 +285,15 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       if (!checkRateLimit('use_power_up')) return;
 
       const { pin, powerUpType } = data || {};
+
+      // Pre-check: reject TIME_EXTENSION if timer can't be extended further
+      if (powerUpType === 'TIME_EXTENSION') {
+        const remaining = timerService.getRemainingExtensionBudget(pin);
+        if (remaining <= 0) {
+          socket.emit('error', { error: 'Time extension limit reached for this question' });
+          return;
+        }
+      }
 
       const { result, emitActions } = await gameUseCases.usePowerUp({
         pin,

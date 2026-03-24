@@ -32,7 +32,9 @@ class SpectatorManager {
   }
 
   remove(socketId) {
+    const spectator = this.getBySocketId(socketId);
     this.spectators = this.spectators.filter(s => s.socketId !== socketId);
+    return spectator || null;
   }
 
   getBySocketId(socketId) {

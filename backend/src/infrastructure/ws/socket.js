@@ -118,11 +118,13 @@ const initializeSocket = (server) => {
     });
   });
 
-  // Start room cleanup service with use cases for proper cleanup
+  // Start room cleanup service with injected dependencies
   cleanupService = new RoomCleanupService(roomRepository, io, {
     roomUseCases,
     gameUseCases,
     timerService,
+    autoAdvanceToResults,
+    endAnsweringLocks,
     hostGracePeriod: 300000,   // 5 minutes - match RoomUseCases
     playerGracePeriod: 120000  // 2 minutes
   });

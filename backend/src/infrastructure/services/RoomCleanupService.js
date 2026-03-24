@@ -1,6 +1,4 @@
 const { RoomState } = require('../../domain/entities');
-const { autoAdvanceToResults } = require('../../api/handlers/socketHandlerUtils');
-const { endAnsweringLocks } = require('../../api/handlers/gameHandler');
 
 /**
  * Room Cleanup Service
@@ -10,11 +8,14 @@ class RoomCleanupService {
   constructor(roomRepository, io, options = {}) {
     this.roomRepository = roomRepository;
     this.io = io;
-    this.roomUseCases = options.roomUseCases || null; // Optional: for join lock cleanup
-    this.gameUseCases = options.gameUseCases || null; // Optional: for interrupted game archival
-    this.timerService = options.timerService || null; // Optional: for stopping room timers on deletion
+    this.roomUseCases = options.roomUseCases || null;
+    this.gameUseCases = options.gameUseCases || null;
+    this.timerService = options.timerService || null;
+    // Injected from outside to avoid infrastructure → API layer dependency
+    this.autoAdvanceToResults = options.autoAdvanceToResults || null;
+    this.endAnsweringLocks = options.endAnsweringLocks || null;
     this.intervalId = null;
-    this.isCleanupRunning = false; // Lock to prevent concurrent cleanup
+    this.isCleanupRunning = false;
 
     // Configuration
     this.checkInterval = options.checkInterval || 30000; // Check every 30 seconds
@@ -65,14 +66,14 @@ class RoomCleanupService {
    * @private
    */
   async _checkAutoAdvanceAfterRemoval(room) {
-    if (!this.gameUseCases || !this.io) return;
+    if (!this.autoAdvanceToResults || !this.io) return;
     if (room.state !== RoomState.ANSWERING_PHASE) return;
     const noConnected = room.getConnectedPlayerCount() === 0;
     if (!room.haveAllPlayersAnswered() && !noConnected) return;
-    await autoAdvanceToResults({
+    await this.autoAdvanceToResults({
       io: this.io,
       pin: room.pin,
-      endAnsweringLocks,
+      endAnsweringLocks: this.endAnsweringLocks,
       timerService: this.timerService,
       gameUseCases: this.gameUseCases
     });
@@ -209,31 +210,35 @@ class RoomCleanupService {
           if (!shouldDelete && room.state === RoomState.PAUSED) {
             const pauseDuration = room.getPauseDuration();
             if (pauseDuration > this.maxPauseDuration) {
-              // Auto-resume to leaderboard state instead of deleting
-              try {
-                room.resume(room.hostId);
-              } catch {
-                // If resume fails (e.g. host disconnected), mark for cleanup
+              // If host is disconnected, no one can control the game — archive and close
+              if (room.isHostDisconnected()) {
                 shouldDelete = true;
                 reason = 'Paused game timeout (host unavailable)';
-              }
-              if (!shouldDelete) {
-                await this.roomRepository.save(room);
-                if (this.io) {
-                  this.io.to(room.pin).emit('game_resumed', {
-                    state: room.state,
-                    pauseDuration
-                  });
+              } else {
+                // Host is connected: auto-resume to previous state
+                try {
+                  room.resume(room.hostId);
+                  await this.roomRepository.save(room);
+                  if (this.io) {
+                    this.io.to(room.pin).emit('game_resumed', {
+                      state: room.state,
+                      pauseDuration
+                    });
+                  }
+                  console.log(`Auto-resumed room ${room.pin} after ${Math.round(pauseDuration / 1000)}s pause`);
+                } catch {
+                  shouldDelete = true;
+                  reason = 'Paused game timeout (resume failed)';
                 }
-                console.log(`Auto-resumed room ${room.pin} after ${Math.round(pauseDuration / 1000)}s pause`);
               }
             }
           }
 
           // Clean up finished games (PODIUM) after podiumTimeout
           if (!shouldDelete && room.state === RoomState.PODIUM) {
-            const podiumAge = room.podiumReachedAt
-              ? Date.now() - room.podiumReachedAt.getTime()
+            const podiumReachedAt = room.getPodiumReachedAt();
+            const podiumAge = podiumReachedAt
+              ? Date.now() - podiumReachedAt.getTime()
               : roomAge;
             if (podiumAge > this.podiumTimeout) {
               shouldDelete = true;

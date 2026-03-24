@@ -60,7 +60,8 @@ class GameTimerService {
       startTime,
       duration: durationMs,
       stopped: false, // Flag to prevent race conditions
-      onExpire: onExpire || null // Store callback for timer extension
+      onExpire: onExpire || null, // Store callback for timer extension
+      totalExtensionMs: 0 // Track cumulative extensions per question
     };
 
     timerEntry.timerId = setTimeout(async () => {
@@ -178,15 +179,26 @@ class GameTimerService {
    * @param {string} pin - Room PIN
    * @param {number} extraMs - Milliseconds to add
    */
+  /**
+   * Extend the active timer for a room by the given milliseconds.
+   * @returns {number} Actual milliseconds extended (0 if cap reached or no timer)
+   */
   extendTimer(pin, extraMs) {
     const timer = this.activeTimers.get(pin);
     if (!timer || timer.stopped) {
-      return; // No active timer to extend
+      return 0;
     }
 
-    // Cap extension to prevent abuse (30s max per call)
-    const MAX_EXTENSION_MS = 30000;
-    const safeExtraMs = Math.min(Math.max(0, extraMs), MAX_EXTENSION_MS);
+    // Cap per-call extension and enforce cumulative cap per question
+    const MAX_EXTENSION_PER_CALL_MS = 30000;
+    const MAX_TOTAL_EXTENSION_MS = 30000; // 30s max total extensions per question
+    const remainingBudget = Math.max(0, MAX_TOTAL_EXTENSION_MS - timer.totalExtensionMs);
+    if (remainingBudget <= 0) return 0;
+    const safeExtraMs = Math.min(Math.max(0, extraMs), MAX_EXTENSION_PER_CALL_MS, remainingBudget);
+    if (safeExtraMs <= 0) return 0;
+
+    // Track cumulative extension
+    timer.totalExtensionMs += safeExtraMs;
 
     // Extend the end time
     timer.endTime += safeExtraMs;
@@ -212,6 +224,19 @@ class GameTimerService {
       serverTime: Date.now(),
       endTime: timer.endTime
     });
+
+    return safeExtraMs;
+  }
+
+  /**
+   * Get remaining extension budget for a room's active timer
+   * @returns {number} Remaining ms that can be extended (0 if no timer or cap reached)
+   */
+  getRemainingExtensionBudget(pin) {
+    const timer = this.activeTimers.get(pin);
+    if (!timer || timer.stopped) return 0;
+    const MAX_TOTAL_EXTENSION_MS = 30000;
+    return Math.max(0, MAX_TOTAL_EXTENSION_MS - timer.totalExtensionMs);
   }
 
   /**

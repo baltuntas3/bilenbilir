@@ -103,7 +103,8 @@ class AnswerUseCases extends SharedUseCases {
         actualScore,
         allAnswered: room.haveAllPlayersAnswered(),
         answeredCount: room.getAnsweredCount(),
-        totalPlayers: room.answeringPhasePlayerCount
+        totalPlayers: room.answeringPhasePlayerCount,
+        connectedPlayerCount: room.getConnectedPlayerCount()
       };
     });
   }

@@ -332,9 +332,9 @@ class RoomUseCases extends SharedUseCases {
 
   async leaveAsSpectator({ pin, socketId }) {
     const room = await this._getRoomOrThrow(pin);
-    room.removeSpectator(socketId);
+    const removedSpectator = room.removeSpectator(socketId);
     await this.roomRepository.save(room);
-    return { room };
+    return { room, removedSpectator };
   }
 
   async reconnectSpectator({ pin, spectatorToken, newSocketId }) {
