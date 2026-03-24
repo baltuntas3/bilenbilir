@@ -123,11 +123,21 @@ export function RoomProvider({ children }) {
       }));
     });
 
-    socketService.on('player_left', ({ playerId }) => {
-      setRoomState(prev => ({
-        ...prev,
-        players: prev.players.filter(p => p.id !== playerId),
-      }));
+    socketService.on('player_left', ({ playerId, disconnected }) => {
+      setRoomState(prev => {
+        if (disconnected) {
+          return {
+            ...prev,
+            players: prev.players.map(p =>
+              p.id === playerId ? { ...p, disconnected: true } : p
+            ),
+          };
+        }
+        return {
+          ...prev,
+          players: prev.players.filter(p => p.id !== playerId),
+        };
+      });
     });
 
     // Cleanup service removes stale disconnected players after grace period

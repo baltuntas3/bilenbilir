@@ -21,6 +21,7 @@ class RoomCleanupService {
     this.checkInterval = options.checkInterval || 30000; // Check every 30 seconds
     this.hostGracePeriod = options.hostGracePeriod || 60000; // 1 minute for host to reconnect
     this.playerGracePeriod = options.playerGracePeriod || 120000; // 2 minutes for player to reconnect
+    this.spectatorGracePeriod = options.spectatorGracePeriod || this.playerGracePeriod; // fallback for backward compatibility
     this.emptyRoomTimeout = options.emptyRoomTimeout || 300000; // 5 minutes for empty rooms
     this.idleRoomTimeout = options.idleRoomTimeout || 3600000; // 1 hour for idle rooms
     this.maxPauseDuration = options.maxPauseDuration || 1800000; // 30 minutes max pause
@@ -138,7 +139,7 @@ class RoomCleanupService {
               await this._checkAutoAdvanceAfterRemoval(room);
             }
             // Also clean up stale spectators in fast path
-            const staleSpecsFast = room.removeStaleDisconnectedSpectators(this.playerGracePeriod);
+            const staleSpecsFast = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
             if (staleSpecsFast.length > 0) {
               await this.roomRepository.save(room);
             }
@@ -169,7 +170,7 @@ class RoomCleanupService {
           }
 
           // Clean up stale disconnected spectators to prevent memory leak
-          const staleSpectators = room.removeStaleDisconnectedSpectators(this.playerGracePeriod);
+          const staleSpectators = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
           if (staleSpectators.length > 0) {
             console.log(`Removed ${staleSpectators.length} stale spectators from room ${room.pin}`);
             await this.roomRepository.save(room);

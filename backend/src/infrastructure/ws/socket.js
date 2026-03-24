@@ -98,7 +98,8 @@ const initializeSocket = (server) => {
             playerId: result.player.id,
             nickname: result.player.nickname,
             playerCount: result.playerCount,
-            connectedPlayerCount: result.connectedPlayerCount
+            connectedPlayerCount: result.connectedPlayerCount,
+            disconnected: true
           });
 
           // Auto-advance if remaining connected players have all answered
@@ -126,7 +127,8 @@ const initializeSocket = (server) => {
     autoAdvanceToResults,
     endAnsweringLocks,
     hostGracePeriod: 300000,   // 5 minutes - match RoomUseCases
-    playerGracePeriod: 120000  // 2 minutes
+    playerGracePeriod: 120000, // 2 minutes
+    spectatorGracePeriod: 120000
   });
   cleanupService.start();
 

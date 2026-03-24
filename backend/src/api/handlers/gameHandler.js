@@ -112,6 +112,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       try {
         elapsedTimeMs = gameUseCases.getServerElapsedTime(timerService, pin);
       } catch (err) {
+        if (typeof ack === 'function') ack({ ok: false, error: err.message });
         socket.emit('error', { error: err.message });
         return;
       }

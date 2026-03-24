@@ -29,6 +29,64 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   };
 
   /**
+   * Build spectator-safe game snapshot payload for join/reconnect.
+   * Keeps a single source of truth for spectator state restoration.
+   * @private
+   */
+  const buildSpectatorSnapshot = (room) => {
+    const payload = {
+      state: room.state,
+      playerCount: room.getPlayerCount(),
+      spectatorCount: room.getSpectatorCount()
+    };
+
+    const snapshot = room.getQuizSnapshot();
+    if (!snapshot) return payload;
+
+    payload.currentQuestionIndex = room.currentQuestionIndex;
+    payload.totalQuestions = snapshot.getTotalQuestions();
+
+    const question = snapshot.getQuestion(room.currentQuestionIndex);
+    if (question) {
+      payload.currentQuestion = toPlayerQuestionDTO(question.getHostData());
+    }
+
+    if (timerService && room.state === 'ANSWERING_PHASE') {
+      const timerSync = timerService.getTimerSync(room.pin);
+      if (timerSync) payload.timerSync = timerSync;
+      payload.answeredCount = room.getAnsweredCount();
+      payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
+    }
+
+    if (room.state === 'SHOW_RESULTS') {
+      payload.correctAnswerIndex = question ? question.correctAnswerIndex : null;
+      payload.explanation = question ? (question.explanation || null) : null;
+      payload.answeredCount = room.getTotalAnsweredCount();
+      payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
+      if (question) {
+        const { distribution } = room.getAnswerDistribution(
+          question.options.length,
+          (idx) => question.isCorrect(idx)
+        );
+        payload.answerDistribution = distribution;
+      }
+    }
+
+    if (room.state === 'LEADERBOARD' || room.state === 'PAUSED') {
+      payload.leaderboard = room.getLeaderboard().map(toPlayerDTO);
+      if (room.isTeamMode()) payload.teamLeaderboard = room.getTeamLeaderboard();
+    }
+
+    if (room.state === 'PODIUM') {
+      payload.podium = room.getPodium().map(toPlayerDTO);
+      payload.leaderboard = room.getLeaderboard().map(toPlayerDTO);
+      if (room.isTeamMode()) payload.teamPodium = room.getTeamPodium();
+    }
+
+    return payload;
+  };
+
+  /**
    * Ensure socket is not already in a room
    * @private
    */
@@ -197,7 +255,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         playerId: result.removedPlayer?.id || socket.id,
         nickname: result.removedPlayer?.nickname || null,
         playerCount: result.room.getPlayerCount(),
-        connectedPlayerCount: result.room.getConnectedPlayerCount()
+        connectedPlayerCount: result.room.getConnectedPlayerCount(),
+        disconnected: false
       });
 
       // Auto-advance if remaining connected players have all answered
@@ -736,9 +795,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         spectatorId: result.spectator.id,
         spectatorToken: result.spectatorToken, // Token for reconnection
         nickname: result.spectator.nickname,
-        state: result.room.state,
-        playerCount: result.room.getPlayerCount(),
-        spectatorCount: result.room.getSpectatorCount()
+        ...buildSpectatorSnapshot(result.room)
       };
       socket.emit('room_joined_spectator', payload);
       sendAck(ack, payload);
@@ -807,10 +864,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         pin: result.room.pin,
         spectatorId: result.spectator.id,
         nickname: result.spectator.nickname,
-        state: result.room.state,
-        playerCount: result.room.getPlayerCount(),
-        spectatorCount: result.room.getSpectatorCount(),
-        spectatorToken: result.newSpectatorToken // New rotated token for security
+        spectatorToken: result.newSpectatorToken, // New rotated token for security
+        ...buildSpectatorSnapshot(result.room)
       };
       socket.emit('spectator_reconnected', payload);
       sendAck(ack, payload);
