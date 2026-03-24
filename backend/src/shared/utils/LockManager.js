@@ -5,14 +5,19 @@ class LockManager {
   }
 
   acquire(key) {
-    const now = Date.now();
-    const existingLock = this.locks.get(key);
+    const existing = this.locks.get(key);
 
-    if (existingLock && (now - existingLock) < this.timeoutMs) {
-      return false;
+    if (existing && existing.active) {
+      // Safety net: if the lock has been held longer than timeout,
+      // it's likely a leaked lock (crashed operation). Force-release it.
+      if (Date.now() - existing.acquiredAt >= this.timeoutMs) {
+        this.locks.delete(key);
+      } else {
+        return false;
+      }
     }
 
-    this.locks.set(key, now);
+    this.locks.set(key, { active: true, acquiredAt: Date.now() });
     return true;
   }
 
@@ -35,8 +40,8 @@ class LockManager {
     const now = Date.now();
     let removedCount = 0;
 
-    for (const [key, timestamp] of this.locks.entries()) {
-      if ((now - timestamp) >= this.timeoutMs) {
+    for (const [key, lock] of this.locks.entries()) {
+      if ((now - lock.acquiredAt) >= this.timeoutMs) {
         this.locks.delete(key);
         removedCount++;
       }

@@ -124,7 +124,7 @@ export function GameProvider({ children }) {
     // Restore game state on player reconnect
     socketService.on('player_reconnected', (data) => {
       const {
-        state, score, streak, powerUps, eliminatedOptions, hasAnswered,
+        state, score, streak, powerUps, eliminatedOptions, hasAnswered, lastAnswer,
         currentQuestionIndex, totalQuestions, currentQuestion, timerSync, playerToken,
         answeredCount, totalPlayersInPhase, correctAnswerIndex, distribution, explanation,
         leaderboard, podium, teamLeaderboard, teamPodium, pausedFromState
@@ -136,6 +136,7 @@ export function GameProvider({ children }) {
       if (powerUps) updates.powerUps = powerUps;
       if (eliminatedOptions && eliminatedOptions.length > 0) updates.eliminatedOptions = eliminatedOptions;
       if (typeof hasAnswered === 'boolean') updates.hasAnswered = hasAnswered;
+      if (lastAnswer) updates.lastAnswer = lastAnswer;
       if (typeof currentQuestionIndex === 'number') updates.currentQuestionIndex = currentQuestionIndex;
       if (typeof totalQuestions === 'number') updates.totalQuestions = totalQuestions;
       if (currentQuestion) updates.currentQuestion = currentQuestion;
@@ -172,7 +173,7 @@ export function GameProvider({ children }) {
         state, currentQuestionIndex, totalQuestions, currentQuestion,
         players, timerSync, leaderboard, podium,
         correctAnswerIndex, distribution, explanation,
-        answeredCount, totalPlayers, totalPlayersInPhase,
+        answeredCount, totalPlayersInPhase,
         teamLeaderboard, teamPodium, pausedFromState
       } = data || {};
       const updates = {};
@@ -185,7 +186,6 @@ export function GameProvider({ children }) {
       if (explanation !== undefined) updates.explanation = explanation;
       if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
       if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
-      else if (typeof totalPlayers === 'number') updates.totalPlayersInPhase = totalPlayers;
       if (leaderboard) updates.leaderboard = leaderboard;
       if (podium) updates.podium = podium;
       if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
@@ -193,9 +193,13 @@ export function GameProvider({ children }) {
       if (pausedFromState) updates.previousState = pausedFromState;
       if (Object.keys(updates).length > 0) updateState(updates);
 
-      // Restore players list in RoomContext
-      if (players) {
-        roomRef.current.updateRoomState({ players });
+      // Restore players list and rotated host token in RoomContext
+      const roomUpdates = {};
+      if (players) roomUpdates.players = players;
+      if (data.hostToken) roomUpdates.hostToken = data.hostToken;
+      if (Object.keys(roomUpdates).length > 0) {
+        roomRef.current.updateRoomState(roomUpdates);
+        if (data.hostToken) saveSession({ hostToken: data.hostToken });
       }
 
       // Restore timer if in answering phase
@@ -288,27 +292,25 @@ export function GameProvider({ children }) {
         hasAnswered: true,
         lastAnswer: { isCorrect, score, streakBonus },
         score: totalScore,
-        streak: isCorrect ? streak : 0,
+        streak,
       });
     });
 
-    socketService.on('answer_count_updated', ({ answeredCount, totalPlayers, connectedPlayerCount }) => {
+    socketService.on('answer_count_updated', ({ answeredCount, totalPlayersInPhase }) => {
       const updates = { answeredCount };
-      // Prefer connectedPlayerCount for accurate progress display
-      if (typeof connectedPlayerCount === 'number') updates.totalPlayersInPhase = connectedPlayerCount;
-      else if (typeof totalPlayers === 'number') updates.totalPlayersInPhase = totalPlayers;
+      if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
       updateState(updates);
     });
     socketService.on('all_players_answered', () => { /* auto-transition to show_results follows */ });
 
-    socketService.on('show_results', ({ correctAnswerIndex, distribution, answeredCount, totalPlayers, explanation }) => {
+    socketService.on('show_results', ({ correctAnswerIndex, distribution, answeredCount, totalPlayersInPhase, explanation }) => {
       try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
       updateState({
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
         answerDistribution: distribution,
-        answeredCount: answeredCount ?? totalPlayers,
-        totalPlayersInPhase: totalPlayers,
+        answeredCount: answeredCount ?? totalPlayersInPhase,
+        totalPlayersInPhase,
         explanation: explanation || null,
       });
     });
@@ -319,9 +321,11 @@ export function GameProvider({ children }) {
       updateState(updates);
     });
 
-    socketService.on('game_over', ({ podium, teamPodium }) => {
+    socketService.on('game_over', ({ podium, leaderboard, teamPodium, teamLeaderboard }) => {
       const updates = { gameState: GAME_STATES.PODIUM, podium };
+      if (leaderboard) updates.leaderboard = leaderboard;
       if (teamPodium) updates.teamPodium = teamPodium;
+      if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
       updateState(updates);
     });
 
@@ -445,50 +449,41 @@ export function GameProvider({ children }) {
   }, [room.isHost, room.roomPin, state.hasAnswered]);
 
   const powerUpPendingRef = useRef(false);
-  const powerUpCleanupRef = useRef(null);
-  const mountedRef = useRef(true);
   const usePowerUp = useCallback((type) => {
     if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
     if ((state.powerUps[type] || 0) <= 0) return;
     powerUpPendingRef.current = true;
     suppressErrorToastRef.current = true;
 
-    const previousCount = state.powerUps[type] || 0;
-    socketService.emit('use_power_up', { pin: room.roomPin, powerUpType: type });
+    // Optimistic UI update
     setState(prev => ({
       ...prev,
       powerUps: { ...prev.powerUps, [type]: Math.max(0, (prev.powerUps[type] || 0) - 1) },
     }));
 
-    let settled = false;
-    const rollback = () => {
-      setState(prev => ({
-        ...prev,
-        powerUps: { ...prev.powerUps, [type]: previousCount },
-      }));
-    };
-    const cleanup = (shouldRollback) => {
-      if (settled) return;
-      settled = true;
-      powerUpPendingRef.current = false;
-      powerUpCleanupRef.current = null;
-      suppressErrorToastRef.current = false;
-      clearTimeout(rollbackTimeout);
-      socketService.off('error', onError);
-      socketService.off('power_up_activated', onSuccess);
-      socketService.off('answer_received', onAnswer);
-      if (shouldRollback) rollback();
-    };
-    const onError = () => cleanup(true);
-    const onSuccess = () => cleanup(false);
-    // If player answers before confirmation, stop waiting — no rollback needed
-    // because power-up state is already applied server-side during answer processing
-    const onAnswer = () => cleanup(false);
-    const rollbackTimeout = setTimeout(() => cleanup(true), 5000);
-    powerUpCleanupRef.current = () => cleanup(true);
-    socketService.on('error', onError);
-    socketService.on('power_up_activated', onSuccess);
-    socketService.on('answer_received', onAnswer);
+    socketService
+      .emitWithAck('use_power_up', { pin: room.roomPin, powerUpType: type }, 5000)
+      .then((response) => {
+        if (response && !response.ok) {
+          // Server rejected — rollback optimistic update
+          setState(prev => ({
+            ...prev,
+            powerUps: { ...prev.powerUps, [type]: (prev.powerUps[type] || 0) + 1 },
+          }));
+          showToast.error(response.error || 'Power-up could not be used');
+        }
+      })
+      .catch(() => {
+        // Timeout or network error — rollback
+        setState(prev => ({
+          ...prev,
+          powerUps: { ...prev.powerUps, [type]: (prev.powerUps[type] || 0) + 1 },
+        }));
+      })
+      .finally(() => {
+        powerUpPendingRef.current = false;
+        suppressErrorToastRef.current = false;
+      });
   }, [room.roomPin, room.isHost, state.hasAnswered, state.powerUps]);
 
   const endAnswering = useCallback(() => room.hostEmit('end_answering'), [room]);
@@ -548,14 +543,11 @@ export function GameProvider({ children }) {
 
   // Cleanup on unmount only — remove game-specific listeners, not all listeners
   useEffect(() => {
-    mountedRef.current = true;
     return () => {
-      mountedRef.current = false;
       timerRef.current.stopTimer();
       cleanupGameListeners();
       listenersSetupRef.current = false;
       lastSocketIdRef.current = null;
-      if (powerUpCleanupRef.current) powerUpCleanupRef.current();
     };
   }, [cleanupGameListeners]);
 

@@ -233,9 +233,25 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         return;
       }
 
+      // Check if this is a spectator leaving
+      if (room.isSpectator(socket.id)) {
+        const result = await roomUseCases.leaveAsSpectator({
+          pin,
+          socketId: socket.id
+        });
+        socket.leave(pin);
+        io.to(pin).emit('spectator_left', {
+          spectatorId: result.removedSpectator?.id || socket.id,
+          nickname: result.removedSpectator?.nickname || null,
+          spectatorCount: result.room.getSpectatorCount()
+        });
+        sendAck(ack, { success: true, role: 'spectator' });
+        return;
+      }
+
       if (!room.getPlayer(socket.id)) {
-        sendAck(ack, { ok: false, error: 'Player is not in this room' });
-        socket.emit('error', { error: 'Player is not in this room' });
+        sendAck(ack, { ok: false, error: 'Not a member of this room' });
+        socket.emit('error', { error: 'Not a member of this room' });
         return;
       }
 
@@ -355,6 +371,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         connectedPlayerCount: result.room.getConnectedPlayerCount(),
         currentQuestionIndex: result.room.currentQuestionIndex,
         players: result.room.getAllPlayers().map(toPlayerDTO),
+        hostToken: result.newHostToken, // Rotated token for security
       };
 
       // Include quiz snapshot data if game has started
@@ -365,6 +382,10 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         if (question) {
           reconnectPayload.currentQuestion = question.getHostData();
         }
+      } else if (result.quiz) {
+        // Game hasn't started yet — provide lobby info from the original quiz
+        reconnectPayload.quizTitle = result.quiz.title;
+        reconnectPayload.totalQuestions = result.quiz.getTotalQuestions();
       }
 
       // Include timer sync if in answering phase
@@ -379,7 +400,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       const roomState = result.room.state;
       if (roomState === 'ANSWERING_PHASE') {
         reconnectPayload.answeredCount = result.room.getAnsweredCount();
-        reconnectPayload.totalPlayers = result.room.answeringPhasePlayerCount;
+        reconnectPayload.totalPlayersInPhase = result.room.answeringPhasePlayerCount;
       }
 
       if (roomState === 'SHOW_RESULTS' && snapshot) {
@@ -471,6 +492,17 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         answeredCount: result.room.getAnsweredCount(),
         totalPlayersInPhase: result.room.answeringPhasePlayerCount
       };
+
+      // Restore the player's own answer feedback so they see correct/incorrect after reconnect
+      if (result.player.hasAnswered() && result.player.answerAttempt && snapshot) {
+        const question = snapshot.getQuestion(result.room.currentQuestionIndex);
+        if (question) {
+          reconnectPayload.lastAnswer = {
+            answerIndex: result.player.answerAttempt.answerIndex,
+            isCorrect: question.isCorrect(result.player.answerAttempt.answerIndex)
+          };
+        }
+      }
 
       // Include phase-specific data for reconnection
       const playerRoomState = result.room.state;

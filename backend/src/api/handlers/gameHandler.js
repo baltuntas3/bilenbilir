@@ -117,11 +117,16 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         return;
       }
 
+      // Pass effective timer duration so scoring accounts for TIME_EXTENSION and lightning rounds
+      const timerSync = timerService.getTimerSync(pin);
+      const effectiveTimeLimitMs = timerSync?.duration || null;
+
       const result = await gameUseCases.submitAnswer({
         pin,
         socketId: socket.id,
         answerIndex,
-        elapsedTimeMs
+        elapsedTimeMs,
+        effectiveTimeLimitMs
       });
 
       socket.emit('answer_received', {
@@ -143,7 +148,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       io.to(pin).emit('answer_count_updated', {
         answeredCount: result.answeredCount,
-        totalPlayers: result.totalPlayers,
+        totalPlayersInPhase: result.totalPlayers,
         connectedPlayerCount: result.connectedPlayerCount
       });
 
@@ -243,10 +248,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       if (result.isGameOver) {
         const gameOverPayload = {
-          podium: result.podium.map(toPlayerDTO)
+          podium: result.podium.map(toPlayerDTO),
+          leaderboard: result.room.getLeaderboard().map(toPlayerDTO)
         };
         if (result.teamPodium) {
           gameOverPayload.teamPodium = result.teamPodium;
+        }
+        if (result.room.isTeamMode()) {
+          gameOverPayload.teamLeaderboard = result.room.getTeamLeaderboard();
         }
         io.to(pin).emit('game_over', gameOverPayload);
 
@@ -338,9 +347,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
   // ==================== POWER-UP EVENTS ====================
 
-  socket.on('use_power_up', async (data) => {
+  socket.on('use_power_up', async (data, ack) => {
     try {
-      if (!checkRateLimit('use_power_up')) return;
+      if (!checkRateLimit('use_power_up')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
 
       const { pin, powerUpType } = data || {};
 
@@ -348,7 +360,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       if (powerUpType === 'TIME_EXTENSION') {
         const remaining = timerService.getRemainingExtensionBudget(pin);
         if (remaining <= 0) {
-          socket.emit('error', { error: 'Time extension limit reached for this question' });
+          sendAck(ack, { ok: false, error: 'Time extension limit reached for this question' });
           return;
         }
       }
@@ -366,6 +378,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       if (emitActions.roomEmits) {
         emitActions.roomEmits.forEach(e => io.to(pin).emit(e.event, e.data));
       }
+      let timerActionFailed = false;
       if (emitActions.timerAction) {
         const { method, args } = emitActions.timerAction;
         const allowedTimerMethods = ['extendTimer', 'stopTimer'];
@@ -374,19 +387,35 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
             .filter(a => typeof a === 'number')
             .map(a => Math.min(Math.max(0, a), MAX_TIMER_EXTENSION_MS));
           try {
-            timerService[method](pin, ...safeArgs);
+            const timerResult = timerService[method](pin, ...safeArgs);
+            if (method === 'extendTimer' && timerResult === 0) {
+              timerActionFailed = true;
+            }
           } catch (timerErr) {
+            timerActionFailed = true;
             console.error(`Timer action '${method}' failed for pin ${pin}:`, timerErr.message);
           }
         }
       }
 
-      // Broadcast to room that a player used a power-up
+      if (timerActionFailed) {
+        // Refund the consumed power-up since timer action failed
+        try {
+          await gameUseCases.refundPowerUp({ pin, socketId: socket.id, powerUpType });
+        } catch (refundErr) {
+          console.error(`Failed to refund power-up for pin ${pin}:`, refundErr.message);
+        }
+        sendAck(ack, { ok: false, error: 'Time extension limit reached for this question' });
+        return;
+      }
+
       io.to(pin).emit('power_up_used', {
         nickname: result.nickname,
         powerUpType
       });
+      sendAck(ack, { ok: true, powerUpType });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });

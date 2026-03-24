@@ -35,7 +35,7 @@ class Answer {
     );
   }
 
-  static create({ playerId, questionId, roomPin, answerIndex, question, elapsedTimeMs, currentStreak }) {
+  static create({ playerId, questionId, roomPin, answerIndex, question, elapsedTimeMs, currentStreak, effectiveTimeLimitMs = null }) {
     // Validate required IDs
     if (!playerId || typeof playerId !== 'string') {
       throw new ValidationError('playerId is required and must be a string');
@@ -71,7 +71,7 @@ class Answer {
       : 0;
 
     const isCorrect = question.isCorrect(answerIndex);
-    const baseScore = question.calculateScore(answerIndex, elapsedTimeMs);
+    const baseScore = question.calculateScore(answerIndex, elapsedTimeMs, effectiveTimeLimitMs);
 
     let streakBonus = 0;
     if (isCorrect && safeStreak > 0) {

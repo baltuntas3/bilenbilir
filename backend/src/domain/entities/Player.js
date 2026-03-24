@@ -165,6 +165,20 @@ class Player extends BaseParticipant {
     this.eliminatedOptions = [...options];
   }
 
+  /**
+   * Refund a consumed power-up (e.g. when timer extension fails)
+   * @param {string} type - PowerUpType
+   */
+  refundPowerUp(type) {
+    if (!PowerUpType[type]) {
+      throw new ValidationError(`Invalid power-up type: ${type}`);
+    }
+    this.powerUps[type] = (this.powerUps[type] || 0) + 1;
+    if (this.activePowerUp === type) {
+      this.activePowerUp = null;
+    }
+  }
+
   clearActivePowerUp() {
     this.activePowerUp = null;
   }

@@ -141,7 +141,7 @@ class Room {
    * @throws {UnauthorizedError} If token is invalid or missing
    * @throws {ForbiddenError} If grace period has expired
    */
-  reconnectHost(newSocketId, token, gracePeriodMs = null) {
+  reconnectHost(newSocketId, token, gracePeriodMs = null, newToken = null) {
     // Validate token is provided and non-empty
     if (!token || typeof token !== 'string' || token.trim().length === 0) {
       throw new UnauthorizedError('Host token is required');
@@ -172,6 +172,10 @@ class Room {
 
     this.hostId = newSocketId;
     this.hostDisconnectedAt = null;
+    // Rotate token on reconnect for security (same pattern as player/spectator)
+    if (newToken) {
+      this.hostToken = newToken;
+    }
   }
 
   isHostDisconnected() {
@@ -212,9 +216,6 @@ class Room {
       this._teamManager.removePlayer(player.id);
     }
     this.players = this.players.filter(p => p.socketId !== socketId);
-    if (player && this.state === RoomState.ANSWERING_PHASE) {
-      this.answeringPhasePlayerCount = Math.max(0, this.answeringPhasePlayerCount - 1);
-    }
     return player || null;
   }
 
@@ -278,10 +279,8 @@ class Room {
         !p.isDisconnected() || p.getDisconnectedDuration() <= gracePeriodMs
       );
 
-      // Update answering phase count to keep progress display consistent
-      if (this.state === RoomState.ANSWERING_PHASE) {
-        this.answeringPhasePlayerCount = Math.max(0, this.answeringPhasePlayerCount - stalePlayers.length);
-      }
+      // answeringPhasePlayerCount is intentionally NOT decremented here.
+      // It is a snapshot taken at phase start for consistent progress reporting.
     }
 
     return stalePlayers;
@@ -587,9 +586,6 @@ class Room {
 
     this._teamManager.removePlayer(playerId);
     this.players = this.players.filter(p => p.id !== playerId);
-    if (this.state === RoomState.ANSWERING_PHASE) {
-      this.answeringPhasePlayerCount = Math.max(0, this.answeringPhasePlayerCount - 1);
-    }
     return player;
   }
 
@@ -698,23 +694,27 @@ class Room {
   // ==================== PAUSE/RESUME METHODS (delegated to PauseManager) ====================
 
   pause(requesterId) {
-    const newState = this._pauseManager.pause(
+    const { pausedState, fromState } = this._pauseManager.pause(
       this.state,
       this.isHost(requesterId),
       [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS],
       RoomState.PAUSED
     );
-    this.setState(newState);
+    // setState validates the transition — if it throws, no pause state is written
+    this.setState(pausedState);
+    this._pauseManager.applyPause(fromState);
   }
 
   resume(requesterId) {
-    const newState = this._pauseManager.resume(
+    const resumeState = this._pauseManager.resume(
       this.state,
       this.isHost(requesterId),
       RoomState.PAUSED,
       RoomState.LEADERBOARD
     );
-    this.setState(newState);
+    // setState validates the transition — if it throws, pause state is preserved
+    this.setState(resumeState);
+    this._pauseManager.applyResume();
   }
 
   isPaused() {

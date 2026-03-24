@@ -23,7 +23,7 @@ class AnswerUseCases extends SharedUseCases {
     return question;
   }
 
-  async submitAnswer({ pin, socketId, answerIndex, elapsedTimeMs }) {
+  async submitAnswer({ pin, socketId, answerIndex, elapsedTimeMs, effectiveTimeLimitMs = null }) {
     if (answerIndex === null || answerIndex === undefined ||
         typeof answerIndex !== 'number' || !Number.isInteger(answerIndex) ||
         answerIndex < 0) {
@@ -59,7 +59,8 @@ class AnswerUseCases extends SharedUseCases {
         answerIndex,
         question: currentQuestion,
         elapsedTimeMs: validElapsedTime,
-        currentStreak: streakBeforeAnswer
+        currentStreak: streakBeforeAnswer,
+        effectiveTimeLimitMs
       });
 
       player.submitAnswer(answerIndex, validElapsedTime);
@@ -137,6 +138,14 @@ class AnswerUseCases extends SharedUseCases {
       await this.roomRepository.save(room);
       return { result, emitActions };
     });
+  }
+
+  async refundPowerUp({ pin, socketId, powerUpType }) {
+    const room = await this._getRoomOrThrow(pin);
+    const player = room.getPlayer(socketId);
+    if (!player) return;
+    player.refundPowerUp(powerUpType);
+    await this.roomRepository.save(room);
   }
 
   getServerElapsedTime(timerService, pin) {

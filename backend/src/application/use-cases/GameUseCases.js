@@ -56,6 +56,7 @@ class GameUseCases {
   // Answer delegation
   submitAnswer(params) { return this._answer.submitAnswer(params); }
   usePowerUp(params) { return this._answer.usePowerUp(params); }
+  refundPowerUp(params) { return this._answer.refundPowerUp(params); }
   getServerElapsedTime(timerService, pin) { return this._answer.getServerElapsedTime(timerService, pin); }
 
   // Archive delegation

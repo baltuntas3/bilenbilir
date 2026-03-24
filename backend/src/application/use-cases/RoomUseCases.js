@@ -194,10 +194,11 @@ class RoomUseCases extends SharedUseCases {
 
   async reconnectHost({ pin, hostToken, newSocketId }) {
     const room = await this._getRoomOrThrow(pin);
-    room.reconnectHost(newSocketId, hostToken, this.hostGracePeriod);
+    const newHostToken = generateId();
+    room.reconnectHost(newSocketId, hostToken, this.hostGracePeriod, newHostToken);
     await this.roomRepository.save(room);
     const quiz = await this.quizRepository.findById(room.quizId);
-    return { room, quiz };
+    return { room, quiz, newHostToken };
   }
 
   async reconnectPlayer({ pin, playerToken, newSocketId }) {

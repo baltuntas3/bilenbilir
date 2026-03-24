@@ -80,10 +80,10 @@ class GameFlowUseCases extends SharedUseCases {
     return { room, timeLimit, optionCount: currentQuestion.options.length, isLightning };
   }
 
-  async endAnsweringPhase({ pin, requesterId }) {
+  async endAnsweringPhase({ pin, requesterId, isSystemTriggered = false }) {
     const room = await this._getRoomOrThrow(pin);
     if (room.state !== RoomState.ANSWERING_PHASE) throw new ConflictError('Not in answering phase');
-    if (requesterId !== 'server') this._throwIfNotHost(room, requesterId);
+    if (!isSystemTriggered) this._throwIfNotHost(room, requesterId);
 
     room.setState(RoomState.SHOW_RESULTS);
     await this.roomRepository.save(room);

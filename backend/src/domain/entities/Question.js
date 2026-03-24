@@ -134,13 +134,14 @@ class Question {
     return answerIndex === this.correctAnswerIndex;
   }
 
-  calculateScore(answerIndex, elapsedTimeMs) {
+  calculateScore(answerIndex, elapsedTimeMs, effectiveTimeLimitMs = null) {
     if (!this.isCorrect(answerIndex)) {
       return 0;
     }
 
-    // Defensive check for zero time limit (should never happen due to validation)
-    const totalTimeMs = this.timeLimit * 1000;
+    // Use effective time limit if provided (accounts for TIME_EXTENSION / lightning round),
+    // otherwise fall back to the question's own timeLimit.
+    const totalTimeMs = effectiveTimeLimitMs || this.timeLimit * 1000;
     if (totalTimeMs <= 0) {
       return this.points; // Return full points if time limit is invalid
     }

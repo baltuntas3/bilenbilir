@@ -8,11 +8,12 @@ describe('PauseManager', () => {
   });
 
   describe('pause', () => {
-    it('should pause from leaderboard state', () => {
+    it('should return pause transition info', () => {
       const result = pm.pause('LEADERBOARD', true, 'LEADERBOARD', 'PAUSED');
-      expect(result).toBe('PAUSED');
-      expect(pm.pausedAt).toBeInstanceOf(Date);
-      expect(pm.pausedFromState).toBe('LEADERBOARD');
+      expect(result).toEqual({ pausedState: 'PAUSED', fromState: 'LEADERBOARD' });
+      // State should NOT be mutated yet — applyPause must be called after setState
+      expect(pm.pausedAt).toBeNull();
+      expect(pm.pausedFromState).toBeNull();
     });
 
     it('should throw if not host', () => {
@@ -24,17 +25,24 @@ describe('PauseManager', () => {
     });
   });
 
+  describe('applyPause', () => {
+    it('should set pause state after successful transition', () => {
+      pm.applyPause('LEADERBOARD');
+      expect(pm.pausedAt).toBeInstanceOf(Date);
+      expect(pm.pausedFromState).toBe('LEADERBOARD');
+    });
+  });
+
   describe('resume', () => {
-    it('should resume to pausedFromState', () => {
-      pm.pause('LEADERBOARD', true, 'LEADERBOARD', 'PAUSED');
+    it('should return the state to resume to', () => {
+      pm.applyPause('LEADERBOARD');
       const result = pm.resume('PAUSED', true, 'PAUSED', 'LEADERBOARD');
       expect(result).toBe('LEADERBOARD');
-      expect(pm.pausedAt).toBeNull();
-      expect(pm.pausedFromState).toBeNull();
+      // State should NOT be cleared yet — applyResume must be called after setState
+      expect(pm.pausedAt).toBeInstanceOf(Date);
     });
 
     it('should fall back to defaultResumeState when pausedFromState is null', () => {
-      // Directly set state without going through pause (simulates edge case)
       pm.pausedFromState = null;
       pm.pausedAt = new Date();
       const result = pm.resume('PAUSED', true, 'PAUSED', 'DEFAULT_STATE');
@@ -42,12 +50,21 @@ describe('PauseManager', () => {
     });
 
     it('should throw if not host', () => {
-      pm.pause('LEADERBOARD', true, 'LEADERBOARD', 'PAUSED');
+      pm.applyPause('LEADERBOARD');
       expect(() => pm.resume('PAUSED', false, 'PAUSED', 'LEADERBOARD')).toThrow('Only host can resume');
     });
 
     it('should throw if not in paused state', () => {
       expect(() => pm.resume('LEADERBOARD', true, 'PAUSED', 'LEADERBOARD')).toThrow('Game is not paused');
+    });
+  });
+
+  describe('applyResume', () => {
+    it('should clear pause state after successful transition', () => {
+      pm.applyPause('LEADERBOARD');
+      pm.applyResume();
+      expect(pm.pausedAt).toBeNull();
+      expect(pm.pausedFromState).toBeNull();
     });
   });
 

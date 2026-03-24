@@ -556,7 +556,7 @@ describe('GameUseCases', () => {
 
     it('should clean expired locks', async () => {
       // Manually add an expired lock via internal map
-      gameUseCases.pendingAnswers.locks.set('expired-key', Date.now() - 20000);
+      gameUseCases.pendingAnswers.locks.set('expired-key', { active: true, acquiredAt: Date.now() - 20000 });
 
       const result = gameUseCases.cleanupExpiredLocks();
 
@@ -715,7 +715,7 @@ describe('GameUseCases', () => {
 
       const result = await gameUseCases.endAnsweringPhase({
         pin: roomPin,
-        requesterId: 'server'
+        isSystemTriggered: true
       });
 
       expect(result.room.state).toBe(RoomState.SHOW_RESULTS);
@@ -737,7 +737,7 @@ describe('GameUseCases', () => {
     it('should reject concurrent answer submissions from same player', async () => {
       // Manually set a pending lock via internal map
       const submissionKey = `${roomPin}:player-socket-1`;
-      gameUseCases.pendingAnswers.locks.set(submissionKey, Date.now());
+      gameUseCases.pendingAnswers.locks.set(submissionKey, { active: true, acquiredAt: Date.now() });
 
       await expect(gameUseCases.submitAnswer({
         pin: roomPin,

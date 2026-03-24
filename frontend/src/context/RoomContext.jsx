@@ -327,7 +327,9 @@ export function RoomProvider({ children }) {
     if (!isAuthenticated) throw new Error('Not authenticated');
     await connectSocket();
     const response = await emitWithResponse('reconnect_host', { pin, hostToken }, 'host_reconnected');
-    updateRoomState({ roomPin: response.pin, isHost: true, hostToken });
+    const rotatedToken = response.hostToken || hostToken;
+    updateRoomState({ roomPin: response.pin, isHost: true, hostToken: rotatedToken });
+    saveSession({ pin: response.pin, hostToken: rotatedToken, role: 'host' });
     return response;
   }, [isAuthenticated, connectSocket, updateRoomState, emitWithResponse]);
 
@@ -362,15 +364,11 @@ export function RoomProvider({ children }) {
 
   // Player/spectator management
   const kickPlayer = useCallback((playerId) => {
-    const result = hostEmit('kick_player', { playerId });
-    setRoomState(prev => ({ ...prev, players: prev.players.filter(p => p.id !== playerId) }));
-    return result;
+    return hostEmit('kick_player', { playerId });
   }, [hostEmit]);
 
   const banPlayer = useCallback((playerId) => {
-    const result = hostEmit('ban_player', { playerId });
-    setRoomState(prev => ({ ...prev, players: prev.players.filter(p => p.id !== playerId) }));
-    return result;
+    return hostEmit('ban_player', { playerId });
   }, [hostEmit]);
 
   const getPlayers = useCallback(() => {

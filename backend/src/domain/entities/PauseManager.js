@@ -6,26 +6,50 @@ class PauseManager {
     this.pausedFromState = null;
   }
 
+  /**
+   * Validate and prepare pause transition.
+   * All validation happens before any state mutation.
+   * @returns {string} The new state to transition to
+   */
   pause(currentState, isHost, allowedStates, pausedState) {
     if (!isHost) throw new ForbiddenError('Only host can pause the game');
     const allowed = Array.isArray(allowedStates) ? allowedStates : [allowedStates];
     if (!allowed.includes(currentState)) {
       throw new ValidationError(`Game can only be paused from: ${allowed.join(', ')}`);
     }
-    this.pausedFromState = currentState;
-    this.pausedAt = new Date();
-    return pausedState;
+    // Return transition info — caller applies via applyPause() after setState succeeds
+    return { pausedState, fromState: currentState };
   }
 
+  /**
+   * Apply pause state after successful state transition.
+   * Must be called only after Room.setState() succeeds.
+   */
+  applyPause(fromState) {
+    this.pausedFromState = fromState;
+    this.pausedAt = new Date();
+  }
+
+  /**
+   * Validate and prepare resume transition.
+   * All validation happens before any state mutation.
+   * @returns {string} The state to resume to
+   */
   resume(currentState, isHost, pausedState, defaultResumeState) {
     if (!isHost) throw new ForbiddenError('Only host can resume the game');
     if (currentState !== pausedState) {
       throw new ValidationError('Game is not paused');
     }
-    const resumeState = this.pausedFromState || defaultResumeState;
+    return this.pausedFromState || defaultResumeState;
+  }
+
+  /**
+   * Clear pause state after successful state transition.
+   * Must be called only after Room.setState() succeeds.
+   */
+  applyResume() {
     this.pausedAt = null;
     this.pausedFromState = null;
-    return resumeState;
   }
 
   isPaused(currentState, pausedState) {

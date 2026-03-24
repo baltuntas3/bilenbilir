@@ -68,7 +68,7 @@ const toShowResultsDTO = (endResult) => ({
   distribution: endResult.distribution,
   correctCount: endResult.correctCount,
   answeredCount: endResult.answeredCount,
-  totalPlayers: endResult.totalPlayers,
+  totalPlayersInPhase: endResult.totalPlayers,
   explanation: endResult.explanation || null
 });
 
@@ -104,7 +104,7 @@ const autoAdvanceToResults = async ({ io, pin, endAnsweringLocks, timerService, 
   try {
     if (timerService) timerService.stopTimer(pin);
     io.to(pin).emit('all_players_answered');
-    const endResult = await gameUseCases.endAnsweringPhase({ pin, requesterId: 'server' });
+    const endResult = await gameUseCases.endAnsweringPhase({ pin, isSystemTriggered: true });
     if (endResult) {
       io.to(pin).emit('show_results', toShowResultsDTO(endResult));
     }
