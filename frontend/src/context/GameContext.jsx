@@ -343,6 +343,8 @@ export function GameProvider({ children }) {
       showToast.success((labels[type] || type) + ' aktif!');
     });
     socketService.on('power_up_used', ({ nickname, powerUpType }) => {
+      // Skip toast for our own pending power-up — already handled via optimistic UI
+      if (pendingPowerUpTypeRef.current === powerUpType) return;
       const labels = { FIFTY_FIFTY: '50:50', DOUBLE_POINTS: 'Çift Puan', TIME_EXTENSION: 'Süre Uzatma' };
       showToast.info(nickname + ' joker kullandı: ' + (labels[powerUpType] || powerUpType));
     });
@@ -449,10 +451,13 @@ export function GameProvider({ children }) {
   }, [room.isHost, room.roomPin, state.hasAnswered]);
 
   const powerUpPendingRef = useRef(false);
+  // Track the power-up type currently being processed to avoid race with server events
+  const pendingPowerUpTypeRef = useRef(null);
   const usePowerUp = useCallback((type) => {
     if (!room.roomPin || room.isHost || state.hasAnswered || powerUpPendingRef.current) return;
     if ((state.powerUps[type] || 0) <= 0) return;
     powerUpPendingRef.current = true;
+    pendingPowerUpTypeRef.current = type;
     suppressErrorToastRef.current = true;
 
     // Optimistic UI update
@@ -482,6 +487,7 @@ export function GameProvider({ children }) {
       })
       .finally(() => {
         powerUpPendingRef.current = false;
+        pendingPowerUpTypeRef.current = null;
         suppressErrorToastRef.current = false;
       });
   }, [room.roomPin, room.isHost, state.hasAnswered, state.powerUps]);

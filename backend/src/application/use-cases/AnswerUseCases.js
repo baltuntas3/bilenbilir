@@ -3,24 +3,16 @@ const { LockManager } = require('../../shared/utils/LockManager');
 const { RoomState } = require('../../domain/entities');
 const { Answer, PowerUpType, powerUpRegistry, MAX_ANSWER_SCORE } = require('../../domain/value-objects');
 const { NotFoundError, ValidationError, ConflictError } = require('../../shared/errors');
-const { LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
+const { ANSWER_LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 
 class AnswerUseCases extends SharedUseCases {
   constructor(roomRepository, quizRepository) {
     super(roomRepository, quizRepository);
-    this.pendingAnswers = new LockManager(LOCK_TIMEOUT_MS);
+    this.pendingAnswers = new LockManager(ANSWER_LOCK_TIMEOUT_MS);
   }
 
   cleanupExpiredLocks() {
     return this.pendingAnswers.cleanupExpired();
-  }
-
-  _getQuestionFromSnapshot(room, index) {
-    const snapshot = room.getQuizSnapshot();
-    if (!snapshot) throw new ValidationError('Game has not started - no quiz snapshot available');
-    const question = snapshot.getQuestion(index);
-    if (!question) throw new NotFoundError(`Question at index ${index} not found`);
-    return question;
   }
 
   async submitAnswer({ pin, socketId, answerIndex, elapsedTimeMs, effectiveTimeLimitMs = null }) {
@@ -141,9 +133,11 @@ class AnswerUseCases extends SharedUseCases {
   }
 
   async refundPowerUp({ pin, socketId, powerUpType }) {
+    if (!pin || !socketId || !powerUpType) return;
     const room = await this._getRoomOrThrow(pin);
     const player = room.getPlayer(socketId);
     if (!player) return;
+    // refundPowerUp validates powerUpType internally via PowerUpType check
     player.refundPowerUp(powerUpType);
     await this.roomRepository.save(room);
   }

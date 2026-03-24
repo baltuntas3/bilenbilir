@@ -505,6 +505,12 @@ class Room {
       throw new ValidationError('isCorrect must be a boolean');
     }
 
+    // Prevent duplicate answer records for the same player on the same question
+    const isDuplicate = this.answerHistory.some(
+      a => a.playerId === answerData.playerId && a.questionId === answerData.questionId
+    );
+    if (isDuplicate) return;
+
     // Sanitize streak with upper bound
     const safeStreak = Math.min(Math.max(0, answerData.streak || 0), MAX_STREAK);
 

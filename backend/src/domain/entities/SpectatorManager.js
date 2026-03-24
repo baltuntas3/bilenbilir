@@ -15,16 +15,18 @@ class SpectatorManager {
     if (nicknameExistsPlayer || nicknameExistsSpectator) {
       throw new ValidationError('Nickname already taken');
     }
-    // Check banned nicknames
+    // Check banned nicknames using the same normalization as Room._normalizeNickname
     if (bannedNicknames.length > 0) {
       const { Nickname } = require('../value-objects/Nickname');
       let normalized;
       try {
         normalized = new Nickname(spectator.nickname).normalized();
       } catch {
-        normalized = spectator.nickname.toLowerCase().trim();
+        // Invalid nicknames cannot be normalized consistently — return empty
+        // to avoid mismatches between ban check and Nickname VO validation
+        normalized = '';
       }
-      if (bannedNicknames.includes(normalized)) {
+      if (normalized && bannedNicknames.includes(normalized)) {
         throw new ForbiddenError('This nickname is banned from this room');
       }
     }

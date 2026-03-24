@@ -30,10 +30,20 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       requireAuth(); // JWT required for host
       const { pin, questionCount } = data || {};
 
+      // Validate questionCount before passing to use case
+      let parsedQuestionCount;
+      if (questionCount !== undefined && questionCount !== null) {
+        parsedQuestionCount = parseInt(questionCount, 10);
+        if (!Number.isInteger(parsedQuestionCount) || parsedQuestionCount < 1) {
+          sendAck(ack, { ok: false, error: 'Invalid question count' });
+          return;
+        }
+      }
+
       const result = await gameUseCases.startGame({
         pin,
         requesterId: socket.id,
-        questionCount: questionCount ? parseInt(questionCount, 10) : undefined
+        questionCount: parsedQuestionCount
       });
 
       // Send to host with full question data
@@ -177,7 +187,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       // Check lock to prevent race with timer callback auto-transition
       if (!endAnsweringLocks.acquire(pin)) {
-        sendAck(ack, { ok: true });
+        sendAck(ack, { ok: true, alreadyEnding: true });
         return;
       }
 
@@ -261,12 +271,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
         // Archive game but keep room in PODIUM state for late reconnects/get_results.
         // RoomCleanupService will remove the room after idle timeout.
+        let archiveFailed = false;
         try {
           await gameUseCases.archiveGame({ pin });
         } catch (archiveError) {
+          archiveFailed = true;
           console.error('Failed to archive game:', archiveError.message);
         }
-        sendAck(ack, { ok: true, isGameOver: true });
+        sendAck(ack, { ok: true, isGameOver: true, archiveFailed });
       } else {
         // Send to host with full question data
         socket.emit('question_intro', {

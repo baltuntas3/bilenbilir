@@ -1,4 +1,4 @@
-const { NotFoundError, ForbiddenError } = require('../../shared/errors');
+const { NotFoundError, ForbiddenError, ValidationError } = require('../../shared/errors');
 
 class SharedUseCases {
   constructor(roomRepository, quizRepository) {
@@ -26,6 +26,14 @@ class SharedUseCases {
     if (!room.isHost(requesterId)) {
       throw new ForbiddenError('Only host can perform this action');
     }
+  }
+
+  _getQuestionFromSnapshot(room, index) {
+    const snapshot = room.getQuizSnapshot();
+    if (!snapshot) throw new ValidationError('Game has not started - no quiz snapshot available');
+    const question = snapshot.getQuestion(index);
+    if (!question) throw new NotFoundError(`Question at index ${index} not found`);
+    return question;
   }
 
   async isInState(pin, state) {

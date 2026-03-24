@@ -1,8 +1,45 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { ConflictError } = require('../../shared/errors');
+const { RoomState } = require('../../domain/entities');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
 const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults, buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload } = require('./socketHandlerUtils');
 const { endAnsweringLocks } = require('./gameHandler');
+
+/**
+ * Append phase-specific payload fields based on room state.
+ * Single source of truth — used by spectator snapshot, host reconnect, and player reconnect.
+ * @param {Object} payload - Target object to extend
+ * @param {Room} room - Current room
+ * @param {Object|null} snapshot - Quiz snapshot (null if game not started)
+ */
+const appendPhasePayload = (payload, room, snapshot) => {
+  const state = room.state;
+
+  if (state === RoomState.ANSWERING_PHASE) {
+    payload.answeredCount = room.getAnsweredCount();
+    payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
+  }
+
+  if (state === RoomState.SHOW_RESULTS && snapshot) {
+    Object.assign(payload, buildShowResultsPayload(room, snapshot));
+  }
+
+  if (state === RoomState.LEADERBOARD) {
+    Object.assign(payload, buildLeaderboardPayload(room));
+  }
+
+  if (state === RoomState.PAUSED) {
+    payload.pausedFromState = room.pausedFromState;
+    Object.assign(payload, buildLeaderboardPayload(room));
+    if (room.pausedFromState === RoomState.SHOW_RESULTS && snapshot) {
+      Object.assign(payload, buildShowResultsPayload(room, snapshot));
+    }
+  }
+
+  if (state === RoomState.PODIUM) {
+    Object.assign(payload, buildPodiumPayload(room));
+  }
+};
 
 /**
  * Map team data for client consumption
@@ -51,34 +88,12 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       payload.currentQuestion = toPlayerQuestionDTO(question.getHostData());
     }
 
-    if (timerService && room.state === 'ANSWERING_PHASE') {
+    if (timerService && room.state === RoomState.ANSWERING_PHASE) {
       const timerSync = timerService.getTimerSync(room.pin);
       if (timerSync) payload.timerSync = timerSync;
-      payload.answeredCount = room.getAnsweredCount();
-      payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
     }
 
-    if (room.state === 'SHOW_RESULTS') {
-      Object.assign(payload, buildShowResultsPayload(room, snapshot));
-    }
-
-    if (room.state === 'LEADERBOARD') {
-      Object.assign(payload, buildLeaderboardPayload(room));
-    }
-
-    if (room.state === 'PAUSED') {
-      payload.pausedFromState = room.pausedFromState;
-      Object.assign(payload, buildLeaderboardPayload(room));
-      // Include SHOW_RESULTS data so clients can restore the correct phase on resume
-      if (room.pausedFromState === 'SHOW_RESULTS') {
-        Object.assign(payload, buildShowResultsPayload(room, snapshot));
-      }
-    }
-
-    if (room.state === 'PODIUM') {
-      Object.assign(payload, buildPodiumPayload(room));
-    }
-
+    appendPhasePayload(payload, room, snapshot);
     return payload;
   };
 
@@ -117,7 +132,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
    */
   const checkAllAnsweredAfterRemoval = async (room) => {
     if (!gameUseCases) return;
-    if (room.state !== 'ANSWERING_PHASE') return;
+    if (room.state !== RoomState.ANSWERING_PHASE) return;
 
     const noConnectedPlayers = room.getConnectedPlayerCount() === 0;
     if (!room.haveAllPlayersAnswered() && !noConnectedPlayers) return;
@@ -397,31 +412,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       // Include phase-specific data
-      const roomState = result.room.state;
-      if (roomState === 'ANSWERING_PHASE') {
-        reconnectPayload.answeredCount = result.room.getAnsweredCount();
-        reconnectPayload.totalPlayersInPhase = result.room.answeringPhasePlayerCount;
-      }
-
-      if (roomState === 'SHOW_RESULTS' && snapshot) {
-        Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
-      }
-
-      if (roomState === 'LEADERBOARD') {
-        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
-      }
-
-      if (roomState === 'PAUSED') {
-        reconnectPayload.pausedFromState = result.room.pausedFromState;
-        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
-        if (result.room.pausedFromState === 'SHOW_RESULTS' && snapshot) {
-          Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
-        }
-      }
-
-      if (roomState === 'PODIUM') {
-        Object.assign(reconnectPayload, buildPodiumPayload(result.room));
-      }
+      appendPhasePayload(reconnectPayload, result.room, snapshot);
 
       socket.emit('host_reconnected', reconnectPayload);
       sendAck(ack, reconnectPayload);
@@ -505,27 +496,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       // Include phase-specific data for reconnection
-      const playerRoomState = result.room.state;
-
-      if (playerRoomState === 'SHOW_RESULTS' && snapshot) {
-        Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
-      }
-
-      if (playerRoomState === 'LEADERBOARD') {
-        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
-      }
-
-      if (playerRoomState === 'PAUSED') {
-        reconnectPayload.pausedFromState = result.room.pausedFromState;
-        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
-        if (result.room.pausedFromState === 'SHOW_RESULTS' && snapshot) {
-          Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
-        }
-      }
-
-      if (playerRoomState === 'PODIUM') {
-        Object.assign(reconnectPayload, buildPodiumPayload(result.room));
-      }
+      appendPhasePayload(reconnectPayload, result.room, snapshot);
 
       socket.emit('player_reconnected', reconnectPayload);
       sendAck(ack, reconnectPayload);

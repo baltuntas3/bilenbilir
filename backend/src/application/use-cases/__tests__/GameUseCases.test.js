@@ -555,8 +555,8 @@ describe('GameUseCases', () => {
     });
 
     it('should clean expired locks', async () => {
-      // Manually add an expired lock via internal map
-      gameUseCases.pendingAnswers.locks.set('expired-key', { active: true, acquiredAt: Date.now() - 20000 });
+      // Manually add an expired lock via internal map (must exceed ANSWER_LOCK_TIMEOUT_MS = 30s)
+      gameUseCases.pendingAnswers.locks.set('expired-key', { active: true, acquiredAt: Date.now() - 40000 });
 
       const result = gameUseCases.cleanupExpiredLocks();
 

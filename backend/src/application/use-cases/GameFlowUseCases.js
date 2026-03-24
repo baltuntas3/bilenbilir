@@ -1,18 +1,10 @@
 const { SharedUseCases } = require('./SharedUseCases');
 const { RoomState } = require('../../domain/entities');
-const { NotFoundError, ValidationError, ConflictError } = require('../../shared/errors');
+const { ValidationError, ConflictError } = require('../../shared/errors');
 
 class GameFlowUseCases extends SharedUseCases {
   constructor(roomRepository, quizRepository) {
     super(roomRepository, quizRepository);
-  }
-
-  _getQuestionFromSnapshot(room, index) {
-    const snapshot = room.getQuizSnapshot();
-    if (!snapshot) throw new ValidationError('Game has not started - no quiz snapshot available');
-    const question = snapshot.getQuestion(index);
-    if (!question) throw new NotFoundError(`Question at index ${index} not found`);
-    return question;
   }
 
   async startGame({ pin, requesterId, questionCount }) {
@@ -67,7 +59,11 @@ class GameFlowUseCases extends SharedUseCases {
     room.clearAllAnswerAttempts();
     room.setState(RoomState.ANSWERING_PHASE);
     await this.roomRepository.save(room);
-    if (pendingAnswers) pendingAnswers.clearByPrefix(`${pin}:`);
+    if (pendingAnswers) {
+      try { pendingAnswers.clearByPrefix(`${pin}:`); } catch (err) {
+        console.error(`Failed to clear pending answer locks for ${pin}:`, err.message);
+      }
+    }
 
     const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
     let timeLimit = currentQuestion.timeLimit;
