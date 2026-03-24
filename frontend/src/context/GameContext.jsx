@@ -92,7 +92,7 @@ export function GameProvider({ children }) {
     const gameEvents = [
       'you_were_kicked', 'room_joined_spectator', 'player_reconnected', 'host_reconnected', 'spectator_reconnected', 'game_started',
       'question_intro', 'answering_started', 'answer_received', 'answer_count_updated',
-      'all_players_answered', 'show_results', 'round_ended', 'leaderboard', 'game_over',
+      'all_players_answered', 'show_results', 'leaderboard', 'game_over',
       'final_results', 'fifty_fifty_result', 'power_up_activated', 'power_up_used',
       'time_extended', 'timer_started', 'timer_tick', 'time_expired', 'timer_sync',
       'game_paused', 'game_resumed', 'reaction_received', 'room_closed',
@@ -126,8 +126,8 @@ export function GameProvider({ children }) {
       const {
         state, score, streak, powerUps, eliminatedOptions, hasAnswered,
         currentQuestionIndex, totalQuestions, currentQuestion, timerSync, playerToken,
-        answeredCount, totalPlayersInPhase, correctAnswerIndex, answerDistribution, explanation,
-        leaderboard, podium, teamLeaderboard, teamPodium
+        answeredCount, totalPlayersInPhase, correctAnswerIndex, distribution, explanation,
+        leaderboard, podium, teamLeaderboard, teamPodium, pausedFromState
       } = data || {};
       const updates = {};
       if (state && GAME_STATES[state]) updates.gameState = state;
@@ -142,12 +142,13 @@ export function GameProvider({ children }) {
       if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
       if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
       if (typeof correctAnswerIndex === 'number') updates.correctAnswerIndex = correctAnswerIndex;
-      if (answerDistribution) updates.answerDistribution = answerDistribution;
+      if (distribution) updates.answerDistribution = distribution;
       if (explanation !== undefined) updates.explanation = explanation;
       if (leaderboard) updates.leaderboard = leaderboard;
       if (podium) updates.podium = podium;
       if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
       if (teamPodium) updates.teamPodium = teamPodium;
+      if (pausedFromState) updates.previousState = pausedFromState;
       if (Object.keys(updates).length > 0) updateState(updates);
 
       // Restore timer if in answering phase
@@ -170,8 +171,9 @@ export function GameProvider({ children }) {
       const {
         state, currentQuestionIndex, totalQuestions, currentQuestion,
         players, timerSync, leaderboard, podium,
-        correctAnswerIndex, answerDistribution, explanation,
-        answeredCount, totalPlayers, teamLeaderboard, teamPodium
+        correctAnswerIndex, distribution, explanation,
+        answeredCount, totalPlayers, totalPlayersInPhase,
+        teamLeaderboard, teamPodium, pausedFromState
       } = data || {};
       const updates = {};
       if (state && GAME_STATES[state]) updates.gameState = state;
@@ -179,14 +181,16 @@ export function GameProvider({ children }) {
       if (typeof totalQuestions === 'number') updates.totalQuestions = totalQuestions;
       if (currentQuestion) updates.currentQuestion = currentQuestion;
       if (typeof correctAnswerIndex === 'number') updates.correctAnswerIndex = correctAnswerIndex;
-      if (answerDistribution) updates.answerDistribution = answerDistribution;
+      if (distribution) updates.answerDistribution = distribution;
       if (explanation !== undefined) updates.explanation = explanation;
       if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
-      if (typeof totalPlayers === 'number') updates.totalPlayersInPhase = totalPlayers;
+      if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
+      else if (typeof totalPlayers === 'number') updates.totalPlayersInPhase = totalPlayers;
       if (leaderboard) updates.leaderboard = leaderboard;
       if (podium) updates.podium = podium;
       if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
       if (teamPodium) updates.teamPodium = teamPodium;
+      if (pausedFromState) updates.previousState = pausedFromState;
       if (Object.keys(updates).length > 0) updateState(updates);
 
       // Restore players list in RoomContext
@@ -207,8 +211,8 @@ export function GameProvider({ children }) {
     const applySpectatorSnapshot = (data) => {
       const {
         state, currentQuestionIndex, totalQuestions, currentQuestion,
-        answeredCount, totalPlayersInPhase, correctAnswerIndex, answerDistribution, explanation,
-        leaderboard, podium, teamLeaderboard, teamPodium, timerSync
+        answeredCount, totalPlayersInPhase, correctAnswerIndex, distribution, explanation,
+        leaderboard, podium, teamLeaderboard, teamPodium, timerSync, pausedFromState
       } = data || {};
       const updates = {};
       if (state && GAME_STATES[state]) updates.gameState = state;
@@ -218,12 +222,13 @@ export function GameProvider({ children }) {
       if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
       if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
       if (typeof correctAnswerIndex === 'number') updates.correctAnswerIndex = correctAnswerIndex;
-      if (answerDistribution) updates.answerDistribution = answerDistribution;
+      if (distribution) updates.answerDistribution = distribution;
       if (explanation !== undefined) updates.explanation = explanation;
       if (leaderboard) updates.leaderboard = leaderboard;
       if (podium) updates.podium = podium;
       if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
       if (teamPodium) updates.teamPodium = teamPodium;
+      if (pausedFromState) updates.previousState = pausedFromState;
       if (Object.keys(updates).length > 0) updateState(updates);
 
       if (timerSync && timerSync.remainingMs > 0) {
@@ -308,15 +313,6 @@ export function GameProvider({ children }) {
       });
     });
 
-    socketService.on('round_ended', ({ correctAnswerIndex, explanation }) => {
-      try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
-      updateState({
-        gameState: GAME_STATES.SHOW_RESULTS,
-        correctAnswerIndex,
-        explanation: explanation || null,
-      });
-    });
-
     socketService.on('leaderboard', ({ leaderboard, teamLeaderboard }) => {
       const updates = { gameState: GAME_STATES.LEADERBOARD, leaderboard };
       if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
@@ -379,9 +375,10 @@ export function GameProvider({ children }) {
       showToast.info('Game paused by host');
     });
     socketService.on('game_resumed', ({ state: resumedState }) => {
-      setState(prev => ({
-        ...prev, gameState: resumedState || prev.previousState || GAME_STATES.LEADERBOARD, previousState: null,
-      }));
+      setState(prev => {
+        const targetState = resumedState || prev.previousState || GAME_STATES.LEADERBOARD;
+        return { ...prev, gameState: targetState, previousState: null };
+      });
       showToast.info('Game resumed');
     });
 

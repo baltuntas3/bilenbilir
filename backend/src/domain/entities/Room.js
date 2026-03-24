@@ -310,8 +310,18 @@ class Room {
   }
 
   /**
-   * Clear all player answer attempts for new question
-   * Maintains Aggregate Root encapsulation
+   * Reset player answers between questions (e.g. when entering QUESTION_INTRO).
+   * Does NOT update answeringPhasePlayerCount — that is only set when entering ANSWERING_PHASE.
+   */
+  resetPlayerAnswersForNextQuestion() {
+    this.players.forEach(player => {
+      player.clearAnswerAttempt();
+    });
+  }
+
+  /**
+   * Clear all player answer attempts and snapshot connected player count for answering phase.
+   * Maintains Aggregate Root encapsulation.
    */
   clearAllAnswerAttempts() {
     this.answeringPhasePlayerCount = this.getConnectedPlayerCount();

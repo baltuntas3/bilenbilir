@@ -1,7 +1,7 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { ConflictError } = require('../../shared/errors');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
-const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults, buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload } = require('./socketHandlerUtils');
 const { endAnsweringLocks } = require('./gameHandler');
 
 /**
@@ -59,28 +59,24 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
     }
 
     if (room.state === 'SHOW_RESULTS') {
-      payload.correctAnswerIndex = question ? question.correctAnswerIndex : null;
-      payload.explanation = question ? (question.explanation || null) : null;
-      payload.answeredCount = room.getTotalAnsweredCount();
-      payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
-      if (question) {
-        const { distribution } = room.getAnswerDistribution(
-          question.options.length,
-          (idx) => question.isCorrect(idx)
-        );
-        payload.answerDistribution = distribution;
+      Object.assign(payload, buildShowResultsPayload(room, snapshot));
+    }
+
+    if (room.state === 'LEADERBOARD') {
+      Object.assign(payload, buildLeaderboardPayload(room));
+    }
+
+    if (room.state === 'PAUSED') {
+      payload.pausedFromState = room.pausedFromState;
+      Object.assign(payload, buildLeaderboardPayload(room));
+      // Include SHOW_RESULTS data so clients can restore the correct phase on resume
+      if (room.pausedFromState === 'SHOW_RESULTS') {
+        Object.assign(payload, buildShowResultsPayload(room, snapshot));
       }
     }
 
-    if (room.state === 'LEADERBOARD' || room.state === 'PAUSED') {
-      payload.leaderboard = room.getLeaderboard().map(toPlayerDTO);
-      if (room.isTeamMode()) payload.teamLeaderboard = room.getTeamLeaderboard();
-    }
-
     if (room.state === 'PODIUM') {
-      payload.podium = room.getPodium().map(toPlayerDTO);
-      payload.leaderboard = room.getLeaderboard().map(toPlayerDTO);
-      if (room.isTeamMode()) payload.teamPodium = room.getTeamPodium();
+      Object.assign(payload, buildPodiumPayload(room));
     }
 
     return payload;
@@ -387,33 +383,23 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       if (roomState === 'SHOW_RESULTS' && snapshot) {
-        const question = snapshot.getQuestion(result.room.currentQuestionIndex);
-        if (question) {
-          const { distribution, correctCount } = result.room.getAnswerDistribution(
-            question.options.length,
-            (idx) => question.isCorrect(idx)
-          );
-          reconnectPayload.correctAnswerIndex = question.correctAnswerIndex;
-          reconnectPayload.answerDistribution = distribution;
-          reconnectPayload.explanation = question.explanation || null;
-          reconnectPayload.answeredCount = result.room.getTotalAnsweredCount();
-          reconnectPayload.totalPlayers = result.room.answeringPhasePlayerCount;
-        }
+        Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
       }
 
-      if (roomState === 'LEADERBOARD' || roomState === 'PAUSED') {
-        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
-        if (result.room.isTeamMode()) {
-          reconnectPayload.teamLeaderboard = result.room.getTeamLeaderboard();
+      if (roomState === 'LEADERBOARD') {
+        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
+      }
+
+      if (roomState === 'PAUSED') {
+        reconnectPayload.pausedFromState = result.room.pausedFromState;
+        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
+        if (result.room.pausedFromState === 'SHOW_RESULTS' && snapshot) {
+          Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
         }
       }
 
       if (roomState === 'PODIUM') {
-        reconnectPayload.podium = result.room.getPodium().map(toPlayerDTO);
-        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
-        if (result.room.isTeamMode()) {
-          reconnectPayload.teamPodium = result.room.getTeamPodium();
-        }
+        Object.assign(reconnectPayload, buildPodiumPayload(result.room));
       }
 
       socket.emit('host_reconnected', reconnectPayload);
@@ -490,32 +476,23 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       const playerRoomState = result.room.state;
 
       if (playerRoomState === 'SHOW_RESULTS' && snapshot) {
-        const question = snapshot.getQuestion(result.room.currentQuestionIndex);
-        if (question) {
-          const { distribution, correctCount } = result.room.getAnswerDistribution(
-            question.options.length,
-            (idx) => question.isCorrect(idx)
-          );
-          reconnectPayload.correctAnswerIndex = question.correctAnswerIndex;
-          reconnectPayload.answerDistribution = distribution;
-          reconnectPayload.correctCount = correctCount;
-          reconnectPayload.explanation = question.explanation || null;
-        }
+        Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
       }
 
-      if (playerRoomState === 'LEADERBOARD' || playerRoomState === 'PAUSED') {
-        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
-        if (result.room.isTeamMode()) {
-          reconnectPayload.teamLeaderboard = result.room.getTeamLeaderboard();
+      if (playerRoomState === 'LEADERBOARD') {
+        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
+      }
+
+      if (playerRoomState === 'PAUSED') {
+        reconnectPayload.pausedFromState = result.room.pausedFromState;
+        Object.assign(reconnectPayload, buildLeaderboardPayload(result.room));
+        if (result.room.pausedFromState === 'SHOW_RESULTS' && snapshot) {
+          Object.assign(reconnectPayload, buildShowResultsPayload(result.room, snapshot));
         }
       }
 
       if (playerRoomState === 'PODIUM') {
-        reconnectPayload.podium = result.room.getPodium().map(toPlayerDTO);
-        reconnectPayload.leaderboard = result.room.getLeaderboard().map(toPlayerDTO);
-        if (result.room.isTeamMode()) {
-          reconnectPayload.teamPodium = result.room.getTeamPodium();
-        }
+        Object.assign(reconnectPayload, buildPodiumPayload(result.room));
       }
 
       socket.emit('player_reconnected', reconnectPayload);

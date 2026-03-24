@@ -123,6 +123,10 @@ class GameFlowUseCases extends SharedUseCases {
 
     const totalQuestions = snapshot.getTotalQuestions();
     const hasMore = room.nextQuestion(requesterId, totalQuestions);
+    if (hasMore) {
+      // Clear previous round's answers so reconnecting players see hasAnswered=false
+      room.resetPlayerAnswersForNextQuestion();
+    }
     await this.roomRepository.save(room);
 
     if (!hasMore) {

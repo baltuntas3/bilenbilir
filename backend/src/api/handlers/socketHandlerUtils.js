@@ -118,4 +118,49 @@ const autoAdvanceToResults = async ({ io, pin, endAnsweringLocks, timerService, 
   }
 };
 
-module.exports = { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults };
+/**
+ * Build SHOW_RESULTS phase data from room and quiz snapshot.
+ * Single source of truth for reconnect, spectator snapshot, and PAUSED-from-SHOW_RESULTS.
+ */
+const buildShowResultsPayload = (room, snapshot) => {
+  const question = snapshot.getQuestion(room.currentQuestionIndex);
+  if (!question) return {};
+  const { distribution, correctCount } = room.getAnswerDistribution(
+    question.options.length,
+    (idx) => question.isCorrect(idx)
+  );
+  return {
+    correctAnswerIndex: question.correctAnswerIndex,
+    distribution,
+    correctCount,
+    explanation: question.explanation || null,
+    answeredCount: room.getTotalAnsweredCount(),
+    totalPlayersInPhase: room.answeringPhasePlayerCount
+  };
+};
+
+/**
+ * Build LEADERBOARD phase data from room.
+ */
+const buildLeaderboardPayload = (room) => {
+  const payload = { leaderboard: room.getLeaderboard().map(toPlayerDTO) };
+  if (room.isTeamMode()) payload.teamLeaderboard = room.getTeamLeaderboard();
+  return payload;
+};
+
+/**
+ * Build PODIUM phase data from room.
+ */
+const buildPodiumPayload = (room) => {
+  const payload = {
+    podium: room.getPodium().map(toPlayerDTO),
+    leaderboard: room.getLeaderboard().map(toPlayerDTO)
+  };
+  if (room.isTeamMode()) payload.teamPodium = room.getTeamPodium();
+  return payload;
+};
+
+module.exports = {
+  createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults,
+  buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload
+};
