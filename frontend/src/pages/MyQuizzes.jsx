@@ -27,7 +27,7 @@ export default function MyQuizzes() {
   });
 
   const importMutation = useMutation({
-    mutationFn: (data) => quizService.import(data),
+    mutationFn: ({ data, isPublic }) => quizService.import(data, isPublic),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['quizzes', 'my'] });
       showToast.success(result.message || 'Quiz imported successfully');
@@ -58,7 +58,12 @@ export default function MyQuizzes() {
     reader.onload = (e) => {
       try {
         const jsonData = JSON.parse(e.target.result);
-        importMutation.mutate(jsonData);
+        // Support both formats: { data: {...}, isPublic } wrapper and raw { version, quiz }
+        if (jsonData.data && (jsonData.data.version || jsonData.data.quiz)) {
+          importMutation.mutate({ data: jsonData.data, isPublic: jsonData.isPublic || false });
+        } else {
+          importMutation.mutate({ data: jsonData, isPublic: false });
+        }
       } catch {
         showToast.error('Invalid JSON file');
       }
