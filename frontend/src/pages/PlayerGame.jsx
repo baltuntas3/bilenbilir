@@ -10,9 +10,10 @@ import {
   Center,
   Button,
   Box,
+  Alert,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconDoorExit, IconCheck, IconX } from '@tabler/icons-react';
+import { IconDoorExit, IconCheck, IconX, IconInfoCircle } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
@@ -308,6 +309,20 @@ export default function PlayerGame() {
               totalPlayers={answeredCount || players.length}
               options={currentQuestion?.options}
             />
+
+            {explanation && (
+              <Alert
+                icon={<IconInfoCircle size={16} />}
+                variant="light"
+                title={t('quiz.explanation')}
+                style={{
+                  background: 'rgba(0, 240, 255, 0.05)',
+                  border: '1px solid var(--theme-primary)',
+                }}
+              >
+                {explanation}
+              </Alert>
+            )}
           </Stack>
         );
 

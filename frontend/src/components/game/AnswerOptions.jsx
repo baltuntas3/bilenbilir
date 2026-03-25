@@ -57,14 +57,14 @@ export default function AnswerOptions({
           bgColor = 'rgba(255, 45, 149, 0.1)';
           glowStyle = 'var(--theme-glow-secondary)';
           textColor = 'var(--theme-secondary)';
-        } else if (isSelected) {
-          borderColor = colors.neon;
-          bgColor = `${colors.neon}11`;
-          glowStyle = colors.glow;
         } else if (isEliminated) {
           borderColor = 'var(--theme-border)';
           bgColor = 'var(--theme-bg)';
           textColor = 'var(--theme-text-dim)';
+        } else if (isSelected) {
+          borderColor = colors.neon;
+          bgColor = `${colors.neon}11`;
+          glowStyle = colors.glow;
         }
 
         return (

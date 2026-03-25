@@ -56,6 +56,7 @@ class Room {
     this.hostDisconnectedAt = null;
     // Track all answers for archiving
     this.answerHistory = [];
+    this._answerHistoryKeys = new Set();
     // Immutable quiz snapshot - set when game starts to prevent mid-game modifications
     this.quizSnapshot = null;
     // Track when game actually started (for accurate archiving)
@@ -505,11 +506,10 @@ class Room {
       throw new ValidationError('isCorrect must be a boolean');
     }
 
-    // Prevent duplicate answer records for the same player on the same question
-    const isDuplicate = this.answerHistory.some(
-      a => a.playerId === answerData.playerId && a.questionId === answerData.questionId
-    );
-    if (isDuplicate) return;
+    // Prevent duplicate answer records for the same player on the same question (O(1) lookup)
+    const answerKey = `${answerData.playerId}:${answerData.questionId}`;
+    if (this._answerHistoryKeys.has(answerKey)) return;
+    this._answerHistoryKeys.add(answerKey);
 
     // Sanitize streak with upper bound
     const safeStreak = Math.min(Math.max(0, answerData.streak || 0), MAX_STREAK);
@@ -647,9 +647,6 @@ class Room {
   // ==================== SPECTATOR METHODS (delegated to SpectatorManager) ====================
 
   addSpectator(spectator) {
-    if (this.state === RoomState.PODIUM) {
-      throw new ValidationError('Spectators cannot join a finished game');
-    }
     this._spectatorManager.add(spectator, this.players, this.bannedNicknames);
   }
 
@@ -750,8 +747,9 @@ class Room {
 
   isLightningQuestion(currentIndex, totalQuestions) {
     if (!this.lightningRound.enabled) return false;
-    // Clamp to 0 to prevent all questions becoming lightning when questionCount > totalQuestions
-    const lightningStart = Math.max(0, totalQuestions - this.lightningRound.questionCount);
+    // Clamp questionCount to totalQuestions to prevent all questions becoming lightning
+    const effectiveCount = Math.min(this.lightningRound.questionCount, totalQuestions);
+    const lightningStart = totalQuestions - effectiveCount;
     return currentIndex >= lightningStart;
   }
 

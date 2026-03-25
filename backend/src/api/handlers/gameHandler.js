@@ -412,10 +412,18 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       if (timerActionFailed) {
         // Refund the consumed power-up since timer action failed
-        try {
-          await gameUseCases.refundPowerUp({ pin, socketId: socket.id, powerUpType });
-        } catch (refundErr) {
-          console.error(`Failed to refund power-up for pin ${pin}:`, refundErr.message);
+        let refundSuccess = false;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            await gameUseCases.refundPowerUp({ pin, socketId: socket.id, powerUpType });
+            refundSuccess = true;
+            break;
+          } catch (refundErr) {
+            console.error(`Refund attempt ${attempt + 1} failed for pin ${pin}:`, refundErr.message);
+          }
+        }
+        if (!refundSuccess) {
+          console.error(`CRITICAL: Power-up refund permanently failed for pin ${pin}, socket ${socket.id}, type ${powerUpType}`);
         }
         sendAck(ack, { ok: false, error: 'Time extension limit reached for this question' });
         return;

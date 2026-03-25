@@ -33,9 +33,10 @@ export default function PowerUpBar() {
   const [activating, setActivating] = useState(null);
 
   const handleUse = (type) => {
+    if (activating) return;
     setActivating(type);
     usePowerUp(type);
-    setTimeout(() => setActivating(null), 500);
+    setTimeout(() => setActivating(null), 1500);
   };
 
   return (

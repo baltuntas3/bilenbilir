@@ -94,7 +94,7 @@ export function GameProvider({ children }) {
       'question_intro', 'answering_started', 'answer_received', 'answer_count_updated',
       'all_players_answered', 'show_results', 'leaderboard', 'game_over',
       'final_results', 'fifty_fifty_result', 'power_up_activated', 'power_up_used',
-      'time_extended', 'timer_started', 'timer_tick', 'time_expired', 'timer_sync',
+      'time_extended', 'timer_started', 'time_expired', 'timer_sync',
       'game_paused', 'game_resumed', 'reaction_received', 'room_closed',
       'host_disconnected', 'host_disconnected_warning', 'host_returned', 'error'
     ];
@@ -359,7 +359,6 @@ export function GameProvider({ children }) {
         timerRef.current.startTimer(duration, adjustedEndTime);
       } catch { /* timer may be unavailable */ }
     });
-    socketService.on('timer_tick', () => {});
     socketService.on('time_expired', () => {
       try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
       updateState({ remainingTime: 0 });

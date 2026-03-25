@@ -817,7 +817,7 @@ export default function HostLobby() {
             leftSection={<IconPlayerPlay size={20} />}
             onClick={handleStartGame}
             loading={starting}
-            disabled={players.length === 0}
+            disabled={players.length === 0 || starting}
             
             style={{
               boxShadow: players.length > 0 ? 'var(--theme-glow-primary)' : 'none',
