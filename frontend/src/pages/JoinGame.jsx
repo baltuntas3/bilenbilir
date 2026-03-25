@@ -148,14 +148,19 @@ export default function JoinGame() {
                 </Text>
                 <PinInput
                   length={6}
-                  size="lg"
+                  size="md"
                   type="number"
                   value={pin}
                   onChange={setPin}
                   onComplete={handlePinSubmit}
                   placeholder=""
                   styles={{
+                    root: {
+                      gap: 6,
+                    },
                     input: {
+                      width: 42,
+                      minWidth: 0,
                       background: 'var(--theme-bg)',
                       border: '1px solid var(--theme-primary)',
                       color: 'var(--theme-primary)',

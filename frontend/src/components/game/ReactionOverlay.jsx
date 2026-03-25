@@ -29,7 +29,7 @@ export default function ReactionOverlay() {
               position: 'absolute',
               bottom: 0,
               left: `${left}%`,
-              animation: `reaction-float-cyber ${ANIMATION_DURATION}ms ease-out forwards`,
+              animation: `reaction-float ${ANIMATION_DURATION}ms ease-out forwards`,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
