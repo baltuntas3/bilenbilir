@@ -39,7 +39,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
       const isAuthAttempt = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/me');
-      if (!isAuthAttempt) {
+      // Only redirect to login if there was an active token (real session expiry)
+      // Don't redirect for unauthenticated users browsing public pages
+      if (!isAuthAttempt && authToken) {
         const message = error.response?.data?.error || error.response?.data?.message || 'Session expired';
         showToast.warning(message);
         setAuthToken(null);

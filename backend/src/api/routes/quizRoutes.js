@@ -199,11 +199,11 @@ router.delete('/:id', authenticate, async (req, res, next) => {
  * Public quizzes: questions accessible to everyone
  * Private quizzes: questions only accessible to owner
  */
-router.get('/:id/questions', authenticate, async (req, res, next) => {
+router.get('/:id/questions', optionalAuthenticate, async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const result = await quizUseCases.getQuestions({ quizId: id, requesterId: req.user.id });
+    const result = await quizUseCases.getQuestions({ quizId: id, requesterId: req.user?.id || null });
     res.json(result.questions);
   } catch (error) {
     next(error);

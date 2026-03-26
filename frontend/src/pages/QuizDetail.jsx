@@ -259,17 +259,20 @@ export default function QuizDetail() {
               </Group>
 
               <Stack gap={4}>
-                {question.options.map((option, optIndex) => (
-                  <Text
-                    key={optIndex}
-                    size="sm"
-                    c={optIndex === question.correctAnswerIndex ? 'green' : 'dimmed'}
-                    fw={optIndex === question.correctAnswerIndex ? 500 : 400}
-                  >
-                    {String.fromCharCode(65 + optIndex)}. {option}
-                    {optIndex === question.correctAnswerIndex && ' ✓'}
-                  </Text>
-                ))}
+                {question.options.map((option, optIndex) => {
+                  const isCorrect = isOwner && optIndex === question.correctAnswerIndex;
+                  return (
+                    <Text
+                      key={optIndex}
+                      size="sm"
+                      c={isCorrect ? 'green' : 'dimmed'}
+                      fw={isCorrect ? 500 : 400}
+                    >
+                      {String.fromCharCode(65 + optIndex)}. {option}
+                      {isCorrect && ' ✓'}
+                    </Text>
+                  );
+                })}
               </Stack>
             </Card>
           ))}

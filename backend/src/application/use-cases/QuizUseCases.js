@@ -246,12 +246,33 @@ class QuizUseCases {
 
   /**
    * Get all questions for a quiz
-   * Only quiz owner can see correct answers
+   * Owner sees full data (with correct answers)
+   * Others see sanitized data for public quizzes only
    */
-  async getQuestions({ quizId, requesterId }) {
+  async getQuestions({ quizId, requesterId = null }) {
     const quiz = await this._getQuizOrThrow(quizId);
-    this._validateQuizOwnership(quiz, requesterId);
-    return { questions: quiz.questions };
+    const isOwner = requesterId && quiz.createdBy === requesterId;
+
+    if (isOwner) {
+      return { questions: quiz.questions };
+    }
+
+    if (!quiz.isPublic) {
+      throw new ForbiddenError('Not authorized to view this quiz\'s questions');
+    }
+
+    // Sanitize: strip correct answers for non-owners
+    const sanitized = quiz.questions.map(q => ({
+      id: q.id,
+      text: q.text,
+      type: q.type,
+      options: q.options,
+      timeLimit: q.timeLimit,
+      points: q.points,
+      imageUrl: q.imageUrl,
+      explanation: q.explanation
+    }));
+    return { questions: sanitized };
   }
 
   /**

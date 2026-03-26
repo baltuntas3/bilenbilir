@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Container, Title, Text, Stack, SimpleGrid, Card, Group, Box, ThemeIcon, PinInput, Button, Divider } from '@mantine/core';
-import { IconSearch, IconPlus, IconList, IconUsers, IconChartBar, IconLogin } from '@tabler/icons-react';
+import { Container, Title, Text, Stack, SimpleGrid, Card, Group, Box, ThemeIcon, PinInput, Button, Divider, Badge, Skeleton } from '@mantine/core';
+import { IconSearch, IconPlus, IconList, IconUsers, IconChartBar, IconLogin, IconArrowRight } from '@tabler/icons-react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useMantineColorScheme } from '@mantine/core';
 import { useAuth } from '../context/AuthContext';
+import { quizService } from '../services/quizService';
 import Logo from '../components/Logo';
 
 const CARD_CONFIGS = [
@@ -132,6 +134,14 @@ function LandingPage({ t, isLight }) {
   const navigate = useNavigate();
   const [pin, setPin] = useState('');
 
+  const { data: quizData, isLoading: quizzesLoading } = useQuery({
+    queryKey: ['quizzes', 'public', 'landing'],
+    queryFn: () => quizService.getPublic(1, 6),
+    staleTime: 60000,
+  });
+
+  const popularQuizzes = quizData?.quizzes || [];
+
   const handlePinSubmit = () => {
     if (pin.length === 6) {
       navigate(`/join?pin=${pin}`);
@@ -139,7 +149,7 @@ function LandingPage({ t, isLight }) {
   };
 
   return (
-    <Container size="xs" py={60} className="fade-slide-in">
+    <Container size="sm" py={60} className="fade-slide-in">
       <Stack align="center" gap="xl">
         <Logo size={72} />
         <Title
@@ -252,6 +262,77 @@ function LandingPage({ t, isLight }) {
             {t('auth.signUp')}
           </Button>
         </Group>
+
+        {/* Popular Quizzes Section */}
+        {(quizzesLoading || popularQuizzes.length > 0) && (
+          <Stack gap="md" style={{ width: '100%' }} mt="lg">
+            <Group justify="space-between">
+              <Title order={4} style={{ color: 'var(--theme-text)' }}>
+                {t('home.popularQuizzes')}
+              </Title>
+              <Button
+                variant="subtle"
+                component={Link}
+                to="/quizzes"
+                size="xs"
+                rightSection={<IconArrowRight size={14} />}
+              >
+                {t('home.viewAll')}
+              </Button>
+            </Group>
+
+            <SimpleGrid cols={{ base: 1, xs: 2, sm: 3 }} spacing="md">
+              {quizzesLoading
+                ? Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} height={100} radius="md" />
+                  ))
+                : popularQuizzes.map((quiz) => (
+                    <Card
+                      key={quiz.id || quiz._id}
+                      component={Link}
+                      to={`/quizzes/${quiz.id || quiz._id}`}
+                      padding="md"
+                      radius="md"
+                      style={{
+                        textDecoration: 'none',
+                        background: 'var(--theme-surface)',
+                        border: '1px solid var(--theme-border)',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--theme-secondary)';
+                        e.currentTarget.style.boxShadow = 'var(--theme-glow-secondary)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--theme-border)';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <Text fw={500} size="sm" lineClamp={1} style={{ color: 'var(--theme-text)' }}>
+                        {quiz.title}
+                      </Text>
+                      {quiz.description && (
+                        <Text size="xs" c="dimmed" lineClamp={1} mt={4}>
+                          {quiz.description}
+                        </Text>
+                      )}
+                      <Group gap={4} mt="xs">
+                        {quiz.category && quiz.category !== 'Diğer' && (
+                          <Badge size="xs" variant="light" color="violet">{quiz.category}</Badge>
+                        )}
+                        <Badge size="xs" color="blue">
+                          {t('quiz.questionCount', { count: quiz.questionCount || quiz.questions?.length || 0 })}
+                        </Badge>
+                      </Group>
+                    </Card>
+                  ))
+              }
+            </SimpleGrid>
+          </Stack>
+        )}
       </Stack>
     </Container>
   );
