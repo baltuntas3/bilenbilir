@@ -3,6 +3,7 @@ const { generateId } = require('../../shared/utils/generateId');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { NotFoundError, ForbiddenError, ConflictError, ValidationError } = require('../../shared/errors');
 const { LOCK_TIMEOUT_MS, MAX_OPTIONS, MIN_OPTIONS } = require('../../shared/config/constants');
+const { decodeHTMLEntities } = require('../../shared/utils/decodeHTMLEntities');
 
 // Current export format version
 const EXPORT_VERSION = '1.0';
@@ -413,6 +414,10 @@ class QuizUseCases {
       throw new ValidationError('Invalid import data: questions must be an array');
     }
 
+    if (quiz.questions.length === 0) {
+      throw new ValidationError('Invalid import data: quiz must have at least one question');
+    }
+
     if (quiz.questions.length > 50) {
       throw new ValidationError('Invalid import data: maximum 50 questions allowed');
     }
@@ -462,29 +467,29 @@ class QuizUseCases {
 
     const { quiz: quizData } = jsonData;
 
-    // Create new quiz
+    // Create new quiz (decode HTML entities in text fields)
     const quiz = new Quiz({
       id: generateId(),
-      title: quizData.title,
-      description: quizData.description || '',
+      title: decodeHTMLEntities(quizData.title),
+      description: decodeHTMLEntities(quizData.description || ''),
       createdBy: requesterId,
       isPublic,
       category: quizData.category,
       tags: quizData.tags
     });
 
-    // Add questions
+    // Add questions (decode HTML entities in text and options)
     for (const qData of quizData.questions) {
       const question = new Question({
         id: generateId(),
-        text: qData.text,
+        text: decodeHTMLEntities(qData.text),
         type: qData.type || 'MULTIPLE_CHOICE',
-        options: qData.options,
+        options: qData.options.map(opt => decodeHTMLEntities(opt)),
         correctAnswerIndex: qData.correctAnswerIndex,
         timeLimit: qData.timeLimit || 30,
         points: qData.points || 1000,
         imageUrl: qData.imageUrl || null,
-        explanation: qData.explanation || ''
+        explanation: decodeHTMLEntities(qData.explanation || '')
       });
       quiz.addQuestion(question);
     }

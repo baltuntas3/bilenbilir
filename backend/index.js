@@ -28,7 +28,7 @@ const io = initializeSocket(server);
 
 // Middleware
 app.use(cors({ origin: checkOrigin }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 app.use(sanitize); // XSS protection - sanitize all inputs
 
 // Routes

@@ -18,12 +18,14 @@ import { useForm } from '@mantine/form';
 import { IconUsers, IconEye } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useGame } from '../context/GameContext';
+import { useAuth } from '../context/AuthContext';
 import { showToast } from '../utils/toast';
 import PlayerAvatar from '../components/game/PlayerAvatar';
 
 export default function JoinGame() {
   const navigate = useNavigate();
   const { joinRoom, joinAsSpectator } = useGame();
+  const { user } = useAuth();
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -47,7 +49,7 @@ export default function JoinGame() {
 
   const form = useForm({
     initialValues: {
-      nickname: '',
+      nickname: user?.username || '',
     },
     validate: {
       nickname: (value) => {

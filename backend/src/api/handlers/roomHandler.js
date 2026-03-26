@@ -187,6 +187,15 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       const { pin, nickname } = sanitizeObject(data || {});
       await ensureNotInRoom();
 
+      // Prevent host from joining their own game as a player
+      if (socket.isAuthenticated && socket.user?.userId) {
+        const { room: targetRoom } = await roomUseCases.getRoom({ pin });
+        if (targetRoom.hostUserId === socket.user.userId) {
+          sendAck(ack, { ok: false, error: 'You cannot join your own game as a player' });
+          return;
+        }
+      }
+
       // Validate and sanitize nickname
       const sanitizedNickname = sanitizeNickname(nickname);
       if (!sanitizedNickname) {
@@ -751,6 +760,15 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       const { pin, nickname } = sanitizeObject(data || {});
       await ensureNotInRoom();
+
+      // Prevent host from joining their own game as a spectator
+      if (socket.isAuthenticated && socket.user?.userId) {
+        const { room: targetRoom } = await roomUseCases.getRoom({ pin });
+        if (targetRoom.hostUserId === socket.user.userId) {
+          sendAck(ack, { ok: false, error: 'You cannot join your own game as a spectator' });
+          return;
+        }
+      }
 
       // Audit log for spectator joins (authenticated status tracked for security review)
       console.log(`[Spectator] Join attempt: pin=${pin}, nickname=${nickname}, authenticated=${socket.isAuthenticated}, socketId=${socket.id}`);

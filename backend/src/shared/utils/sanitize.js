@@ -4,6 +4,9 @@ const { Nickname } = require('../../domain/value-objects/Nickname');
 // Maximum recursion depth for object sanitization
 const MAX_SANITIZE_DEPTH = 10;
 
+// Keys that can be used for prototype pollution attacks
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /**
  * Sanitize a string to prevent XSS attacks
  * @param {string} str - String to sanitize
@@ -37,6 +40,7 @@ const sanitizeObject = (obj, skipFields = ['password', 'currentPassword', 'newPa
 
   const sanitized = {};
   for (const [key, value] of Object.entries(obj)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
     if (skipFields.includes(key)) {
       sanitized[key] = value;
     } else if (typeof value === 'string') {
