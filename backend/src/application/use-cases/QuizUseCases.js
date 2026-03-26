@@ -253,26 +253,11 @@ class QuizUseCases {
     const quiz = await this._getQuizOrThrow(quizId);
     const isOwner = requesterId && quiz.createdBy === requesterId;
 
-    if (isOwner) {
-      return { questions: quiz.questions };
-    }
-
-    if (!quiz.isPublic) {
+    if (!isOwner) {
       throw new ForbiddenError('Not authorized to view this quiz\'s questions');
     }
 
-    // Sanitize: strip correct answers for non-owners
-    const sanitized = quiz.questions.map(q => ({
-      id: q.id,
-      text: q.text,
-      type: q.type,
-      options: q.options,
-      timeLimit: q.timeLimit,
-      points: q.points,
-      imageUrl: q.imageUrl,
-      explanation: q.explanation
-    }));
-    return { questions: sanitized };
+    return { questions: quiz.questions };
   }
 
   /**

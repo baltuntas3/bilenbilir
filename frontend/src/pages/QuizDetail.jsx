@@ -24,11 +24,13 @@ export default function QuizDetail() {
   });
 
   const quizId = quiz?.id || quiz?._id || id;
+  const isOwner = user && quiz?.createdBy === user.id;
 
-  const { data: questions = [] } = useQuery({
+  // Only fetch questions for quiz owner
+  const { data: questions = [], isLoading: questionsLoading } = useQuery({
     queryKey: ['quiz', quizId, 'questions'],
     queryFn: () => quizService.getQuestions(quizId),
-    enabled: !!quizId && !!quiz,
+    enabled: !!quizId && !!quiz && !!isOwner,
   });
 
   const { data: ratingData } = useQuery({
@@ -68,8 +70,8 @@ export default function QuizDetail() {
     );
   }
 
-  const isOwner = user && quiz?.createdBy === user.id;
   const shareUrl = quiz?.slug ? `${window.location.origin}/quiz/share/${quiz.slug}` : null;
+  const questionCount = isOwner ? questions.length : (quiz.questionCount || 0);
 
   const handleExport = async () => {
     try {
@@ -110,7 +112,7 @@ export default function QuizDetail() {
               {quiz.category && quiz.category !== 'Diğer' && (
                 <Badge color="violet" variant="light">{quiz.category}</Badge>
               )}
-              <Badge color="blue">{questions.length} questions</Badge>
+              <Badge color="blue">{questionCount} questions</Badge>
               <Text size="sm" c="dimmed">Played {quiz.playCount || 0} times</Text>
             </Group>
             {quiz.tags && quiz.tags.length > 0 && (
@@ -233,50 +235,54 @@ export default function QuizDetail() {
         </Paper>
       </Paper>
 
-      <Title order={3} mb="md">Questions</Title>
+      {/* Questions section - only visible to quiz owner */}
+      {isOwner && (
+        <>
+          <Title order={3} mb="md">Questions</Title>
 
-      {questions.length === 0 ? (
-        <Paper withBorder p="xl" ta="center">
-          <Text c="dimmed" mb="md">No questions yet.</Text>
-          {isOwner && (
-            <Button component={Link} to={`/quizzes/${quizId}/edit`}>
-              Add Questions
-            </Button>
-          )}
-        </Paper>
-      ) : (
-        <Stack gap="md">
-          {questions.map((question, index) => (
-            <Card key={question.id || question._id} withBorder padding="md">
-              <Group justify="space-between" mb="xs">
-                <Text fw={500}>
-                  {index + 1}. {question.text}
-                </Text>
-                <Group gap="xs">
-                  <Badge size="sm" variant="light">{question.timeLimit}s</Badge>
-                  <Badge size="sm" variant="light">{question.points} pts</Badge>
-                </Group>
-              </Group>
-
-              <Stack gap={4}>
-                {question.options.map((option, optIndex) => {
-                  const isCorrect = isOwner && optIndex === question.correctAnswerIndex;
-                  return (
-                    <Text
-                      key={optIndex}
-                      size="sm"
-                      c={isCorrect ? 'green' : 'dimmed'}
-                      fw={isCorrect ? 500 : 400}
-                    >
-                      {String.fromCharCode(65 + optIndex)}. {option}
-                      {isCorrect && ' ✓'}
+          {questionsLoading ? (
+            <Center py="xl">
+              <Loader size="md" />
+            </Center>
+          ) : questions.length === 0 ? (
+            <Paper withBorder p="xl" ta="center">
+              <Text c="dimmed" mb="md">No questions yet.</Text>
+              <Button component={Link} to={`/quizzes/${quizId}/edit`}>
+                Add Questions
+              </Button>
+            </Paper>
+          ) : (
+            <Stack gap="md">
+              {questions.map((question, index) => (
+                <Card key={question.id || question._id} withBorder padding="md">
+                  <Group justify="space-between" mb="xs">
+                    <Text fw={500}>
+                      {index + 1}. {question.text}
                     </Text>
-                  );
-                })}
-              </Stack>
-            </Card>
-          ))}
-        </Stack>
+                    <Group gap="xs">
+                      <Badge size="sm" variant="light">{question.timeLimit}s</Badge>
+                      <Badge size="sm" variant="light">{question.points} pts</Badge>
+                    </Group>
+                  </Group>
+
+                  <Stack gap={4}>
+                    {question.options.map((option, optIndex) => (
+                      <Text
+                        key={optIndex}
+                        size="sm"
+                        c={optIndex === question.correctAnswerIndex ? 'green' : 'dimmed'}
+                        fw={optIndex === question.correctAnswerIndex ? 500 : 400}
+                      >
+                        {String.fromCharCode(65 + optIndex)}. {option}
+                        {optIndex === question.correctAnswerIndex && ' ✓'}
+                      </Text>
+                    ))}
+                  </Stack>
+                </Card>
+              ))}
+            </Stack>
+          )}
+        </>
       )}
     </Container>
   );

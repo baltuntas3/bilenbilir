@@ -24,6 +24,8 @@ export const authService = {
   },
 
   getMe: async () => {
+    const { getAuthToken } = await import('./api');
+    if (!getAuthToken()) return null;
     const response = await api.get('/auth/me');
     return response.data;
   },
