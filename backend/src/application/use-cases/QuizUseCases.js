@@ -83,7 +83,10 @@ class QuizUseCases {
 
     const question = new Question({
       id: generateId(),
-      ...questionData
+      ...questionData,
+      text: decodeHTMLEntities(questionData.text),
+      options: questionData.options.map(opt => decodeHTMLEntities(opt)),
+      explanation: questionData.explanation ? decodeHTMLEntities(questionData.explanation) : questionData.explanation
     });
     quiz.addQuestion(question);
     const savedQuiz = await this.quizRepository.save(quiz);
@@ -178,11 +181,11 @@ class QuizUseCases {
     const quiz = await this._getQuizOrThrow(quizId);
     this._validateQuizOwnership(quiz, requesterId);
 
-    if (title !== undefined) quiz.updateTitle(title);
-    if (description !== undefined) quiz.updateDescription(description);
+    if (title !== undefined) quiz.updateTitle(decodeHTMLEntities(title));
+    if (description !== undefined) quiz.updateDescription(decodeHTMLEntities(description));
     if (isPublic !== undefined) quiz.setPublic(isPublic);
-    if (category !== undefined) quiz.updateCategory(category);
-    if (tags !== undefined) quiz.setTags(tags);
+    if (category !== undefined) quiz.updateCategory(decodeHTMLEntities(category));
+    if (tags !== undefined) quiz.setTags(tags.map(tag => decodeHTMLEntities(tag)));
 
     const savedQuiz = await this.quizRepository.save(quiz);
     return { quiz: savedQuiz };
@@ -275,16 +278,20 @@ class QuizUseCases {
     // Get existing question data and merge with updates
     // Use 'in' operator to allow falsy values (0, '', false) to be set explicitly
     const existingQuestion = quiz.questions[questionIndex];
+    const rawText = 'text' in questionData ? questionData.text : existingQuestion.text;
+    const rawOptions = 'options' in questionData ? questionData.options : existingQuestion.options;
+    const rawExplanation = 'explanation' in questionData ? questionData.explanation : existingQuestion.explanation;
+
     const updatedQuestion = new Question({
       id: questionId,
-      text: 'text' in questionData ? questionData.text : existingQuestion.text,
+      text: decodeHTMLEntities(rawText),
       type: 'type' in questionData ? questionData.type : existingQuestion.type,
-      options: 'options' in questionData ? questionData.options : existingQuestion.options,
+      options: rawOptions.map(opt => decodeHTMLEntities(opt)),
       correctAnswerIndex: 'correctAnswerIndex' in questionData ? questionData.correctAnswerIndex : existingQuestion.correctAnswerIndex,
       timeLimit: 'timeLimit' in questionData ? questionData.timeLimit : existingQuestion.timeLimit,
       points: 'points' in questionData ? questionData.points : existingQuestion.points,
       imageUrl: 'imageUrl' in questionData ? questionData.imageUrl : existingQuestion.imageUrl,
-      explanation: 'explanation' in questionData ? questionData.explanation : existingQuestion.explanation
+      explanation: rawExplanation ? decodeHTMLEntities(rawExplanation) : rawExplanation
     });
 
     quiz.questions[questionIndex] = updatedQuestion;
