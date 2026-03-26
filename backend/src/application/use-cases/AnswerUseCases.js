@@ -66,6 +66,11 @@ class AnswerUseCases extends SharedUseCases {
         const baseScore = answer.score;
         const streakBonus = answer.streakBonus;
         if (hasDoublePoints) {
+          // Design note: DOUBLE_POINTS is intentionally applied here in the use-case layer
+          // rather than inside Answer (domain value object). Moving it into Answer or Question
+          // would require passing power-up state into value objects, breaking their purity.
+          // The current approach keeps domain objects free of power-up concerns while the
+          // use-case layer orchestrates the interaction between Answer scoring and power-ups.
           // Only double the base score; streak bonus is a fixed reward, not subject to multipliers
           actualScore = Math.min(baseScore * 2 + streakBonus, MAX_ANSWER_SCORE);
         } else {

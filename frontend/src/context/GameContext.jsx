@@ -64,8 +64,9 @@ export function GameProvider({ children }) {
   const listenersSetupRef = useRef(false);
   const lastSocketIdRef = useRef(null);
   const timerRef = useRef(timer);
-  // Suppresses global error toast when a specific operation handles its own error
-  const suppressErrorToastRef = useRef(false);
+  // No longer using a blanket suppressErrorToastRef — answer/power-up errors
+  // are handled in their own ack callbacks; the global error handler only
+  // suppresses known answer-related messages to avoid duplicates.
 
   timerRef.current = timer;
 
@@ -288,6 +289,11 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('answer_received', ({ isCorrect, score, totalScore, streak, streakBonus }) => {
+      // If we have a pending answer submission, mark it as accepted by the server
+      if (answerPendingRef.current) {
+        answerPendingRef.current = false;
+        answerAcceptedRef.current = true;
+      }
       updateState({
         hasAnswered: true,
         lastAnswer: { isCorrect, score, streakBonus },
@@ -343,8 +349,11 @@ export function GameProvider({ children }) {
       showToast.success((labels[type] || type) + ' aktif!');
     });
     socketService.on('power_up_used', ({ nickname, powerUpType }) => {
-      // Skip toast for our own pending power-up — already handled via optimistic UI
-      if (pendingPowerUpTypeRef.current === powerUpType) return;
+      // Skip update entirely for our own pending power-up — already handled via optimistic UI
+      if (pendingPowerUpTypeRef.current === powerUpType) {
+        pendingPowerUpTypeRef.current = null;
+        return;
+      }
       const labels = { FIFTY_FIFTY: '50:50', DOUBLE_POINTS: 'Çift Puan', TIME_EXTENSION: 'Süre Uzatma' };
       showToast.info(nickname + ' joker kullandı: ' + (labels[powerUpType] || powerUpType));
     });
@@ -414,9 +423,11 @@ export function GameProvider({ children }) {
     });
     socketService.on('host_returned', () => showToast.success('Host has reconnected!'));
     socketService.on('error', ({ error, message }) => {
-      // Skip toast when a specific operation (submitAnswer, usePowerUp) handles its own error
-      if (suppressErrorToastRef.current) return;
-      showToast.error(error || message || 'An error occurred');
+      const msg = error || message || '';
+      // Skip answer/power-up related errors — those are handled in their own ack callbacks
+      const suppressPatterns = ['answer', 'Already answered', 'power-up', 'power_up', 'powerup'];
+      if (suppressPatterns.some(p => msg.toLowerCase().includes(p.toLowerCase()))) return;
+      showToast.error(msg || 'An error occurred');
     });
     // Dependencies: only stable callbacks and refs. timer/room accessed via timerRef/roomRef
     // to prevent listener rebuild on every timer tick or room state change.
@@ -437,15 +448,24 @@ export function GameProvider({ children }) {
   const startAnswering = useCallback(() => room.hostEmit('start_answering'), [room]);
 
   const answerSubmittingRef = useRef(false);
+  const answerPendingRef = useRef(false);
+  const answerAcceptedRef = useRef(false);
   const submitAnswer = useCallback((answerIndex) => {
     if (room.isHost || !room.roomPin || state.hasAnswered || answerSubmittingRef.current) return Promise.reject(new Error('Cannot submit answer'));
     answerSubmittingRef.current = true;
-    suppressErrorToastRef.current = true;
+    answerPendingRef.current = true;
+    answerAcceptedRef.current = false;
     return socketService
       .emitWithAck('submit_answer', { pin: room.roomPin, answerIndex }, 10000)
+      .catch((err) => {
+        // If answer_received already arrived from the server, the answer was accepted — ignore the ack error
+        if (answerAcceptedRef.current) return;
+        throw err;
+      })
       .finally(() => {
         answerSubmittingRef.current = false;
-        suppressErrorToastRef.current = false;
+        answerPendingRef.current = false;
+        answerAcceptedRef.current = false;
       });
   }, [room.isHost, room.roomPin, state.hasAnswered]);
 
@@ -457,7 +477,6 @@ export function GameProvider({ children }) {
     if ((state.powerUps[type] || 0) <= 0) return;
     powerUpPendingRef.current = true;
     pendingPowerUpTypeRef.current = type;
-    suppressErrorToastRef.current = true;
 
     // Optimistic UI update
     setState(prev => ({
@@ -468,6 +487,7 @@ export function GameProvider({ children }) {
     socketService
       .emitWithAck('use_power_up', { pin: room.roomPin, powerUpType: type }, 5000)
       .then((response) => {
+        pendingPowerUpTypeRef.current = null;
         if (response && !response.ok) {
           // Server rejected — rollback optimistic update
           setState(prev => ({
@@ -478,6 +498,7 @@ export function GameProvider({ children }) {
         }
       })
       .catch(() => {
+        pendingPowerUpTypeRef.current = null;
         // Timeout or network error — rollback
         setState(prev => ({
           ...prev,
@@ -486,8 +507,6 @@ export function GameProvider({ children }) {
       })
       .finally(() => {
         powerUpPendingRef.current = false;
-        pendingPowerUpTypeRef.current = null;
-        suppressErrorToastRef.current = false;
       });
   }, [room.roomPin, room.isHost, state.hasAnswered, state.powerUps]);
 

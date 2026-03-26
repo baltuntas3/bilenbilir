@@ -156,12 +156,13 @@ export default function HostLobby() {
 
   const handleRejoinExisting = () => {
     navigate(`/host/${existingRoom.quizId}`);
-    window.location.reload();
   };
 
+  const connectedPlayers = players.filter(p => !p.disconnected);
+
   const handleStartGame = async () => {
-    if (players.length === 0) {
-      showToast.error('Wait for at least one player to join');
+    if (connectedPlayers.length === 0) {
+      showToast.error('Wait for at least one connected player to join');
       return;
     }
 
@@ -817,10 +818,10 @@ export default function HostLobby() {
             leftSection={<IconPlayerPlay size={20} />}
             onClick={handleStartGame}
             loading={starting}
-            disabled={players.length === 0 || starting}
+            disabled={connectedPlayers.length === 0 || starting}
             
             style={{
-              boxShadow: players.length > 0 ? 'var(--theme-glow-primary)' : 'none',
+              boxShadow: connectedPlayers.length > 0 ? 'var(--theme-glow-primary)' : 'none',
               fontFamily: 'var(--theme-font-display)',
               fontSize: '0.7rem',
               transition: 'box-shadow 0.3s',

@@ -13,7 +13,11 @@ const SESSION_KEYS = {
   SPECTATOR_TOKEN: 'game_spectator_token',
   ROLE: 'game_role',
   NICKNAME: 'game_nickname',
+  TIMESTAMP: 'game_session_timestamp',
 };
+
+// Maximum session age: 4 hours
+const SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000;
 
 const saveSession = (data) => {
   if (data.pin) sessionStorage.setItem(SESSION_KEYS.PIN, data.pin);
@@ -22,6 +26,7 @@ const saveSession = (data) => {
   if (data.spectatorToken) sessionStorage.setItem(SESSION_KEYS.SPECTATOR_TOKEN, data.spectatorToken);
   if (data.role) sessionStorage.setItem(SESSION_KEYS.ROLE, data.role);
   if (data.nickname) sessionStorage.setItem(SESSION_KEYS.NICKNAME, data.nickname);
+  sessionStorage.setItem(SESSION_KEYS.TIMESTAMP, Date.now().toString());
 };
 
 const getSession = () => {
@@ -31,7 +36,19 @@ const getSession = () => {
   const spectatorToken = sessionStorage.getItem(SESSION_KEYS.SPECTATOR_TOKEN);
   const role = sessionStorage.getItem(SESSION_KEYS.ROLE);
   const nickname = sessionStorage.getItem(SESSION_KEYS.NICKNAME);
+  const timestamp = sessionStorage.getItem(SESSION_KEYS.TIMESTAMP);
   if (!pin || !role) return null;
+
+  // Check session expiry
+  if (timestamp) {
+    const age = Date.now() - parseInt(timestamp, 10);
+    if (age > SESSION_MAX_AGE_MS) {
+      console.warn('[RoomContext] Session expired (age: ' + Math.round(age / 60000) + ' min). Clearing stale session.');
+      clearSession();
+      return null;
+    }
+  }
+
   return { pin, hostToken, playerToken, spectatorToken, role, nickname };
 };
 
@@ -331,6 +348,9 @@ export function RoomProvider({ children }) {
     await connectSocket();
     const response = await emitWithResponse('reconnect_host', { pin, hostToken }, 'host_reconnected');
     const rotatedToken = response.hostToken || hostToken;
+    if (!response.hostToken) {
+      console.warn('[RoomContext] Server did not return a new hostToken on reconnect; using previous token as fallback.');
+    }
     updateRoomState({ roomPin: response.pin, isHost: true, hostToken: rotatedToken });
     saveSession({ pin: response.pin, hostToken: rotatedToken, role: 'host' });
     return response;
@@ -339,29 +359,31 @@ export function RoomProvider({ children }) {
   const reconnectPlayer = useCallback(async (pin, playerToken) => {
     await connectSocket();
     const response = await emitWithResponse('reconnect_player', { pin, playerToken }, 'player_reconnected');
+    const rotatedToken = response.playerToken || playerToken;
+    if (!response.playerToken) {
+      console.warn('[RoomContext] Server did not return a new playerToken on reconnect; using previous token as fallback.');
+    }
     updateRoomState({
       roomPin: response.pin, isHost: false, playerId: response.playerId,
-      playerToken: response.playerToken, nickname: response.nickname,
+      playerToken: rotatedToken, nickname: response.nickname,
     });
-    // Save rotated token to sessionStorage for page reload resilience
-    if (response.playerToken) {
-      saveSession({ pin: response.pin, playerToken: response.playerToken, role: 'player', nickname: response.nickname });
-    }
+    saveSession({ pin: response.pin, playerToken: rotatedToken, role: 'player', nickname: response.nickname });
     return response;
   }, [connectSocket, updateRoomState, emitWithResponse]);
 
   const reconnectSpectator = useCallback(async (pin, spectatorToken) => {
     await connectSocket();
     const response = await emitWithResponse('reconnect_spectator', { pin, spectatorToken }, 'spectator_reconnected');
+    const rotatedToken = response.spectatorToken || spectatorToken;
+    if (!response.spectatorToken) {
+      console.warn('[RoomContext] Server did not return a new spectatorToken on reconnect; using previous token as fallback.');
+    }
     updateRoomState({
       roomPin: response.pin, isHost: false, isSpectator: true,
-      spectatorId: response.spectatorId, spectatorToken: response.spectatorToken,
+      spectatorId: response.spectatorId, spectatorToken: rotatedToken,
       nickname: response.nickname,
     });
-    // Save rotated token to sessionStorage for page reload resilience
-    if (response.spectatorToken) {
-      saveSession({ pin: response.pin, spectatorToken: response.spectatorToken, role: 'spectator', nickname: response.nickname });
-    }
+    saveSession({ pin: response.pin, spectatorToken: rotatedToken, role: 'spectator', nickname: response.nickname });
     return response;
   }, [connectSocket, updateRoomState, emitWithResponse]);
 

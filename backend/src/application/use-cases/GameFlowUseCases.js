@@ -85,7 +85,7 @@ class GameFlowUseCases extends SharedUseCases {
     await this.roomRepository.save(room);
 
     const currentQuestion = this._getQuestionFromSnapshot(room, room.currentQuestionIndex);
-    const { distribution, correctCount } = room.getAnswerDistribution(
+    const { distribution, correctCount, skippedCount } = room.getAnswerDistribution(
       currentQuestion.options.length,
       (idx) => currentQuestion.isCorrect(idx)
     );
@@ -95,6 +95,7 @@ class GameFlowUseCases extends SharedUseCases {
       correctAnswerIndex: currentQuestion.correctAnswerIndex,
       distribution,
       correctCount,
+      skippedCount,
       answeredCount: room.getTotalAnsweredCount(),
       totalPlayers: room.answeringPhasePlayerCount,
       explanation: currentQuestion.explanation || null

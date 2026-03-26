@@ -224,6 +224,10 @@ class Room {
     const player = this.getPlayer(socketId);
     if (player) {
       player.setDisconnected();
+      // Keep answeringPhasePlayerCount in sync when a player disconnects mid-round
+      if (this.state === RoomState.ANSWERING_PHASE && this.answeringPhasePlayerCount > 0) {
+        this.answeringPhasePlayerCount--;
+      }
     }
     return player;
   }

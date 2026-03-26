@@ -10,6 +10,8 @@ const { DEFAULT_POWER_UPS } = require('../../domain/value-objects/PowerUp');
  */
 // Per-room lock to prevent concurrent endAnsweringPhase calls (timer expiry vs all-answered race)
 const endAnsweringLocks = new LockManager(LOCK_TIMEOUT_MS);
+// Per-room lock to prevent concurrent nextQuestion calls (double-click race)
+const nextQuestionLocks = new LockManager(LOCK_TIMEOUT_MS);
 
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
   const checkRateLimit = createRateLimiter(socket);
@@ -251,49 +253,59 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       requireAuth(); // JWT required for host
       const { pin } = data || {};
 
-      const result = await gameUseCases.nextQuestion({
-        pin,
-        requesterId: socket.id
-      });
+      // Check lock to prevent double-call race (rapid next_question clicks)
+      if (!nextQuestionLocks.acquire(pin)) {
+        sendAck(ack, { ok: true, alreadyAdvancing: true });
+        return;
+      }
 
-      if (result.isGameOver) {
-        const gameOverPayload = {
-          podium: result.podium.map(toPlayerDTO),
-          leaderboard: result.room.getLeaderboard().map(toPlayerDTO)
-        };
-        if (result.teamPodium) {
-          gameOverPayload.teamPodium = result.teamPodium;
-        }
-        if (result.room.isTeamMode()) {
-          gameOverPayload.teamLeaderboard = result.room.getTeamLeaderboard();
-        }
-        io.to(pin).emit('game_over', gameOverPayload);
-
-        // Archive game but keep room in PODIUM state for late reconnects/get_results.
-        // RoomCleanupService will remove the room after idle timeout.
-        let archiveFailed = false;
-        try {
-          await gameUseCases.archiveGame({ pin });
-        } catch (archiveError) {
-          archiveFailed = true;
-          console.error('Failed to archive game:', archiveError.message);
-        }
-        sendAck(ack, { ok: true, isGameOver: true, archiveFailed });
-      } else {
-        // Send to host with full question data
-        socket.emit('question_intro', {
-          questionIndex: result.questionIndex,
-          totalQuestions: result.totalQuestions,
-          currentQuestion: result.currentQuestion
+      try {
+        const result = await gameUseCases.nextQuestion({
+          pin,
+          requesterId: socket.id
         });
 
-        // Send to players without correct answer
-        socket.to(pin).emit('question_intro', {
-          questionIndex: result.questionIndex,
-          totalQuestions: result.totalQuestions,
-          currentQuestion: toPlayerQuestionDTO(result.currentQuestion)
-        });
-        sendAck(ack, { ok: true, isGameOver: false });
+        if (result.isGameOver) {
+          const gameOverPayload = {
+            podium: result.podium.map(toPlayerDTO),
+            leaderboard: result.room.getLeaderboard().map(toPlayerDTO)
+          };
+          if (result.teamPodium) {
+            gameOverPayload.teamPodium = result.teamPodium;
+          }
+          if (result.room.isTeamMode()) {
+            gameOverPayload.teamLeaderboard = result.room.getTeamLeaderboard();
+          }
+          io.to(pin).emit('game_over', gameOverPayload);
+
+          // Archive game but keep room in PODIUM state for late reconnects/get_results.
+          // RoomCleanupService will remove the room after idle timeout.
+          let archiveFailed = false;
+          try {
+            await gameUseCases.archiveGame({ pin });
+          } catch (archiveError) {
+            archiveFailed = true;
+            console.error('Failed to archive game:', archiveError.message);
+          }
+          sendAck(ack, { ok: true, isGameOver: true, archiveFailed });
+        } else {
+          // Send to host with full question data
+          socket.emit('question_intro', {
+            questionIndex: result.questionIndex,
+            totalQuestions: result.totalQuestions,
+            currentQuestion: result.currentQuestion
+          });
+
+          // Send to players without correct answer
+          socket.to(pin).emit('question_intro', {
+            questionIndex: result.questionIndex,
+            totalQuestions: result.totalQuestions,
+            currentQuestion: toPlayerQuestionDTO(result.currentQuestion)
+          });
+          sendAck(ack, { ok: true, isGameOver: false });
+        }
+      } finally {
+        nextQuestionLocks.release(pin);
       }
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
@@ -453,13 +465,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       const { pin } = data || {};
 
+      // Stop timer before pause to prevent desync — if pause fails, timer is already idle
+      // (no active answering phase timer should keep running while paused)
+      timerService.stopTimer(pin);
+
       const result = await gameUseCases.pauseGame({
         pin,
         requesterId: socket.id
       });
-
-      // Stop timer only after pause succeeds to prevent desync on failure
-      timerService.stopTimer(pin);
 
       io.to(pin).emit('game_paused', {
         pausedAt: result.pausedAt
@@ -538,4 +551,4 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
   });
 };
 
-module.exports = { createGameHandler, endAnsweringLocks };
+module.exports = { createGameHandler, endAnsweringLocks, nextQuestionLocks };

@@ -67,6 +67,7 @@ const toShowResultsDTO = (endResult) => ({
   correctAnswerIndex: endResult.correctAnswerIndex,
   distribution: endResult.distribution,
   correctCount: endResult.correctCount,
+  skippedCount: endResult.skippedCount || 0,
   answeredCount: endResult.answeredCount,
   totalPlayersInPhase: endResult.totalPlayers,
   explanation: endResult.explanation || null
@@ -125,7 +126,7 @@ const autoAdvanceToResults = async ({ io, pin, endAnsweringLocks, timerService, 
 const buildShowResultsPayload = (room, snapshot) => {
   const question = snapshot.getQuestion(room.currentQuestionIndex);
   if (!question) return {};
-  const { distribution, correctCount } = room.getAnswerDistribution(
+  const { distribution, correctCount, skippedCount } = room.getAnswerDistribution(
     question.options.length,
     (idx) => question.isCorrect(idx)
   );
@@ -133,6 +134,7 @@ const buildShowResultsPayload = (room, snapshot) => {
     correctAnswerIndex: question.correctAnswerIndex,
     distribution,
     correctCount,
+    skippedCount,
     explanation: question.explanation || null,
     answeredCount: room.getTotalAnsweredCount(),
     totalPlayersInPhase: room.answeringPhasePlayerCount

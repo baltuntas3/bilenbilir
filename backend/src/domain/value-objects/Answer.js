@@ -1,9 +1,9 @@
 const { ValidationError } = require('../../shared/errors');
 
-const MAX_STREAK_BONUS = 500;
+const MAX_STREAK_BONUS = 1500;
 // Hard cap per answer — applies to all cases including DOUBLE_POINTS.
 // Prevents score inflation: even with DOUBLE_POINTS, a single answer cannot exceed this.
-const MAX_ANSWER_SCORE = 20500;
+const MAX_ANSWER_SCORE = 21500;
 
 class Answer {
   constructor({ playerId, questionId, roomPin, answerIndex, isCorrect, elapsedTimeMs, score = 0, streakBonus = 0, submittedAt = new Date() }) {

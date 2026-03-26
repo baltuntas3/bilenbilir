@@ -37,8 +37,12 @@ export function TimerProvider({ children }) {
     endTimeRef.current += extraTimeMs;
     setTimeLimit(prev => prev + Math.ceil(extraTimeMs / 1000));
 
-    // Restart interval only if it was already cleared (timer had expired)
-    if (timerRef.current) return;
+    // Always clear existing interval to prevent stacking
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
     setRemainingTime(remaining);
     if (remaining <= 0) return;
