@@ -189,31 +189,31 @@ describe('Player', () => {
   });
 
   describe('streak cap', () => {
-    it('should cap streak at MAX_STREAK (1000)', () => {
+    it('should cap streak at MAX_STREAK (50)', () => {
       // Set streak near cap
-      player.streak = 999;
+      player.streak = 49;
       player.incrementStreak();
-      expect(player.streak).toBe(1000);
+      expect(player.streak).toBe(50);
 
-      // Should not increment beyond 1000
+      // Should not increment beyond 50
       player.incrementStreak();
-      expect(player.streak).toBe(1000);
+      expect(player.streak).toBe(50);
 
       // But correctAnswers should still increment
       expect(player.correctAnswers).toBe(2);
     });
 
-    it('should cap longestStreak at MAX_STREAK (1000)', () => {
+    it('should cap longestStreak at MAX_STREAK (50)', () => {
       // Set streak and longestStreak near cap
-      player.streak = 999;
-      player.longestStreak = 999;
+      player.streak = 49;
+      player.longestStreak = 49;
       player.incrementStreak();
 
-      expect(player.longestStreak).toBe(1000);
+      expect(player.longestStreak).toBe(50);
 
-      // Should not increment longestStreak beyond 1000
+      // Should not increment longestStreak beyond 50
       player.incrementStreak();
-      expect(player.longestStreak).toBe(1000);
+      expect(player.longestStreak).toBe(50);
     });
   });
 

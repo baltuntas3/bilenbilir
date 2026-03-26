@@ -475,7 +475,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       });
 
       io.to(pin).emit('game_paused', {
-        pausedAt: result.pausedAt
+        pausedAt: result.pausedAt,
+        pausedFromState: result.room.pausedFromState
       });
       sendAck(ack, { ok: true });
     } catch (error) {

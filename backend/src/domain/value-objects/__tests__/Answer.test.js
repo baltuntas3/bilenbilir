@@ -173,7 +173,7 @@ describe('Answer', () => {
       expect(answer.streakBonus).toBe(0);
     });
 
-    it('should cap streak bonus at 500', () => {
+    it('should cap streak bonus at MAX_STREAK_BONUS (1500)', () => {
       const answer = Answer.create({
         playerId: 'player-1',
         questionId: 'q-1',
@@ -181,35 +181,35 @@ describe('Answer', () => {
         answerIndex: 1,
         question: mockQuestion,
         elapsedTimeMs: 0,
-        currentStreak: 10 // Would be 1000 without cap
+        currentStreak: 20 // Would be 2000 without cap
       });
 
-      expect(answer.streakBonus).toBe(500);
+      expect(answer.streakBonus).toBe(1500);
     });
 
     it('should allow streak bonus up to cap', () => {
-      const answer5 = Answer.create({
+      const answer15 = Answer.create({
         playerId: 'player-1',
         questionId: 'q-1',
         roomPin: '123456',
         answerIndex: 1,
         question: mockQuestion,
         elapsedTimeMs: 0,
-        currentStreak: 5 // Exactly at cap
+        currentStreak: 15 // Exactly at cap (15 * 100 = 1500)
       });
 
-      const answer6 = Answer.create({
+      const answer16 = Answer.create({
         playerId: 'player-1',
         questionId: 'q-1',
         roomPin: '123456',
         answerIndex: 1,
         question: mockQuestion,
         elapsedTimeMs: 0,
-        currentStreak: 6 // Over cap
+        currentStreak: 16 // Over cap
       });
 
-      expect(answer5.streakBonus).toBe(500);
-      expect(answer6.streakBonus).toBe(500); // Capped
+      expect(answer15.streakBonus).toBe(1500);
+      expect(answer16.streakBonus).toBe(1500); // Capped
     });
 
     it('should calculate lower score for slower answers', () => {

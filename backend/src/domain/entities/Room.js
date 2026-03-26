@@ -202,8 +202,9 @@ class Room {
       throw new ForbiddenError('This nickname is banned from this room');
     }
 
-    // Use Player's VO-backed case-insensitive comparison
-    const nicknameExists = this.players.some(p => p.hasNickname(player.nickname));
+    // Use VO-backed case-insensitive comparison against both players and spectators
+    const nicknameExists = this.players.some(p => p.hasNickname(player.nickname))
+      || this._spectatorManager.spectators.some(s => s.hasNickname(player.nickname));
     if (nicknameExists) {
       throw new ConflictError('Nickname already taken');
     }
@@ -224,10 +225,10 @@ class Room {
     const player = this.getPlayer(socketId);
     if (player) {
       player.setDisconnected();
-      // Keep answeringPhasePlayerCount in sync when a player disconnects mid-round
-      if (this.state === RoomState.ANSWERING_PHASE && this.answeringPhasePlayerCount > 0) {
-        this.answeringPhasePlayerCount--;
-      }
+      // answeringPhasePlayerCount is intentionally NOT decremented here.
+      // It is a snapshot taken at phase start for consistent progress reporting.
+      // haveAllPlayersAnswered() already excludes disconnected players,
+      // so auto-advance logic works correctly without modifying the snapshot.
     }
     return player;
   }
@@ -472,7 +473,11 @@ class Room {
   }
 
   getLeaderboard() {
-    return [...this.players].sort((a, b) => b.score - a.score);
+    return [...this.players].sort((a, b) =>
+      b.score - a.score
+      || b.correctAnswers - a.correctAnswers
+      || b.longestStreak - a.longestStreak
+    );
   }
 
   getPodium() {
@@ -592,6 +597,13 @@ class Room {
     const player = this.getPlayerById(playerId);
     if (!player) {
       throw new ValidationError('Player not found');
+    }
+
+    // Update answeringPhasePlayerCount when a connected player is removed during ANSWERING_PHASE.
+    // Unlike disconnect (where the player stays in the list), kick permanently removes the player,
+    // so the snapshot must reflect the actual participants.
+    if (this.state === RoomState.ANSWERING_PHASE && !player.isDisconnected() && this.answeringPhasePlayerCount > 0) {
+      this.answeringPhasePlayerCount--;
     }
 
     this._teamManager.removePlayer(playerId);

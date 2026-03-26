@@ -570,10 +570,11 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.to(pin).emit('room_closed', { reason: 'Host closed the room' });
       io.in(pin).socketsLeave(pin);
 
-      // Delete room if saveInterruptedGame didn't already delete it
-      const result = await roomUseCases.forceCloseHostRoom({
-        hostUserId: socket.user.userId
-      });
+      // Delete room only if saveInterruptedGame didn't already delete it
+      const roomStillExists = await gameUseCases.roomExists(pin);
+      const result = roomStillExists
+        ? await roomUseCases.forceCloseHostRoom({ hostUserId: socket.user.userId })
+        : { closed: true, pin };
 
       const payload = { pin, ...result, closed: true };
       socket.emit('room_force_closed', payload);

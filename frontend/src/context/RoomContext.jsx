@@ -92,7 +92,7 @@ export function RoomProvider({ children }) {
     if (!roomState.isHost || !roomState.roomPin) {
       return Promise.reject(new Error('Not authorized'));
     }
-    return socketService.emitWithAck(event, { pin: roomState.roomPin, ...extraData }, 5000);
+    return socketService.emitWithAck(event, { pin: roomState.roomPin, ...extraData }, 10000);
   }, [roomState.isHost, roomState.roomPin]);
 
   const connectSocket = useCallback(async () => {

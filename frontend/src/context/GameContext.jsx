@@ -383,9 +383,14 @@ export function GameProvider({ children }) {
     });
 
     // Pause/Resume
-    socketService.on('game_paused', () => {
+    socketService.on('game_paused', ({ pausedFromState } = {}) => {
       try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
-      setState(prev => ({ ...prev, previousState: prev.gameState, gameState: GAME_STATES.PAUSED }));
+      setState(prev => ({
+        ...prev,
+        // Prefer server-authoritative pausedFromState over local gameState to avoid race conditions
+        previousState: pausedFromState || prev.gameState,
+        gameState: GAME_STATES.PAUSED
+      }));
       showToast.info('Game paused by host');
     });
     socketService.on('game_resumed', ({ state: resumedState }) => {

@@ -3,7 +3,7 @@ module.exports = {
   MAX_PLAYERS: 50,
   MAX_SPECTATORS: 10,
   MAX_TEAMS: 8,
-  MAX_STREAK: 1000,
+  MAX_STREAK: 50, // Aligned with MAX_QUESTIONS — a streak cannot exceed total questions
 
   // Grace periods (ms)
   HOST_GRACE_PERIOD_MS: 5 * 60 * 1000,      // 5 minutes
