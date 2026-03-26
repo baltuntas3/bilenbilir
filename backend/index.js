@@ -29,7 +29,7 @@ const io = initializeSocket(server);
 // Middleware
 app.use(cors({ origin: checkOrigin }));
 app.use(express.json({ limit: '100kb' }));
-app.use(sanitize); // XSS protection - sanitize all inputs
+app.use(sanitize); // Input sanitization - trim, depth limit, prototype pollution protection
 
 // Routes
 app.get('/', (req, res) => {

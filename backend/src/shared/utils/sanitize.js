@@ -8,17 +8,7 @@ const MAX_SANITIZE_DEPTH = 10;
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
- * Sanitize a string to prevent XSS attacks
- * @param {string} str - String to sanitize
- * @returns {string} - Sanitized string
- */
-const sanitizeString = (str) => {
-  if (typeof str !== 'string') return str;
-  return validator.escape(str.trim());
-};
-
-/**
- * Sanitize an object recursively with depth limit to prevent stack overflow
+ * Sanitize an object recursively: trim strings, block prototype pollution, enforce depth limit.
  * @param {Object} obj - Object to sanitize
  * @param {string[]} skipFields - Fields to skip (e.g., password)
  * @param {number} depth - Current recursion depth (internal use)
@@ -28,7 +18,6 @@ const sanitizeObject = (obj, skipFields = ['password', 'currentPassword', 'newPa
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') return obj;
 
-  // Reject deeply nested objects to prevent both stack overflow and XSS bypass
   if (depth >= MAX_SANITIZE_DEPTH) {
     console.warn('[sanitizeObject] Max depth reached, rejecting nested content');
     return {};
@@ -44,7 +33,7 @@ const sanitizeObject = (obj, skipFields = ['password', 'currentPassword', 'newPa
     if (skipFields.includes(key)) {
       sanitized[key] = value;
     } else if (typeof value === 'string') {
-      sanitized[key] = sanitizeString(value);
+      sanitized[key] = value.trim();
     } else if (typeof value === 'object') {
       sanitized[key] = sanitizeObject(value, skipFields, depth + 1);
     } else {

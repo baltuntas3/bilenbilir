@@ -3,7 +3,6 @@ const { generateId } = require('../../shared/utils/generateId');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { NotFoundError, ForbiddenError, ConflictError, ValidationError } = require('../../shared/errors');
 const { LOCK_TIMEOUT_MS, MAX_OPTIONS, MIN_OPTIONS } = require('../../shared/config/constants');
-const { decodeHTMLEntities } = require('../../shared/utils/decodeHTMLEntities');
 
 // Current export format version
 const EXPORT_VERSION = '1.0';
@@ -83,10 +82,7 @@ class QuizUseCases {
 
     const question = new Question({
       id: generateId(),
-      ...questionData,
-      text: decodeHTMLEntities(questionData.text),
-      options: questionData.options.map(opt => decodeHTMLEntities(opt)),
-      explanation: questionData.explanation ? decodeHTMLEntities(questionData.explanation) : questionData.explanation
+      ...questionData
     });
     quiz.addQuestion(question);
     const savedQuiz = await this.quizRepository.save(quiz);
@@ -181,11 +177,11 @@ class QuizUseCases {
     const quiz = await this._getQuizOrThrow(quizId);
     this._validateQuizOwnership(quiz, requesterId);
 
-    if (title !== undefined) quiz.updateTitle(decodeHTMLEntities(title));
-    if (description !== undefined) quiz.updateDescription(decodeHTMLEntities(description));
+    if (title !== undefined) quiz.updateTitle(title);
+    if (description !== undefined) quiz.updateDescription(description);
     if (isPublic !== undefined) quiz.setPublic(isPublic);
-    if (category !== undefined) quiz.updateCategory(decodeHTMLEntities(category));
-    if (tags !== undefined) quiz.setTags(tags.map(tag => decodeHTMLEntities(tag)));
+    if (category !== undefined) quiz.updateCategory(category);
+    if (tags !== undefined) quiz.setTags(tags);
 
     const savedQuiz = await this.quizRepository.save(quiz);
     return { quiz: savedQuiz };
@@ -278,20 +274,16 @@ class QuizUseCases {
     // Get existing question data and merge with updates
     // Use 'in' operator to allow falsy values (0, '', false) to be set explicitly
     const existingQuestion = quiz.questions[questionIndex];
-    const rawText = 'text' in questionData ? questionData.text : existingQuestion.text;
-    const rawOptions = 'options' in questionData ? questionData.options : existingQuestion.options;
-    const rawExplanation = 'explanation' in questionData ? questionData.explanation : existingQuestion.explanation;
-
     const updatedQuestion = new Question({
       id: questionId,
-      text: decodeHTMLEntities(rawText),
+      text: 'text' in questionData ? questionData.text : existingQuestion.text,
       type: 'type' in questionData ? questionData.type : existingQuestion.type,
-      options: rawOptions.map(opt => decodeHTMLEntities(opt)),
+      options: 'options' in questionData ? questionData.options : existingQuestion.options,
       correctAnswerIndex: 'correctAnswerIndex' in questionData ? questionData.correctAnswerIndex : existingQuestion.correctAnswerIndex,
       timeLimit: 'timeLimit' in questionData ? questionData.timeLimit : existingQuestion.timeLimit,
       points: 'points' in questionData ? questionData.points : existingQuestion.points,
       imageUrl: 'imageUrl' in questionData ? questionData.imageUrl : existingQuestion.imageUrl,
-      explanation: rawExplanation ? decodeHTMLEntities(rawExplanation) : rawExplanation
+      explanation: 'explanation' in questionData ? questionData.explanation : existingQuestion.explanation
     });
 
     quiz.questions[questionIndex] = updatedQuestion;
@@ -480,29 +472,27 @@ class QuizUseCases {
 
     const { quiz: quizData } = jsonData;
 
-    // Create new quiz (decode HTML entities in text fields)
     const quiz = new Quiz({
       id: generateId(),
-      title: decodeHTMLEntities(quizData.title),
-      description: decodeHTMLEntities(quizData.description || ''),
+      title: quizData.title,
+      description: quizData.description || '',
       createdBy: requesterId,
       isPublic,
       category: quizData.category,
       tags: quizData.tags
     });
 
-    // Add questions (decode HTML entities in text and options)
     for (const qData of quizData.questions) {
       const question = new Question({
         id: generateId(),
-        text: decodeHTMLEntities(qData.text),
+        text: qData.text,
         type: qData.type || 'MULTIPLE_CHOICE',
-        options: qData.options.map(opt => decodeHTMLEntities(opt)),
+        options: qData.options,
         correctAnswerIndex: qData.correctAnswerIndex,
         timeLimit: qData.timeLimit || 30,
         points: qData.points || 1000,
         imageUrl: qData.imageUrl || null,
-        explanation: decodeHTMLEntities(qData.explanation || '')
+        explanation: qData.explanation || ''
       });
       quiz.addQuestion(question);
     }
