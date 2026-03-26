@@ -1,6 +1,7 @@
-import { Link } from 'react-router-dom';
-import { Container, Title, Text, Stack, SimpleGrid, Card, Group, Box, ThemeIcon } from '@mantine/core';
-import { IconSearch, IconPlus, IconList, IconUsers, IconChartBar } from '@tabler/icons-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Container, Title, Text, Stack, SimpleGrid, Card, Group, Box, ThemeIcon, PinInput, Button, Divider } from '@mantine/core';
+import { IconSearch, IconPlus, IconList, IconUsers, IconChartBar, IconLogin } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useMantineColorScheme } from '@mantine/core';
 import { useAuth } from '../context/AuthContext';
@@ -54,12 +55,7 @@ const CARD_CONFIGS = [
   },
 ];
 
-export default function Home() {
-  const { user } = useAuth();
-  const { t } = useTranslation();
-  const { colorScheme } = useMantineColorScheme();
-  const isLight = colorScheme === 'light';
-
+function AuthenticatedHome({ user, t, isLight }) {
   return (
     <Container size="lg" my={40} className="fade-slide-in">
       <Stack align="center" gap="md" mb="xl">
@@ -108,7 +104,7 @@ export default function Home() {
                 size={50}
                 radius="md"
                 variant="light"
-                
+
                 style={{
                   border: `1px solid var(${color})`,
                   boxShadow: `var(${glow})`,
@@ -130,4 +126,146 @@ export default function Home() {
       </SimpleGrid>
     </Container>
   );
+}
+
+function LandingPage({ t, isLight }) {
+  const navigate = useNavigate();
+  const [pin, setPin] = useState('');
+
+  const handlePinSubmit = () => {
+    if (pin.length === 6) {
+      navigate(`/join?pin=${pin}`);
+    }
+  };
+
+  return (
+    <Container size="xs" py={60} className="fade-slide-in">
+      <Stack align="center" gap="xl">
+        <Logo size={72} />
+        <Title
+          ta="center"
+          className={`theme-text-primary ${isLight ? 'gold-shimmer' : ''}`}
+          style={{ fontSize: 'clamp(1.2rem, 5vw, 2rem)' }}
+        >
+          {t('home.heroTitle')}
+        </Title>
+        <Text ta="center" size="lg" style={{ color: 'var(--theme-text-dim)' }}>
+          {t('home.heroSubtitle')}
+        </Text>
+
+        <Card
+          padding="xl"
+          radius="md"
+          style={{
+            width: '100%',
+            maxWidth: 400,
+            background: 'var(--theme-surface)',
+            border: '1px solid var(--theme-primary)',
+            boxShadow: 'var(--theme-glow-primary)',
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Box
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid var(--theme-primary)',
+                boxShadow: 'var(--theme-glow-primary)',
+                background: 'rgba(0, 240, 255, 0.05)',
+              }}
+            >
+              <IconUsers size={32} style={{ color: 'var(--theme-primary)' }} />
+            </Box>
+
+            <Text fw={600} size="lg" style={{ color: 'var(--theme-primary)' }}>
+              {t('home.joinGame')}
+            </Text>
+
+            <PinInput
+              length={6}
+              size="md"
+              type="number"
+              value={pin}
+              onChange={setPin}
+              onComplete={handlePinSubmit}
+              placeholder=""
+              styles={{
+                root: { gap: 6 },
+                input: {
+                  width: 42,
+                  minWidth: 0,
+                  background: 'var(--theme-bg)',
+                  border: '1px solid var(--theme-primary)',
+                  color: 'var(--theme-primary)',
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '1rem',
+                  caretColor: 'var(--theme-primary)',
+                  '&:focus': {
+                    borderColor: 'var(--theme-primary)',
+                    boxShadow: 'var(--theme-glow-primary)',
+                  },
+                },
+              }}
+            />
+
+            <Button
+              fullWidth
+              size="md"
+              onClick={handlePinSubmit}
+              disabled={pin.length !== 6}
+              style={{
+                boxShadow: pin.length === 6 ? 'var(--theme-glow-primary)' : 'none',
+                transition: 'box-shadow 0.3s ease',
+              }}
+            >
+              {t('home.joinGame')}
+            </Button>
+          </Stack>
+        </Card>
+
+        <Divider
+          label={t('home.orSignIn')}
+          labelPosition="center"
+          color="var(--theme-border)"
+          styles={{ label: { color: 'var(--theme-text-dim)' } }}
+          style={{ width: '100%', maxWidth: 400 }}
+        />
+
+        <Group gap="sm">
+          <Button
+            variant="light"
+            component={Link}
+            to="/login"
+            leftSection={<IconLogin size={16} />}
+          >
+            {t('auth.signIn')}
+          </Button>
+          <Button
+            variant="subtle"
+            component={Link}
+            to="/register"
+          >
+            {t('auth.signUp')}
+          </Button>
+        </Group>
+      </Stack>
+    </Container>
+  );
+}
+
+export default function Home() {
+  const { isAuthenticated, user } = useAuth();
+  const { t } = useTranslation();
+  const { colorScheme } = useMantineColorScheme();
+  const isLight = colorScheme === 'light';
+
+  if (isAuthenticated) {
+    return <AuthenticatedHome user={user} t={t} isLight={isLight} />;
+  }
+
+  return <LandingPage t={t} isLight={isLight} />;
 }

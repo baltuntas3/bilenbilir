@@ -59,8 +59,10 @@ export default function AppRoutes() {
         <Route path="/quiz/share/:slug" element={<QuizDetail />} />
         <Route path="/quizzes/:id" element={<QuizDetail />} />
 
+        {/* Home - public landing or authenticated dashboard */}
+        <Route path="/" element={<Home />} />
+
         {/* Protected Routes */}
-        <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/my-quizzes" element={<ProtectedRoute><MyQuizzes /></ProtectedRoute>} />
         <Route path="/quizzes/create" element={<ProtectedRoute><QuizCreate /></ProtectedRoute>} />
