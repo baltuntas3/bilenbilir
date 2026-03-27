@@ -135,7 +135,7 @@ export function GameProvider({ children }) {
       if (typeof score === 'number') updates.score = score;
       if (typeof streak === 'number') updates.streak = streak;
       if (powerUps) updates.powerUps = powerUps;
-      if (eliminatedOptions && eliminatedOptions.length > 0) updates.eliminatedOptions = eliminatedOptions;
+      if (Array.isArray(eliminatedOptions)) updates.eliminatedOptions = eliminatedOptions;
       if (typeof hasAnswered === 'boolean') updates.hasAnswered = hasAnswered;
       if (lastAnswer) updates.lastAnswer = lastAnswer;
       if (typeof currentQuestionIndex === 'number') updates.currentQuestionIndex = currentQuestionIndex;
@@ -315,7 +315,7 @@ export function GameProvider({ children }) {
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
         answerDistribution: distribution,
-        answeredCount: answeredCount ?? totalPlayersInPhase,
+        answeredCount: typeof answeredCount === 'number' ? answeredCount : 0,
         totalPlayersInPhase,
         explanation: explanation || null,
       });
@@ -349,8 +349,10 @@ export function GameProvider({ children }) {
       showToast.success((labels[type] || type) + ' aktif!');
     });
     socketService.on('power_up_used', ({ nickname, powerUpType }) => {
-      // Skip update entirely for our own pending power-up — already handled via optimistic UI
-      if (pendingPowerUpTypeRef.current === powerUpType) {
+      // Skip our own pending power-up — already handled via optimistic UI.
+      // Match both type AND nickname to avoid suppressing other players' same-type power-ups.
+      const myNickname = roomRef.current.nickname;
+      if (pendingPowerUpTypeRef.current === powerUpType && nickname === myNickname) {
         pendingPowerUpTypeRef.current = null;
         return;
       }
