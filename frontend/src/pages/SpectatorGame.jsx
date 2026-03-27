@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -14,8 +14,9 @@ import {
   Progress,
   Alert,
   Box,
+  Transition,
 } from '@mantine/core';
-import { IconDoorExit, IconEye, IconUsers, IconInfoCircle } from '@tabler/icons-react';
+import { IconDoorExit, IconEye, IconUsers, IconInfoCircle, IconBulb } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import Timer from '../components/game/Timer';
 import QuestionDisplay from '../components/game/QuestionDisplay';
@@ -69,6 +70,29 @@ export default function SpectatorGame() {
 
   const connectedPlayers = players.filter((p) => !p.disconnected);
 
+  // Fun facts for waiting screen
+  const funFacts = useMemo(() => t('game.waitingFunFacts', { returnObjects: true }), [t]);
+  const shuffledFacts = useMemo(() => {
+    if (!Array.isArray(funFacts)) return [];
+    return [...funFacts].sort(() => Math.random() - 0.5);
+  }, [funFacts]);
+  const [factIndex, setFactIndex] = useState(0);
+  const [factVisible, setFactVisible] = useState(true);
+
+  const rotateFact = useCallback(() => {
+    setFactVisible(false);
+    setTimeout(() => {
+      setFactIndex((prev) => (prev + 1) % shuffledFacts.length);
+      setFactVisible(true);
+    }, 300);
+  }, [shuffledFacts.length]);
+
+  useEffect(() => {
+    if (shuffledFacts.length === 0 || gameState !== GAME_STATES.WAITING_PLAYERS) return;
+    const interval = setInterval(rotateFact, 5000);
+    return () => clearInterval(interval);
+  }, [rotateFact, shuffledFacts.length, gameState]);
+
   const renderContent = () => {
     switch (gameState) {
       case GAME_STATES.WAITING_PLAYERS:
@@ -109,13 +133,36 @@ export default function SpectatorGame() {
                 >
                   {t('game.spectatorMode')}
                 </Text>
-                <Text style={{ color: 'var(--theme-text-dim)' }} ta="center">
-                  {t('game.hostWillStart')}
-                </Text>
+
+                {/* Fun fact */}
+                <Paper
+                  p="sm"
+                  radius="md"
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0, 240, 255, 0.04)',
+                    border: '1px solid var(--theme-primary)',
+                    minHeight: 44,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Transition mounted={factVisible} transition="fade" duration={300}>
+                    {(styles) => (
+                      <Group gap="xs" wrap="nowrap" justify="center" style={styles}>
+                        <IconBulb size={16} style={{ color: 'var(--theme-warning)', flexShrink: 0 }} />
+                        <Text size="sm" ta="center" fw={500} style={{ color: 'var(--theme-text)' }}>
+                          {shuffledFacts.length > 0 ? shuffledFacts[factIndex] : t('game.hostWillStart')}
+                        </Text>
+                      </Group>
+                    )}
+                  </Transition>
+                </Paper>
+
                 <Badge
                   size="lg"
                   variant="light"
-                  
                   style={{
                     fontFamily: 'var(--theme-font-display)',
                     fontSize: '0.45rem',

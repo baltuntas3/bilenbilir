@@ -5,7 +5,7 @@ import { showToast } from '../utils/toast';
 
 const RoomContext = createContext(null);
 
-// Session storage keys
+// Game session storage keys (localStorage for persistence across tab close)
 const SESSION_KEYS = {
   PIN: 'game_pin',
   HOST_TOKEN: 'game_host_token',
@@ -19,24 +19,36 @@ const SESSION_KEYS = {
 // Maximum session age: 4 hours
 const SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000;
 
+// Migrate old sessionStorage data to localStorage (one-time)
+(() => {
+  const pin = sessionStorage.getItem(SESSION_KEYS.PIN);
+  if (pin && !localStorage.getItem(SESSION_KEYS.PIN)) {
+    Object.values(SESSION_KEYS).forEach(key => {
+      const val = sessionStorage.getItem(key);
+      if (val) localStorage.setItem(key, val);
+    });
+  }
+  Object.values(SESSION_KEYS).forEach(key => sessionStorage.removeItem(key));
+})();
+
 const saveSession = (data) => {
-  if (data.pin) sessionStorage.setItem(SESSION_KEYS.PIN, data.pin);
-  if (data.hostToken) sessionStorage.setItem(SESSION_KEYS.HOST_TOKEN, data.hostToken);
-  if (data.playerToken) sessionStorage.setItem(SESSION_KEYS.PLAYER_TOKEN, data.playerToken);
-  if (data.spectatorToken) sessionStorage.setItem(SESSION_KEYS.SPECTATOR_TOKEN, data.spectatorToken);
-  if (data.role) sessionStorage.setItem(SESSION_KEYS.ROLE, data.role);
-  if (data.nickname) sessionStorage.setItem(SESSION_KEYS.NICKNAME, data.nickname);
-  sessionStorage.setItem(SESSION_KEYS.TIMESTAMP, Date.now().toString());
+  if (data.pin) localStorage.setItem(SESSION_KEYS.PIN, data.pin);
+  if (data.hostToken) localStorage.setItem(SESSION_KEYS.HOST_TOKEN, data.hostToken);
+  if (data.playerToken) localStorage.setItem(SESSION_KEYS.PLAYER_TOKEN, data.playerToken);
+  if (data.spectatorToken) localStorage.setItem(SESSION_KEYS.SPECTATOR_TOKEN, data.spectatorToken);
+  if (data.role) localStorage.setItem(SESSION_KEYS.ROLE, data.role);
+  if (data.nickname) localStorage.setItem(SESSION_KEYS.NICKNAME, data.nickname);
+  localStorage.setItem(SESSION_KEYS.TIMESTAMP, Date.now().toString());
 };
 
 const getSession = () => {
-  const pin = sessionStorage.getItem(SESSION_KEYS.PIN);
-  const hostToken = sessionStorage.getItem(SESSION_KEYS.HOST_TOKEN);
-  const playerToken = sessionStorage.getItem(SESSION_KEYS.PLAYER_TOKEN);
-  const spectatorToken = sessionStorage.getItem(SESSION_KEYS.SPECTATOR_TOKEN);
-  const role = sessionStorage.getItem(SESSION_KEYS.ROLE);
-  const nickname = sessionStorage.getItem(SESSION_KEYS.NICKNAME);
-  const timestamp = sessionStorage.getItem(SESSION_KEYS.TIMESTAMP);
+  const pin = localStorage.getItem(SESSION_KEYS.PIN);
+  const hostToken = localStorage.getItem(SESSION_KEYS.HOST_TOKEN);
+  const playerToken = localStorage.getItem(SESSION_KEYS.PLAYER_TOKEN);
+  const spectatorToken = localStorage.getItem(SESSION_KEYS.SPECTATOR_TOKEN);
+  const role = localStorage.getItem(SESSION_KEYS.ROLE);
+  const nickname = localStorage.getItem(SESSION_KEYS.NICKNAME);
+  const timestamp = localStorage.getItem(SESSION_KEYS.TIMESTAMP);
   if (!pin || !role) return null;
 
   // Check session expiry
@@ -53,7 +65,7 @@ const getSession = () => {
 };
 
 const clearSession = () => {
-  Object.values(SESSION_KEYS).forEach(key => sessionStorage.removeItem(key));
+  Object.values(SESSION_KEYS).forEach(key => localStorage.removeItem(key));
 };
 
 const initialRoomState = {
@@ -218,12 +230,22 @@ export function RoomProvider({ children }) {
     });
 
     socketService.on('spectator_returned', ({ spectatorId, nickname }) => {
-      setRoomState(prev => ({
-        ...prev,
-        spectators: prev.spectators.map(s =>
-          s.id === spectatorId ? { ...s, disconnected: false } : s
-        ),
-      }));
+      setRoomState(prev => {
+        const exists = prev.spectators.some(s => s.id === spectatorId);
+        if (exists) {
+          return {
+            ...prev,
+            spectators: prev.spectators.map(s =>
+              s.id === spectatorId ? { ...s, disconnected: false } : s
+            ),
+          };
+        }
+        // Spectator was removed from list after disconnect — re-add
+        return {
+          ...prev,
+          spectators: [...prev.spectators, { id: spectatorId, nickname, disconnected: false }],
+        };
+      });
       if (nickname) showToast.info(`${nickname} reconnected`);
     });
 

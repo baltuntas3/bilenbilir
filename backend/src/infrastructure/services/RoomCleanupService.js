@@ -143,6 +143,15 @@ class RoomCleanupService {
             // Also clean up stale spectators in fast path
             const staleSpecsFast = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
             if (staleSpecsFast.length > 0) {
+              if (this.io) {
+                staleSpecsFast.forEach(spectator => {
+                  this.io.to(room.pin).emit('spectator_left', {
+                    spectatorId: spectator.id,
+                    nickname: spectator.nickname,
+                    spectatorCount: room.getSpectatorCount()
+                  });
+                });
+              }
               await this.roomRepository.save(room);
             }
             continue;
@@ -175,6 +184,15 @@ class RoomCleanupService {
           const staleSpectators = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
           if (staleSpectators.length > 0) {
             console.log(`Removed ${staleSpectators.length} stale spectators from room ${room.pin}`);
+            if (this.io) {
+              staleSpectators.forEach(spectator => {
+                this.io.to(room.pin).emit('spectator_left', {
+                  spectatorId: spectator.id,
+                  nickname: spectator.nickname,
+                  spectatorCount: room.getSpectatorCount()
+                });
+              });
+            }
             await this.roomRepository.save(room);
           }
 

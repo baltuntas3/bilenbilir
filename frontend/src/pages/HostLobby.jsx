@@ -43,6 +43,7 @@ import {
   IconPlus,
   IconTrash,
   IconBolt,
+  IconEye,
 } from '@tabler/icons-react';
 import { useGame, GAME_STATES } from '../context/GameContext';
 import { showToast } from '../utils/toast';
@@ -76,6 +77,7 @@ export default function HostLobby() {
     assignTeam,
     lightningRound,
     setLightningRound,
+    spectators,
   } = useGame();
 
   const [loading, setLoading] = useState(true);
@@ -456,18 +458,33 @@ export default function HostLobby() {
                   {t('quiz.questionCount', { count: quiz.questionCount || totalQuestions || 0 })}
                 </Text>
               </div>
-              <Badge
-                size="lg"
-                variant="light"
-                
-                style={{
-                  fontFamily: 'var(--theme-font-display)',
-                  fontSize: '0.5rem',
-                  boxShadow: 'var(--theme-glow-primary)',
-                }}
-              >
-                {t('game.onlineCount', { count: players.length })}
-              </Badge>
+              <Group gap="xs">
+                <Badge
+                  size="lg"
+                  variant="light"
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.5rem',
+                    boxShadow: 'var(--theme-glow-primary)',
+                  }}
+                >
+                  {t('game.onlineCount', { count: players.length })}
+                </Badge>
+                {spectators.length > 0 && (
+                  <Badge
+                    size="md"
+                    variant="light"
+                    color="grape"
+                    leftSection={<IconEye size={14} />}
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '0.4rem',
+                    }}
+                  >
+                    {t('game.spectatorCount', { count: spectators.length })}
+                  </Badge>
+                )}
+              </Group>
             </Group>
           </Paper>
         )}

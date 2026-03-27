@@ -13,6 +13,7 @@ import {
   SimpleGrid,
   Alert,
   Box,
+  Transition,
 } from '@mantine/core';
 import {
   IconPlayerPlay,
@@ -22,6 +23,8 @@ import {
   IconTrophy,
   IconUsers,
   IconPlayerPause,
+  IconEye,
+  IconAlertTriangle,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useGame, GAME_STATES } from '../context/GameContext';
@@ -33,6 +36,7 @@ import Podium from '../components/game/Podium';
 import ReactionOverlay from '../components/game/ReactionOverlay';
 import AnswerDistribution from '../components/game/AnswerDistribution';
 import GamePausedBanner from '../components/game/GamePausedBanner';
+import { showToast } from '../utils/toast';
 
 const OPTION_COLORS = ['var(--theme-primary)', 'var(--theme-secondary)', 'var(--theme-success)', 'var(--theme-warning)', 'var(--theme-accent)', 'var(--theme-primary)'];
 
@@ -67,6 +71,7 @@ export default function HostGame() {
     teamLeaderboard,
     teamPodium,
     isLightning,
+    spectators,
   } = useGame();
 
   useEffect(() => {
@@ -75,15 +80,30 @@ export default function HostGame() {
     }
   }, [isHost, roomPin, navigate]);
 
-  const handleStartAnswering = useGameAction(startAnswering);
   const handleEndAnswering = useGameAction(endAnswering);
   const handleShowLeaderboard = useGameAction(showLeaderboard);
-  const handleNextQuestion = useGameAction(nextQuestion);
   const handleEndGame = useGameAction(closeRoom, { onSuccess: () => navigate('/my-quizzes') });
   const handlePauseGame = useGameAction(pauseGame);
   const handleResumeGame = useGameAction(resumeGame);
 
   const connectedPlayers = players.filter((p) => !p.disconnected);
+  const noPlayers = connectedPlayers.length === 0 && players.length > 0;
+
+  const handleStartAnswering = useGameAction(() => {
+    if (noPlayers) {
+      showToast.error(t('game.noPlayersToAdvance'));
+      return Promise.reject(new Error(t('game.noPlayersToAdvance')));
+    }
+    return startAnswering();
+  });
+
+  const handleNextQuestion = useGameAction(() => {
+    if (noPlayers) {
+      showToast.error(t('game.noPlayersToAdvance'));
+      return Promise.reject(new Error(t('game.noPlayersToAdvance')));
+    }
+    return nextQuestion();
+  });
 
   const renderContent = () => {
     switch (gameState) {
@@ -102,11 +122,11 @@ export default function HostGame() {
                 size="xl"
                 leftSection={<IconPlayerPlay size={24} />}
                 onClick={handleStartAnswering}
-                
+                disabled={noPlayers}
                 style={{
                   fontFamily: 'var(--theme-font-display)',
                   fontSize: '0.7rem',
-                  boxShadow: 'var(--theme-glow-primary)',
+                  boxShadow: noPlayers ? 'none' : 'var(--theme-glow-primary)',
                 }}
               >
                 {t('game.startTimer')}
@@ -310,11 +330,11 @@ export default function HostGame() {
                     : <IconPlayerSkipForward size={20} />
                 }
                 onClick={handleNextQuestion}
-                
+                disabled={noPlayers}
                 style={{
                   fontFamily: 'var(--theme-font-display)',
                   fontSize: '0.6rem',
-                  boxShadow: 'var(--theme-glow-primary)',
+                  boxShadow: noPlayers ? 'none' : 'var(--theme-glow-primary)',
                 }}
               >
                 {currentQuestionIndex + 1 >= totalQuestions ? t('game.finalResults') : t('game.nextQuestion')}
@@ -417,7 +437,7 @@ export default function HostGame() {
                 <Badge
                   size="md"
                   variant="light"
-                  
+
                   style={{
                     fontFamily: 'var(--theme-font-display)',
                     fontSize: '0.4rem',
@@ -425,6 +445,20 @@ export default function HostGame() {
                 >
                   {t('game.onlineCount', { count: connectedPlayers.length })}
                 </Badge>
+                {spectators.length > 0 && (
+                  <Badge
+                    size="md"
+                    variant="light"
+                    color="grape"
+                    leftSection={<IconEye size={14} />}
+                    style={{
+                      fontFamily: 'var(--theme-font-display)',
+                      fontSize: '0.4rem',
+                    }}
+                  >
+                    {t('game.spectatorCount', { count: spectators.length })}
+                  </Badge>
+                )}
               </Group>
               <Badge
                 size="md"
@@ -438,6 +472,22 @@ export default function HostGame() {
               </Badge>
             </Group>
           </Paper>
+
+          <Transition mounted={noPlayers} transition="slide-down" duration={300}>
+            {(styles) => (
+              <Alert
+                style={{
+                  ...styles,
+                  background: 'rgba(255, 100, 100, 0.08)',
+                  border: '1px solid var(--theme-secondary)',
+                }}
+                icon={<IconAlertTriangle size={20} />}
+                color="red"
+                variant="light"
+                title={t('game.allPlayersDisconnected')}
+              />
+            )}
+          </Transition>
 
           {renderContent()}
         </Stack>
