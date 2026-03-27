@@ -1,7 +1,7 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 
-const { createRoomHandler, createGameHandler, endAnsweringLocks } = require('../../api/handlers');
+const { createRoomHandler, createGameHandler, endAnsweringLocks, nextQuestionLocks } = require('../../api/handlers');
 const { autoAdvanceToResults } = require('../../api/handlers/socketHandlerUtils');
 const { RoomUseCases, GameUseCases } = require('../../application/use-cases');
 const { roomRepository, gameSessionRepository } = require('../repositories');
@@ -126,6 +126,7 @@ const initializeSocket = (server) => {
     timerService,
     autoAdvanceToResults,
     endAnsweringLocks,
+    managedLocks: [endAnsweringLocks, nextQuestionLocks],
     hostGracePeriod: 300000,   // 5 minutes - match RoomUseCases
     playerGracePeriod: 120000, // 2 minutes
     spectatorGracePeriod: 120000

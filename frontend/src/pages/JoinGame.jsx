@@ -47,6 +47,17 @@ export default function JoinGame() {
     }
   }, [searchParams]);
 
+  // Auto-join as spectator when autoSpectate is set and nickname is available
+  useEffect(() => {
+    if (!autoSpectate || step !== 'nickname') return;
+    const nickname = form.values.nickname.trim();
+    if (nickname.length >= 2) {
+      setAutoSpectate(false);
+      handleJoinAsSpectator({ nickname });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSpectate, step]);
+
   const form = useForm({
     initialValues: {
       nickname: user?.username || '',

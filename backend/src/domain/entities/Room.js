@@ -532,6 +532,7 @@ class Room {
       elapsedTimeMs: Math.max(0, answerData.elapsedTimeMs || 0),
       score: Math.max(0, answerData.score || 0),
       streak: safeStreak,
+      streakBonus: Math.max(0, answerData.streakBonus || 0),
       questionIndex: this.currentQuestionIndex,
       timestamp: new Date()
     });

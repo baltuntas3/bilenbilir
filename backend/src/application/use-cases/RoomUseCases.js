@@ -19,6 +19,8 @@ class RoomUseCases extends SharedUseCases {
 
     // Lock to prevent nickname collision race conditions (60s TTL)
     this.joinLocks = new LockManager(60000);
+    // Lock to prevent duplicate room creation by the same host (10s TTL)
+    this.createRoomLocks = new LockManager(10000);
   }
 
   /**
@@ -30,43 +32,45 @@ class RoomUseCases extends SharedUseCases {
   }
 
   async createRoom({ hostId, hostUserId, quizId }) {
-    const existingRoom = await this.roomRepository.findByHostUserId(hostUserId);
-    if (existingRoom) {
-      throw new ConflictError(`You already have an active room (PIN: ${existingRoom.pin}). Close it before creating a new one.`);
-    }
-
-    const quiz = await this._getQuizOrThrow(quizId);
-    if (quiz.getTotalQuestions() === 0) {
-      throw new ValidationError('Cannot create room: quiz has no questions');
-    }
-
-    let pin;
-    let attempts = 0;
-    const maxAttempts = 50;
-
-    do {
-      pin = PIN.generate();
-      attempts++;
-      if (attempts > maxAttempts) {
-        throw new ValidationError('Failed to generate unique PIN. System may be at capacity.');
+    return this.createRoomLocks.withLock(hostUserId, 'Room creation already in progress', async () => {
+      const existingRoom = await this.roomRepository.findByHostUserId(hostUserId);
+      if (existingRoom) {
+        throw new ConflictError(`You already have an active room (PIN: ${existingRoom.pin}). Close it before creating a new one.`);
       }
-    } while (await this.roomRepository.exists(pin.toString()));
 
-    const hostToken = generateId();
+      const quiz = await this._getQuizOrThrow(quizId);
+      if (quiz.getTotalQuestions() === 0) {
+        throw new ValidationError('Cannot create room: quiz has no questions');
+      }
 
-    const room = new Room({
-      id: generateId(),
-      pin,
-      hostId,
-      hostUserId,
-      hostToken,
-      quizId,
-      state: RoomState.WAITING_PLAYERS
+      let pin;
+      let attempts = 0;
+      const maxAttempts = 50;
+
+      do {
+        pin = PIN.generate();
+        attempts++;
+        if (attempts > maxAttempts) {
+          throw new ValidationError('Failed to generate unique PIN. System may be at capacity.');
+        }
+      } while (await this.roomRepository.exists(pin.toString()));
+
+      const hostToken = generateId();
+
+      const room = new Room({
+        id: generateId(),
+        pin,
+        hostId,
+        hostUserId,
+        hostToken,
+        quizId,
+        state: RoomState.WAITING_PLAYERS
+      });
+
+      await this.roomRepository.save(room);
+
+      return { room, quiz, hostToken };
     });
-
-    await this.roomRepository.save(room);
-
-    return { room, quiz, hostToken };
   }
 
   async joinRoom({ pin, nickname, socketId }) {

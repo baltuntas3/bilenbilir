@@ -63,6 +63,7 @@ export default function QuizEdit() {
     mutationFn: (data) => quizService.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quiz', id] });
+      queryClient.invalidateQueries({ queryKey: ['quizzes'] });
       showToast.success('Quiz updated');
     },
   });

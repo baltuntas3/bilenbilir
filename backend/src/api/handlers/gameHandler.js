@@ -185,15 +185,15 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       requireAuth(); // JWT required for host
       const { pin } = data || {};
 
-      timerService.stopTimer(pin);
-
-      // Check lock to prevent race with timer callback auto-transition
+      // Acquire lock FIRST to prevent race with timer callback auto-transition
       if (!endAnsweringLocks.acquire(pin)) {
         sendAck(ack, { ok: true, alreadyEnding: true });
         return;
       }
 
       try {
+        timerService.stopTimer(pin);
+
         const result = await gameUseCases.endAnsweringPhase({
           pin,
           requesterId: socket.id
@@ -322,6 +322,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
 
       const { pin } = data || {};
+      if (!socket.rooms.has(pin)) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Not a member of this room' });
+        return;
+      }
 
       const result = await gameUseCases.getResults({ pin });
 
@@ -352,6 +356,10 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
 
       const { pin } = data || {};
+      if (!socket.rooms.has(pin)) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Not a member of this room' });
+        return;
+      }
 
       const timerSync = timerService.getTimerSync(pin);
 
@@ -395,13 +403,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         powerUpType
       });
 
-      // Execute emit actions from strategy — no if/else needed
-      if (emitActions.playerEmits) {
-        emitActions.playerEmits.forEach(e => socket.emit(e.event, e.data));
-      }
-      if (emitActions.roomEmits) {
-        emitActions.roomEmits.forEach(e => io.to(pin).emit(e.event, e.data));
-      }
+      // Resolve timer action FIRST before emitting to clients
       let timerActionFailed = false;
       if (emitActions.timerAction) {
         const { method, args } = emitActions.timerAction;
@@ -439,6 +441,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         }
         sendAck(ack, { ok: false, error: 'Time extension limit reached for this question' });
         return;
+      }
+
+      // Timer action succeeded (or not needed) — now emit to clients
+      if (emitActions.playerEmits) {
+        emitActions.playerEmits.forEach(e => socket.emit(e.event, e.data));
+      }
+      if (emitActions.roomEmits) {
+        emitActions.roomEmits.forEach(e => io.to(pin).emit(e.event, e.data));
       }
 
       io.to(pin).emit('power_up_used', {

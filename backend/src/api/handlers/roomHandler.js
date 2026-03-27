@@ -725,13 +725,14 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
     }
   });
 
-  // Get banned nicknames
+  // Get banned nicknames (host only)
   socket.on('get_banned_nicknames', async (data, ack) => {
     try {
       if (!checkRateLimit('get_banned_nicknames')) {
         sendAck(ack, { ok: false, error: 'Too many requests' });
         return;
       }
+      requireAuth();
       const { pin } = data || {};
 
       const result = await roomUseCases.getBannedNicknames({ pin });

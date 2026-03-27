@@ -157,7 +157,7 @@ export function GameProvider({ children }) {
       if (timerSync && timerSync.remainingMs > 0) {
         try {
           const adjustedEndTime = calcAdjustedEndTime(timerSync.endTime, timerSync.serverTime, timerSync.remainingMs);
-          timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime);
+          timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime, true);
         } catch { /* timer may be unavailable */ }
       }
 
@@ -207,7 +207,7 @@ export function GameProvider({ children }) {
       if (timerSync && timerSync.remainingMs > 0) {
         try {
           const adjustedEndTime = calcAdjustedEndTime(timerSync.endTime, timerSync.serverTime, timerSync.remainingMs);
-          timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime);
+          timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime, true);
         } catch { /* timer may be unavailable */ }
       }
     });
@@ -239,7 +239,7 @@ export function GameProvider({ children }) {
       if (timerSync && timerSync.remainingMs > 0) {
         try {
           const adjustedEndTime = calcAdjustedEndTime(timerSync.endTime, timerSync.serverTime, timerSync.remainingMs);
-          timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime);
+          timerRef.current.startTimer(Math.ceil(timerSync.remainingMs / 1000), adjustedEndTime, true);
         } catch { /* timer may be unavailable */ }
       }
     };
@@ -378,7 +378,7 @@ export function GameProvider({ children }) {
         const { remainingMs, endTime, serverTime } = data;
         if (typeof remainingMs !== 'number' || typeof endTime !== 'number' || typeof serverTime !== 'number') return;
         const adjustedEndTime = calcAdjustedEndTime(endTime, serverTime, remainingMs);
-        timerRef.current.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
+        timerRef.current.startTimer(Math.ceil(remainingMs / 1000), adjustedEndTime, true);
       } catch { /* timer may be unavailable */ }
     });
 

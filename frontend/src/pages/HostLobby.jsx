@@ -171,6 +171,7 @@ export default function HostLobby() {
       await startGame(randomEnabled ? questionCount : undefined);
     } catch (error) {
       showToast.error(error.message || 'Failed to start game');
+    } finally {
       setStarting(false);
     }
   };

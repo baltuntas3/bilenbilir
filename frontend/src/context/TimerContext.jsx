@@ -8,11 +8,11 @@ export function TimerProvider({ children }) {
   const timerRef = useRef(null);
   const endTimeRef = useRef(null);
 
-  const startTimer = useCallback((duration, endTime) => {
+  const startTimer = useCallback((duration, endTime, isSync = false) => {
     if (timerRef.current) clearInterval(timerRef.current);
     endTimeRef.current = endTime;
     setRemainingTime(duration);
-    setTimeLimit(duration);
+    if (!isSync) setTimeLimit(duration);
 
     timerRef.current = setInterval(() => {
       const now = Date.now();

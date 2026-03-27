@@ -14,6 +14,8 @@ class RoomCleanupService {
     // Injected from outside to avoid infrastructure → API layer dependency
     this.autoAdvanceToResults = options.autoAdvanceToResults || null;
     this.endAnsweringLocks = options.endAnsweringLocks || null;
+    // Additional LockManagers to clean up expired entries periodically
+    this.managedLocks = options.managedLocks || [];
     this.intervalId = null;
     this.isCleanupRunning = false;
 
@@ -347,6 +349,10 @@ class RoomCleanupService {
     } catch (error) {
       console.error('Room cleanup error:', error.message);
     } finally {
+      // Clean up expired entries in all managed LockManagers
+      for (const lock of this.managedLocks) {
+        try { lock.cleanupExpired(); } catch { /* best-effort */ }
+      }
       clearTimeout(safetyTimeout);
       this.isCleanupRunning = false;
     }

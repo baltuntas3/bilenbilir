@@ -161,7 +161,6 @@ export default function HostGame() {
 
             <SimpleGrid cols={2} spacing="sm">
               {currentQuestion?.options?.map((option, index) => {
-                const isCorrect = index === currentQuestion?.correctAnswerIndex;
                 const color = OPTION_COLORS[index];
 
                 return (
@@ -170,9 +169,8 @@ export default function HostGame() {
                     p="md"
                     radius="md"
                     style={{
-                      background: isCorrect ? 'rgba(57, 255, 20, 0.08)' : 'var(--theme-surface)',
-                      border: `1px solid ${isCorrect ? 'var(--theme-success)' : color}`,
-                      boxShadow: isCorrect ? 'var(--theme-glow-success)' : 'none',
+                      background: 'var(--theme-surface)',
+                      border: `1px solid ${color}`,
                     }}
                   >
                     <Group gap="sm">
@@ -181,7 +179,7 @@ export default function HostGame() {
                           width: 28,
                           height: 28,
                           borderRadius: 6,
-                          border: `1px solid ${isCorrect ? 'var(--theme-success)' : color}`,
+                          border: `1px solid ${color}`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -192,7 +190,7 @@ export default function HostGame() {
                           style={{
                             fontFamily: 'var(--theme-font-display)',
                             fontSize: '0.5rem',
-                            color: isCorrect ? 'var(--theme-success)' : color,
+                            color,
                           }}
                         >
                           {String.fromCharCode(65 + index)}

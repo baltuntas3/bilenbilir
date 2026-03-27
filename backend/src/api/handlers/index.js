@@ -1,8 +1,9 @@
 const { createRoomHandler } = require('./roomHandler');
-const { createGameHandler, endAnsweringLocks } = require('./gameHandler');
+const { createGameHandler, endAnsweringLocks, nextQuestionLocks } = require('./gameHandler');
 
 module.exports = {
   createRoomHandler,
   createGameHandler,
-  endAnsweringLocks
+  endAnsweringLocks,
+  nextQuestionLocks
 };
