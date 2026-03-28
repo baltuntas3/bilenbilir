@@ -2,27 +2,40 @@ import { createContext, useContext, useState, useCallback, useRef, useMemo } fro
 
 const TimerContext = createContext(null);
 
+/**
+ * Shared tick logic: only calls setRemainingTime when the displayed second changes.
+ * Returns the interval ID so the caller can store it.
+ */
+function createTimerInterval(endTimeRef, lastSecondRef, setRemainingTime) {
+  return setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+    if (remaining !== lastSecondRef.current) {
+      lastSecondRef.current = remaining;
+      setRemainingTime(remaining);
+    }
+    if (remaining <= 0) {
+      clearInterval(endTimeRef._intervalId);
+      endTimeRef._intervalId = null;
+    }
+  }, 100);
+}
+
 export function TimerProvider({ children }) {
   const [remainingTime, setRemainingTime] = useState(0);
   const [timeLimit, setTimeLimit] = useState(30);
   const timerRef = useRef(null);
   const endTimeRef = useRef(null);
+  const lastSecondRef = useRef(0);
 
   const startTimer = useCallback((duration, endTime, isSync = false) => {
     if (timerRef.current) clearInterval(timerRef.current);
     endTimeRef.current = endTime;
+    lastSecondRef.current = duration;
     setRemainingTime(duration);
     if (!isSync) setTimeLimit(duration);
 
-    timerRef.current = setInterval(() => {
-      const now = Date.now();
-      const remaining = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
-      setRemainingTime(remaining);
-      if (remaining <= 0) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }, 100);
+    timerRef.current = createTimerInterval(endTimeRef, lastSecondRef, setRemainingTime);
+    endTimeRef._intervalId = timerRef.current;
   }, []);
 
   const stopTimer = useCallback(() => {
@@ -37,24 +50,17 @@ export function TimerProvider({ children }) {
     endTimeRef.current += extraTimeMs;
     setTimeLimit(prev => prev + Math.ceil(extraTimeMs / 1000));
 
-    // Always clear existing interval to prevent stacking
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
     const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+    lastSecondRef.current = remaining;
     setRemainingTime(remaining);
     if (remaining <= 0) return;
-    timerRef.current = setInterval(() => {
-      const now = Date.now();
-      const r = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
-      setRemainingTime(r);
-      if (r <= 0) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }, 100);
+    timerRef.current = createTimerInterval(endTimeRef, lastSecondRef, setRemainingTime);
+    endTimeRef._intervalId = timerRef.current;
   }, []);
 
   const resetTimer = useCallback(() => {

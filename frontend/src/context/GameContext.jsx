@@ -95,7 +95,7 @@ export function GameProvider({ children }) {
       'question_intro', 'answering_started', 'answer_received', 'answer_count_updated',
       'all_players_answered', 'show_results', 'leaderboard', 'game_over',
       'final_results', 'fifty_fifty_result', 'power_up_activated', 'power_up_used',
-      'time_extended', 'timer_started', 'time_expired', 'timer_sync',
+      'time_extended', 'power_up_refund_failed', 'timer_started', 'time_expired', 'timer_sync',
       'game_paused', 'game_resumed', 'reaction_received', 'room_closed',
       'host_disconnected', 'host_disconnected_warning', 'host_returned', 'error'
     ];
@@ -362,6 +362,10 @@ export function GameProvider({ children }) {
     socketService.on('time_extended', ({ extraTimeMs }) => {
       try { timerRef.current.extendTimer(extraTimeMs); } catch { /* timer may be unavailable */ }
     });
+    socketService.on('power_up_refund_failed', ({ powerUpType }) => {
+      const labels = { FIFTY_FIFTY: '50:50', DOUBLE_POINTS: 'Çift Puan', TIME_EXTENSION: 'Süre Uzatma' };
+      showToast.error((labels[powerUpType] || powerUpType) + ' jokeri geri alınamadı. Lütfen yöneticiye bildirin.');
+    });
 
     // Timer events
     socketService.on('timer_started', ({ duration, endTime, serverTime }) => {
@@ -506,11 +510,12 @@ export function GameProvider({ children }) {
       })
       .catch(() => {
         pendingPowerUpTypeRef.current = null;
-        // Timeout or network error — rollback
+        // Timeout or network error — rollback and notify user
         setState(prev => ({
           ...prev,
           powerUps: { ...prev.powerUps, [type]: (prev.powerUps[type] || 0) + 1 },
         }));
+        showToast.error('Joker kullanılamadı, tekrar deneyin');
       })
       .finally(() => {
         powerUpPendingRef.current = false;

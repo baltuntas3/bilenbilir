@@ -1,6 +1,6 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults } = require('./socketHandlerUtils');
-const { MAX_TIMER_EXTENSION_MS, LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
+const { MAX_TIMER_EXTENSION_MS, GAME_FLOW_LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { DEFAULT_POWER_UPS } = require('../../domain/value-objects/PowerUp');
 
@@ -9,9 +9,9 @@ const { DEFAULT_POWER_UPS } = require('../../domain/value-objects/PowerUp');
  * Handles game flow: start, questions, answers, results
  */
 // Per-room lock to prevent concurrent endAnsweringPhase calls (timer expiry vs all-answered race)
-const endAnsweringLocks = new LockManager(LOCK_TIMEOUT_MS);
+const endAnsweringLocks = new LockManager(GAME_FLOW_LOCK_TIMEOUT_MS);
 // Per-room lock to prevent concurrent nextQuestion calls (double-click race)
-const nextQuestionLocks = new LockManager(LOCK_TIMEOUT_MS);
+const nextQuestionLocks = new LockManager(GAME_FLOW_LOCK_TIMEOUT_MS);
 
 const createGameHandler = (io, socket, gameUseCases, timerService) => {
   const checkRateLimit = createRateLimiter(socket);
@@ -438,6 +438,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         }
         if (!refundSuccess) {
           console.error(`CRITICAL: Power-up refund permanently failed for pin ${pin}, socket ${socket.id}, type ${powerUpType}`);
+          socket.emit('power_up_refund_failed', { powerUpType });
         }
         sendAck(ack, { ok: false, error: 'Time extension limit reached for this question' });
         return;

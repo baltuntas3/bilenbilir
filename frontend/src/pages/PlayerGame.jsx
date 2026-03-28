@@ -440,21 +440,9 @@ export default function PlayerGame() {
           </Stack>
         );
 
+      case GAME_STATES.IDLE:
       default:
-        return (
-          <Center>
-            <Text
-              className="anim-pulse"
-              style={{
-                fontFamily: 'var(--theme-font-display)',
-                fontSize: '0.5rem',
-                color: 'var(--theme-text-dim)',
-              }}
-            >
-              {t('game.waitingSignal')}
-            </Text>
-          </Center>
-        );
+        return <PlayerWaiting nickname={nickname} playerCount={players.length} />;
     }
   };
 
@@ -467,8 +455,8 @@ export default function PlayerGame() {
       <ReactionOverlay />
       <Container size="sm" py="md" pb={80}>
         <Stack gap="md">
-          {/* Header bar */}
-          {gameState !== GAME_STATES.WAITING_PLAYERS && (
+          {/* Header bar - only show during active game phases with valid question data */}
+          {gameState !== GAME_STATES.WAITING_PLAYERS && gameState !== GAME_STATES.IDLE && totalQuestions > 0 && (
             <Paper
               p="xs"
               radius="md"

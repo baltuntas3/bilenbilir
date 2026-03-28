@@ -96,6 +96,27 @@ class Room {
   }
 
   /**
+   * Atomically transition from WAITING_PLAYERS to QUESTION_INTRO with a quiz snapshot.
+   * Ensures snapshot + state are set together — if state transition fails,
+   * no side effects are written. Prevents the room from becoming unrecoverable.
+   * @param {Quiz} quizSnapshot - Frozen quiz snapshot
+   */
+  startGameSession(quizSnapshot) {
+    if (this.quizSnapshot !== null) {
+      throw new ValidationError('Quiz snapshot already set');
+    }
+    // Validate state transition BEFORE any side effects
+    const allowedTransitions = validTransitions[this.state];
+    if (!allowedTransitions || !allowedTransitions.includes(RoomState.QUESTION_INTRO)) {
+      throw new ValidationError(`Invalid state transition: ${this.state} → ${RoomState.QUESTION_INTRO}`);
+    }
+    // All validations passed — apply atomically
+    this.quizSnapshot = quizSnapshot;
+    this.gameStartedAt = new Date();
+    this.state = RoomState.QUESTION_INTRO;
+  }
+
+  /**
    * Get when the game started (quiz snapshot was set)
    * @returns {Date|null}
    */

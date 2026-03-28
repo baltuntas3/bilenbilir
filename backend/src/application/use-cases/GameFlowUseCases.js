@@ -1,6 +1,7 @@
 const { SharedUseCases } = require('./SharedUseCases');
 const { RoomState } = require('../../domain/entities');
 const { ValidationError, ConflictError } = require('../../shared/errors');
+const { MIN_QUESTION_TIME } = require('../../shared/config/constants');
 
 class GameFlowUseCases extends SharedUseCases {
   constructor(roomRepository, quizRepository) {
@@ -27,9 +28,9 @@ class GameFlowUseCases extends SharedUseCases {
 
     if (!Object.isFrozen(quizSnapshot)) throw new ValidationError('Failed to create immutable quiz snapshot - quiz not frozen');
 
-    // All validations passed — now mutate room state
-    room.setQuizSnapshot(quizSnapshot);
-    room.setState(RoomState.QUESTION_INTRO);
+    // All validations passed — atomically set snapshot + state together
+    // Prevents room from becoming unrecoverable if state transition fails
+    room.startGameSession(quizSnapshot);
     await this.roomRepository.save(room);
     // Non-critical: increment play count. Failure should not affect game start.
     try {
@@ -70,7 +71,7 @@ class GameFlowUseCases extends SharedUseCases {
     let isLightning = false;
     const snapshot = room.getQuizSnapshot();
     if (room.lightningRound.enabled && room.isLightningQuestion(room.currentQuestionIndex, snapshot.getTotalQuestions())) {
-      timeLimit = Math.max(5, Math.floor(timeLimit / 2));
+      timeLimit = Math.max(MIN_QUESTION_TIME, Math.floor(timeLimit / 2));
       isLightning = true;
     }
     return { room, timeLimit, optionCount: currentQuestion.options.length, isLightning };

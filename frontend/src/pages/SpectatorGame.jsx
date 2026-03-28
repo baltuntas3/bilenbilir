@@ -413,19 +413,23 @@ export default function SpectatorGame() {
           </Stack>
         );
 
+      case GAME_STATES.IDLE:
       default:
         return (
-          <Center>
-            <Text
-              className="anim-pulse"
-              style={{
-                fontFamily: 'var(--theme-font-display)',
-                fontSize: '0.5rem',
-                color: 'var(--theme-text-dim)',
-              }}
-            >
-              {t('game.waitingSignal')}
-            </Text>
+          <Center style={{ minHeight: 300 }}>
+            <Stack align="center" gap="md">
+              <IconEye size={48} style={{ color: 'var(--theme-primary)', opacity: 0.5 }} />
+              <Text
+                className="anim-pulse"
+                style={{
+                  fontFamily: 'var(--theme-font-display)',
+                  fontSize: '0.5rem',
+                  color: 'var(--theme-text-dim)',
+                }}
+              >
+                {t('game.spectatorMode')}
+              </Text>
+            </Stack>
           </Center>
         );
     }
@@ -475,7 +479,7 @@ export default function SpectatorGame() {
                   {t('game.onlineCount', { count: connectedPlayers.length })}
                 </Badge>
               </Group>
-              {gameState !== GAME_STATES.WAITING_PLAYERS && (
+              {gameState !== GAME_STATES.WAITING_PLAYERS && gameState !== GAME_STATES.IDLE && totalQuestions > 0 && (
                 <Badge
                   size="md"
                   color="violet"

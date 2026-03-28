@@ -18,6 +18,7 @@ module.exports = {
   MAX_QUESTION_TIME: 120,
   DEFAULT_QUESTION_TIME: 30,
   LOCK_TIMEOUT_MS: 10000,
+  GAME_FLOW_LOCK_TIMEOUT_MS: 30000, // 30s for end-answering/next-question locks (race condition margin)
   ANSWER_LOCK_TIMEOUT_MS: 30000, // 30s for answer/power-up locks (slower networks)
 
   // Power-ups

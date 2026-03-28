@@ -460,16 +460,18 @@ export default function HostGame() {
                   </Badge>
                 )}
               </Group>
-              <Badge
-                size="md"
-                color="violet"
-                style={{
-                  fontFamily: 'var(--theme-font-display)',
-                  fontSize: '0.4rem',
-                }}
-              >
-                {t('game.questionOf', { current: currentQuestionIndex + 1, total: totalQuestions })}
-              </Badge>
+              {totalQuestions > 0 && (
+                <Badge
+                  size="md"
+                  color="violet"
+                  style={{
+                    fontFamily: 'var(--theme-font-display)',
+                    fontSize: '0.4rem',
+                  }}
+                >
+                  {t('game.questionOf', { current: currentQuestionIndex + 1, total: totalQuestions })}
+                </Badge>
+              )}
             </Group>
           </Paper>
 
