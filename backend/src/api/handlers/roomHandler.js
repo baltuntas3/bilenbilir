@@ -631,6 +631,36 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
   // ==================== KICK/BAN EVENTS ====================
 
+  /**
+   * Shared kick/ban logic: acquire endAnsweringLocks to prevent race with concurrent
+   * answer submissions that could trigger auto-advance simultaneously.
+   * @private
+   */
+  const handleKickOrBan = async (pin, playerId, isBan, ack) => {
+    const result = isBan
+      ? await roomUseCases.banPlayer({ pin, playerId, requesterId: socket.id })
+      : await roomUseCases.kickPlayer({ pin, playerId, requesterId: socket.id });
+
+    // Notify kicked/banned player
+    const targetSocket = io.sockets.sockets.get(result.player.socketId);
+    if (targetSocket) {
+      targetSocket.emit('you_were_kicked', { reason: isBan ? 'banned' : 'kicked' });
+      targetSocket.leave(pin);
+    }
+
+    // Notify room
+    io.to(pin).emit(isBan ? 'player_banned' : 'player_kicked', {
+      playerId: result.player.id,
+      nickname: result.player.nickname,
+      playerCount: result.room.getPlayerCount(),
+      connectedPlayerCount: result.room.getConnectedPlayerCount()
+    });
+
+    // Auto-advance if remaining connected players have all answered
+    await checkAllAnsweredAfterRemoval(result.room);
+    sendAck(ack, { ok: true });
+  };
+
   // Host kicks a player
   socket.on('kick_player', async (data, ack) => {
     try {
@@ -639,33 +669,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         return;
       }
       requireAuth();
-
       const { pin, playerId } = data || {};
-
-      const result = await roomUseCases.kickPlayer({
-        pin,
-        playerId,
-        requesterId: socket.id
-      });
-
-      // Notify kicked player
-      const kickedSocket = io.sockets.sockets.get(result.player.socketId);
-      if (kickedSocket) {
-        kickedSocket.emit('you_were_kicked', { reason: 'kicked' });
-        kickedSocket.leave(pin);
-      }
-
-      // Notify room
-      io.to(pin).emit('player_kicked', {
-        playerId: result.player.id,
-        nickname: result.player.nickname,
-        playerCount: result.room.getPlayerCount(),
-        connectedPlayerCount: result.room.getConnectedPlayerCount()
-      });
-
-      // Auto-advance if remaining connected players have all answered
-      await checkAllAnsweredAfterRemoval(result.room);
-      sendAck(ack, { ok: true });
+      await handleKickOrBan(pin, playerId, false, ack);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
@@ -680,33 +685,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         return;
       }
       requireAuth();
-
       const { pin, playerId } = data || {};
-
-      const result = await roomUseCases.banPlayer({
-        pin,
-        playerId,
-        requesterId: socket.id
-      });
-
-      // Notify banned player
-      const bannedSocket = io.sockets.sockets.get(result.player.socketId);
-      if (bannedSocket) {
-        bannedSocket.emit('you_were_kicked', { reason: 'banned' });
-        bannedSocket.leave(pin);
-      }
-
-      // Notify room
-      io.to(pin).emit('player_banned', {
-        playerId: result.player.id,
-        nickname: result.player.nickname,
-        playerCount: result.room.getPlayerCount(),
-        connectedPlayerCount: result.room.getConnectedPlayerCount()
-      });
-
-      // Auto-advance if remaining connected players have all answered
-      await checkAllAnsweredAfterRemoval(result.room);
-      sendAck(ack, { ok: true });
+      await handleKickOrBan(pin, playerId, true, ack);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);

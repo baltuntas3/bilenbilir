@@ -1106,7 +1106,7 @@ describe('Room', () => {
   });
 
   describe('beginAnsweringPhase', () => {
-    it('should transition to ANSWERING_PHASE and clear all player answer attempts', () => {
+    it('should transition to ANSWERING_PHASE and snapshot connected player count', () => {
       const player1 = new Player({ id: 'p1', socketId: 's1', nickname: 'P1', roomPin: '123456' });
       const player2 = new Player({ id: 'p2', socketId: 's2', nickname: 'P2', roomPin: '123456' });
 
@@ -1120,18 +1120,16 @@ describe('Room', () => {
       });
       room.startGameSession('host-socket-id', quiz.clone());
 
-      player1.submitAnswer(0, 1000);
-      player2.submitAnswer(1, 2000);
-
-      expect(room.getAnsweredCount()).toBe(2);
-
+      // In the real game flow, resetPlayerAnswersForNextQuestion() is called
+      // when entering QUESTION_INTRO (via nextQuestion). For the first question,
+      // players are fresh with no stale answers. beginAnsweringPhase no longer
+      // clears answers — that responsibility is in resetPlayerAnswersForNextQuestion.
       room.beginAnsweringPhase();
 
       expect(room.state).toBe(RoomState.ANSWERING_PHASE);
-      expect(room.getAnsweredCount()).toBe(0);
+      expect(room.answeringPhasePlayerCount).toBe(2);
       expect(player1.hasAnswered()).toBe(false);
       expect(player2.hasAnswered()).toBe(false);
-      expect(room.answeringPhasePlayerCount).toBe(2);
     });
 
     it('should throw if not in QUESTION_INTRO state', () => {

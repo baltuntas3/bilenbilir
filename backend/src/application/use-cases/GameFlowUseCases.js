@@ -15,7 +15,13 @@ class GameFlowUseCases extends SharedUseCases {
 
     // Create snapshot BEFORE mutating room state — if this fails, room stays in WAITING_PLAYERS
     let quizSnapshot;
-    if (questionCount && Number.isInteger(questionCount) && questionCount >= 1 && questionCount <= quiz.getTotalQuestions()) {
+    if (questionCount !== undefined && questionCount !== null) {
+      if (!Number.isInteger(questionCount) || questionCount < 1) {
+        throw new ValidationError('Question count must be a positive integer');
+      }
+      if (questionCount > quiz.getTotalQuestions()) {
+        throw new ValidationError(`Question count (${questionCount}) exceeds available questions (${quiz.getTotalQuestions()})`);
+      }
       quizSnapshot = quiz.getRandomSubset(questionCount);
     } else {
       quizSnapshot = quiz.clone();

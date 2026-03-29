@@ -1,6 +1,6 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
 const { createRateLimiter, createAuthChecker, toLeaderboardPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults, isValidPin } = require('./socketHandlerUtils');
-const { MAX_TIMER_EXTENSION_MS, GAME_FLOW_LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
+const { MAX_TIMER_EXTENSION_MS, GAME_FLOW_LOCK_TIMEOUT_MS, MAX_EXTENDED_TIMER_SECONDS } = require('../../shared/config/constants');
 const { RoomState } = require('../../domain/entities');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { DEFAULT_POWER_UPS } = require('../../domain/value-objects/PowerUp');
@@ -101,7 +101,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         timeLimit: result.timeLimit,
         optionCount: result.optionCount,
         isLightning: result.isLightning || false,
-        fiftyFiftyAvailable: result.optionCount > 2
+        fiftyFiftyAvailable: result.optionCount > 2,
+        connectedPlayerCount: result.room.getConnectedPlayerCount()
       });
       io.to(pin).emit('timer_started', timerInfo);
       sendAck(ack, { ok: true });
@@ -148,21 +149,17 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         effectiveTimeLimitMs
       });
 
-      socket.emit('answer_received', {
+      const answerPayload = {
         isCorrect: result.answer.isCorrect,
         score: result.actualScore,
         totalScore: result.player.score,
         streak: result.player.streak,
-        streakBonus: result.answer.streakBonus
-      });
+        streakBonus: result.answer.streakBonus,
+        doublePointsRefunded: result.doublePointsRefunded || false
+      };
+      socket.emit('answer_received', answerPayload);
       if (typeof ack === 'function') {
-        ack({
-          isCorrect: result.answer.isCorrect,
-          score: result.actualScore,
-          totalScore: result.player.score,
-          streak: result.player.streak,
-          streakBonus: result.answer.streakBonus
-        });
+        ack(answerPayload);
       }
 
       io.to(pin).emit('answer_count_updated', {
@@ -550,32 +547,45 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         requesterId: socket.id
       });
 
-      // Emit game_resumed BEFORE any auto-advance logic so clients receive
-      // the correct state ordering: resume first, then potential transition.
-      io.to(pin).emit('game_resumed', {
-        state: result.resumedState,
-        pauseDuration: result.pauseDuration
-      });
-
-      // If resuming to ANSWERING_PHASE, restart timer or auto-advance
+      // If resuming to ANSWERING_PHASE, check if we can actually continue
+      // or need to auto-advance immediately. This prevents a brief ANSWERING_PHASE
+      // flash on clients before the inevitable transition to SHOW_RESULTS.
       if (result.resumedState === RoomState.ANSWERING_PHASE) {
-        if (result.shouldAutoAdvance) {
-          // All connected players already answered during pause — advance immediately
+        const needsAutoAdvance = result.shouldAutoAdvance
+          || !result.timerState || result.timerState.remainingMs <= 0;
+
+        if (needsAutoAdvance) {
+          // Skip emitting game_resumed with ANSWERING_PHASE — clients will receive
+          // show_results directly, avoiding a flash of the answering UI.
+          if (!result.shouldAutoAdvance) {
+            io.to(pin).emit('time_expired');
+          }
           await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
-        } else if (result.timerState && result.timerState.remainingMs > 0) {
+        } else {
+          // Start timer silently FIRST, then emit state transition + timer data
+          // in guaranteed order. Same pattern as start_answering handler.
           const remainingSeconds = Math.max(1, Math.round(result.timerState.remainingMs / 1000));
-          timerService.startTimer(pin, remainingSeconds, async () => {
+          const timerInfo = timerService.startTimer(pin, remainingSeconds, async () => {
             io.to(pin).emit('time_expired');
             await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
           }, {
+            silent: true,
             minDuration: 1,
+            maxDuration: MAX_EXTENDED_TIMER_SECONDS,
             originalDurationMs: result.timerState.originalDurationMs
           });
-        } else {
-          // No time remaining — auto-advance
-          io.to(pin).emit('time_expired');
-          await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
+          io.to(pin).emit('game_resumed', {
+            state: result.resumedState,
+            pauseDuration: result.pauseDuration
+          });
+          io.to(pin).emit('timer_started', timerInfo);
         }
+      } else {
+        // Non-ANSWERING_PHASE resume (LEADERBOARD, SHOW_RESULTS) — always emit
+        io.to(pin).emit('game_resumed', {
+          state: result.resumedState,
+          pauseDuration: result.pauseDuration
+        });
       }
 
       sendAck(ack, { ok: true });

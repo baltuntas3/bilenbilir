@@ -113,8 +113,14 @@ class Room {
     if (this.getConnectedPlayerCount() === 0) {
       throw new ValidationError('At least one connected player required');
     }
-    if (this._teamManager.isEnabled() && this._teamManager.getAll().length === 0) {
-      throw new ValidationError('Team mode is enabled but no teams have been created');
+    if (this._teamManager.isEnabled()) {
+      if (this._teamManager.getAll().length === 0) {
+        throw new ValidationError('Team mode is enabled but no teams have been created');
+      }
+      const unassignedCount = this.players.filter(p => !p.isDisconnected() && !this._teamManager.getTeamForPlayer(p.id)).length;
+      if (unassignedCount > 0) {
+        throw new ValidationError(`${unassignedCount} player(s) have not been assigned to a team`);
+      }
     }
     const allowedTransitions = validTransitions[this.state];
     if (!allowedTransitions || !allowedTransitions.includes(RoomState.QUESTION_INTRO)) {
@@ -376,11 +382,10 @@ class Room {
     }
     // State transition validates via validTransitions — if it throws, nothing changes
     this.setState(RoomState.ANSWERING_PHASE);
-    // Only apply side effects after state transition succeeds
+    // Only apply side effects after state transition succeeds.
+    // Answer attempts are already cleared by resetPlayerAnswersForNextQuestion()
+    // when entering QUESTION_INTRO — no need to clear again here.
     this.answeringPhasePlayerCount = this.getConnectedPlayerCount();
-    this.players.forEach(player => {
-      player.clearAnswerAttempt();
-    });
   }
 
   /**

@@ -276,7 +276,7 @@ export function GameProvider({ children }) {
         hasAnswered: false,
         lastAnswer: null,
         answeredCount: 0,
-        // Keep previous connectedPlayerCount — will be updated by answering_started/answer_count_updated
+        totalPlayersInPhase: 0,
         answerDistribution: null,
         correctAnswerIndex: null,
         explanation: null,
@@ -285,25 +285,39 @@ export function GameProvider({ children }) {
       }));
     });
 
-    socketService.on('answering_started', ({ timeLimit, isLightning }) => {
-      updateState({
+    socketService.on('answering_started', ({ timeLimit, isLightning, connectedPlayerCount }) => {
+      const updates = {
         gameState: GAME_STATES.ANSWERING_PHASE,
         timeLimit,
         isLightning: isLightning || false,
-      });
+        answeredCount: 0,
+      };
+      if (typeof connectedPlayerCount === 'number') {
+        updates.totalPlayersInPhase = connectedPlayerCount;
+        updates.connectedPlayerCount = connectedPlayerCount;
+      }
+      updateState(updates);
     });
 
-    socketService.on('answer_received', ({ isCorrect, score, totalScore, streak, streakBonus }) => {
+    socketService.on('answer_received', ({ isCorrect, score, totalScore, streak, streakBonus, doublePointsRefunded }) => {
       // If we have a pending answer submission, mark it as accepted by the server
       if (answerPendingRef.current) {
         answerPendingRef.current = false;
         answerAcceptedRef.current = true;
       }
-      updateState({
-        hasAnswered: true,
-        lastAnswer: { isCorrect, score, streakBonus },
-        score: totalScore,
-        streak,
+      setState(prev => {
+        const updates = {
+          ...prev,
+          hasAnswered: true,
+          lastAnswer: { isCorrect, score, streakBonus },
+          score: totalScore,
+          streak,
+        };
+        // Restore DOUBLE_POINTS power-up when refunded on wrong answer
+        if (doublePointsRefunded) {
+          updates.powerUps = { ...prev.powerUps, DOUBLE_POINTS: (prev.powerUps.DOUBLE_POINTS || 0) + 1 };
+        }
+        return updates;
       });
     });
 
@@ -451,11 +465,12 @@ export function GameProvider({ children }) {
       showToast.warning(`${message} (${remainingSeconds}s remaining)`);
     });
     socketService.on('host_returned', () => showToast.success('Host has reconnected!'));
-    socketService.on('error', ({ error, message }) => {
+    socketService.on('error', ({ error, message, code }) => {
+      // Skip errors with known codes handled by their own ack callbacks
+      if (code === 'ANSWER_ERROR' || code === 'POWER_UP_ERROR') return;
       const msg = error || message || '';
-      // Skip answer/power-up related errors — those are handled in their own ack callbacks
-      const suppressPatterns = ['answer', 'Already answered', 'power-up', 'power_up', 'powerup'];
-      if (suppressPatterns.some(p => msg.toLowerCase().includes(p.toLowerCase()))) return;
+      // Fallback: suppress answer/power-up messages by pattern for backward compatibility
+      if (/\b(answer|already answered|power.?up)\b/i.test(msg)) return;
       showToast.error(msg || 'An error occurred');
     });
     // Dependencies: only stable callbacks and refs. timer/room accessed via timerRef/roomRef

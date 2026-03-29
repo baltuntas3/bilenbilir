@@ -45,13 +45,16 @@ class GameTimerService {
    */
   startTimer(pin, durationSeconds, onExpire, options = {}) {
     const { minDuration = MIN_DURATION_SECONDS, originalDurationMs = null, silent = false } = options;
+    // Resumed timers with TIME_EXTENSION may exceed MAX_DURATION_SECONDS.
+    // Allow callers to raise the ceiling via maxDuration option.
+    const effectiveMax = options.maxDuration || MAX_DURATION_SECONDS;
 
     // Validate duration - throw error instead of silent fallback
     if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds)) {
       throw new ValidationError('Timer duration must be a valid number');
     }
-    if (durationSeconds < minDuration || durationSeconds > MAX_DURATION_SECONDS) {
-      throw new ValidationError(`Timer duration must be between ${minDuration} and ${MAX_DURATION_SECONDS} seconds`);
+    if (durationSeconds < minDuration || durationSeconds > effectiveMax) {
+      throw new ValidationError(`Timer duration must be between ${minDuration} and ${effectiveMax} seconds`);
     }
 
     this.stopTimer(pin);
@@ -78,7 +81,11 @@ class GameTimerService {
     timerEntry.timerId = setTimeout(async () => {
       this.stopTimer(pin);
       if (onExpire) {
-        await onExpire();
+        try {
+          await onExpire();
+        } catch (err) {
+          console.error(`[GameTimerService] Timer expire callback failed for pin ${pin}:`, err.message);
+        }
       }
     }, durationMs);
 
@@ -104,6 +111,8 @@ class GameTimerService {
 
     // When silent=true, caller is responsible for emitting timer_started
     // after its own state event (e.g. answering_started) to guarantee ordering.
+    // Both timer_started AND the first tick are suppressed so clients receive
+    // events in the correct order: state transition → timer_started → tick.
     if (!silent) {
       this.io.to(pin).emit('timer_started', {
         duration: durationSeconds,
@@ -111,10 +120,9 @@ class GameTimerService {
         serverTime: startTime,
         endTime
       });
+      // Emit first tick for compatibility
+      this.io.to(pin).emit('timer_tick', this._buildTimerSync(endTime));
     }
-
-    // Emit first tick for compatibility
-    this.io.to(pin).emit('timer_tick', this._buildTimerSync(endTime));
 
     return { duration: durationSeconds, durationMs, serverTime: startTime, endTime };
   }
@@ -241,7 +249,11 @@ class GameTimerService {
     timer.timerId = setTimeout(async () => {
       this.stopTimer(pin);
       if (onExpire) {
-        await onExpire();
+        try {
+          await onExpire();
+        } catch (err) {
+          console.error(`[GameTimerService] Timer expire callback failed for pin ${pin}:`, err.message);
+        }
       }
     }, remainingMs);
 

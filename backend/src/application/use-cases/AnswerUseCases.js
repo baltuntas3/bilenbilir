@@ -58,7 +58,7 @@ class AnswerUseCases extends SharedUseCases {
       player.submitAnswer(answerIndex, validElapsedTime);
       let actualScore = 0;
       const hasDoublePoints = player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS);
-      // Clear active power-up immediately after checking — it's been consumed
+      // Clear active power-up after checking — consumed on correct, refunded on incorrect
       player.clearActivePowerUp();
 
       if (answer.isCorrect) {
@@ -79,6 +79,12 @@ class AnswerUseCases extends SharedUseCases {
         player.addScore(actualScore);
       } else {
         player.resetStreak();
+        // Refund DOUBLE_POINTS on wrong answer — unlike FIFTY_FIFTY and TIME_EXTENSION
+        // which have immediate effects, DOUBLE_POINTS is a deferred bet on the answer.
+        // Consuming it on wrong answers punishes the player twice (wrong + lost power-up).
+        if (hasDoublePoints) {
+          player.refundPowerUp(PowerUpType.DOUBLE_POINTS);
+        }
       }
 
       room.recordAnswer({
@@ -94,11 +100,14 @@ class AnswerUseCases extends SharedUseCases {
         optionCount: currentQuestion.options.length
       });
 
+      const doublePointsRefunded = !answer.isCorrect && hasDoublePoints;
+
       await this.roomRepository.save(room);
       return {
         answer,
         player,
         actualScore,
+        doublePointsRefunded,
         allAnswered: room.shouldAutoAdvance(),
         answeredCount: room.getAnsweredCount(),
         totalPlayers: room.answeringPhasePlayerCount,

@@ -31,8 +31,18 @@ describe('GameFlowUseCases edge cases', () => {
       expect(result.totalQuestions).toBe(3);
     });
 
-    it('should start with all questions for invalid count', async () => {
-      const result = await flowUC.startGame({ pin: roomPin, requesterId: 'host-sock', questionCount: 0 });
+    it('should reject invalid question count', async () => {
+      await expect(flowUC.startGame({ pin: roomPin, requesterId: 'host-sock', questionCount: 0 }))
+        .rejects.toThrow('Question count must be a positive integer');
+    });
+
+    it('should reject question count exceeding available questions', async () => {
+      await expect(flowUC.startGame({ pin: roomPin, requesterId: 'host-sock', questionCount: 100 }))
+        .rejects.toThrow('exceeds available questions');
+    });
+
+    it('should start with all questions when count not provided', async () => {
+      const result = await flowUC.startGame({ pin: roomPin, requesterId: 'host-sock' });
       expect(result.totalQuestions).toBe(5);
     });
 
@@ -90,6 +100,7 @@ describe('GameFlowUseCases edge cases', () => {
       room.enableTeamMode();
       const { Team } = require('../../../domain/entities');
       room.addTeam(new Team({ id: 't1', name: 'Alpha', color: '#fff' }));
+      room.assignPlayerToTeam(room.players[0].id, 't1');
       await roomRepo.save(room);
 
       await flowUC.startGame({ pin: roomPin, requesterId: 'host-sock' });
@@ -115,6 +126,7 @@ describe('GameFlowUseCases edge cases', () => {
       room.enableTeamMode();
       const { Team } = require('../../../domain/entities');
       room.addTeam(new Team({ id: 't1', name: 'Alpha', color: '#fff' }));
+      room.assignPlayerToTeam(room.players[0].id, 't1');
       await roomRepo.save(room);
 
       const flow2 = new GameFlowUseCases(roomRepo, quizRepo);
