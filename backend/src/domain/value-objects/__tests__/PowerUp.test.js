@@ -80,17 +80,16 @@ describe('PowerUpRegistry', () => {
       expect(emitActions.timerAction).toBeNull();
     });
 
-    it('should handle null player gracefully', () => {
+    it('should throw when player not found', () => {
       const mockRoom = {
         getFiftyFiftyOptions: jest.fn().mockReturnValue([0, 2]),
         getPlayer: jest.fn().mockReturnValue(null)
       };
       const mockQuestion = { correctAnswerIndex: 1, options: ['a', 'b', 'c', 'd'] };
 
-      const { result } = powerUpRegistry.execute(PowerUpType.FIFTY_FIFTY, {
+      expect(() => powerUpRegistry.execute(PowerUpType.FIFTY_FIFTY, {
         room: mockRoom, socketId: 'sock-1', currentQuestion: mockQuestion
-      });
-      expect(result.eliminatedOptions).toEqual([0, 2]);
+      })).toThrow('Player not found');
     });
   });
 
@@ -108,12 +107,11 @@ describe('PowerUpRegistry', () => {
       expect(emitActions.timerAction).toBeNull();
     });
 
-    it('should handle missing player gracefully', () => {
+    it('should throw when player not found', () => {
       const mockRoom = { getPlayer: jest.fn().mockReturnValue(null) };
-      const { result } = powerUpRegistry.execute(PowerUpType.DOUBLE_POINTS, {
+      expect(() => powerUpRegistry.execute(PowerUpType.DOUBLE_POINTS, {
         room: mockRoom, socketId: 'sock-1'
-      });
-      expect(result.activated).toBe(true);
+      })).toThrow('Player not found');
     });
   });
 

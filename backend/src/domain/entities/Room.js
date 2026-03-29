@@ -614,6 +614,12 @@ class Room {
       throw new ValidationError('Cannot use power-up after answering');
     }
 
+    // Validate correctAnswerIndex is within bounds
+    if (typeof correctAnswerIndex !== 'number' || !Number.isInteger(correctAnswerIndex) ||
+        correctAnswerIndex < 0 || correctAnswerIndex >= optionCount) {
+      throw new ValidationError(`correctAnswerIndex ${correctAnswerIndex} is out of bounds (0-${optionCount - 1})`);
+    }
+
     // Build list of wrong option indices
     const wrongIndices = [];
     for (let i = 0; i < optionCount; i++) {

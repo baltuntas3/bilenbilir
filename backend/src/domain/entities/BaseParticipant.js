@@ -73,6 +73,9 @@ class BaseParticipant {
   }
 
   reconnect(newSocketId, newToken = null) {
+    if (!newSocketId || typeof newSocketId !== 'string') {
+      throw new (require('../../shared/errors').ValidationError)('Valid socket ID is required for reconnection');
+    }
     this.socketId = newSocketId;
     this.disconnectedAt = null;
     if (newToken) {

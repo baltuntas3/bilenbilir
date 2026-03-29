@@ -679,14 +679,29 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         connectedPlayerCount: result.room.getConnectedPlayerCount()
       });
 
-      // Auto-advance if remaining connected players have all answered
-      // Release lock BEFORE auto-advance since autoAdvanceToResults acquires its own lock
-      endAnsweringLocks.release(pin);
-      await checkAllAnsweredAfterRemoval(result.room);
+      // Auto-advance inline while still holding the lock to prevent race conditions.
+      // We do NOT release the lock before auto-advance — releasing first would create a
+      // window where timer callbacks or answer submissions could acquire the lock and
+      // transition state concurrently.
+      if (gameUseCases && result.room.shouldAutoAdvance()) {
+        try {
+          if (timerService) timerService.stopTimer(pin);
+          io.to(pin).emit('all_players_answered');
+          const endResult = await gameUseCases.endAnsweringPhase({ pin, isSystemTriggered: true });
+          if (endResult) {
+            io.to(pin).emit('show_results', toShowResultsDTO(endResult));
+          }
+        } catch (err) {
+          // State already transitioned or room deleted — benign
+          if (!(err instanceof require('../../shared/errors').NotFoundError)) {
+            console.warn(`Auto-advance after kick/ban skipped for ${pin}: ${err.message}`);
+          }
+        }
+      }
+
       sendAck(ack, { ok: true });
-    } catch (error) {
+    } finally {
       endAnsweringLocks.release(pin);
-      throw error;
     }
   };
 

@@ -79,6 +79,9 @@ const powerUpRegistry = new PowerUpRegistry();
 
 powerUpRegistry.register(PowerUpType.FIFTY_FIFTY, {
   execute({ room, socketId, currentQuestion }) {
+    if (!currentQuestion || !Array.isArray(currentQuestion.options) || currentQuestion.options.length === 0) {
+      throw new ValidationError('Current question has no options');
+    }
     const eliminatedOptions = room.getFiftyFiftyOptions(
       socketId,
       currentQuestion.correctAnswerIndex,
@@ -86,9 +89,8 @@ powerUpRegistry.register(PowerUpType.FIFTY_FIFTY, {
     );
     // Persist on player for reconnect scenarios
     const player = room.getPlayer(socketId);
-    if (player) {
-      player.setEliminatedOptions(eliminatedOptions);
-    }
+    if (!player) throw new ValidationError('Player not found');
+    player.setEliminatedOptions(eliminatedOptions);
     return { type: PowerUpType.FIFTY_FIFTY, eliminatedOptions };
   },
   getEmitActions(result) {
@@ -105,9 +107,8 @@ powerUpRegistry.register(PowerUpType.DOUBLE_POINTS, {
     // DOUBLE_POINTS must persist as "active" until answer submission,
     // unlike FIFTY_FIFTY/TIME_EXTENSION which have immediate effects.
     const player = room.getPlayer(socketId);
-    if (player) {
-      player.setActivePowerUp(PowerUpType.DOUBLE_POINTS);
-    }
+    if (!player) throw new ValidationError('Player not found');
+    player.setActivePowerUp(PowerUpType.DOUBLE_POINTS);
     return { type: PowerUpType.DOUBLE_POINTS, activated: true };
   },
   getEmitActions() {

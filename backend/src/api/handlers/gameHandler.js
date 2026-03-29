@@ -563,64 +563,95 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       const { pin } = data || {};
       if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
-      const result = await gameUseCases.resumeGame({
-        pin,
-        requesterId: socket.id
-      });
-
-      // If resuming to ANSWERING_PHASE, check if we can actually continue
-      // or need to auto-advance immediately. This prevents a brief ANSWERING_PHASE
-      // flash on clients before the inevitable transition to SHOW_RESULTS.
-      if (result.resumedState === RoomState.ANSWERING_PHASE) {
-        const needsAutoAdvance = result.shouldAutoAdvance
-          || !result.timerState || result.timerState.remainingMs <= 0;
-
-        if (needsAutoAdvance) {
-          // Skip emitting game_resumed with ANSWERING_PHASE — clients will receive
-          // show_results directly, avoiding a flash of the answering UI.
-          if (!result.shouldAutoAdvance) {
-            io.to(pin).emit('time_expired');
-          }
-          await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
-        } else {
-          // Start timer silently FIRST, then emit state transition + timer data
-          // in guaranteed order. Same pattern as start_answering handler.
-          const remainingSeconds = Math.max(1, Math.round(result.timerState.remainingMs / 1000));
-          let timerInfo;
-          try {
-            timerInfo = timerService.startTimer(pin, remainingSeconds, async () => {
-              io.to(pin).emit('time_expired');
-              await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
-            }, {
-              silent: true,
-              minDuration: 1,
-              maxDuration: MAX_EXTENDED_TIMER_SECONDS,
-              originalDurationMs: result.timerState.originalDurationMs
-            });
-          } catch (timerErr) {
-            // Timer failed after resume — auto-advance to prevent stuck state
-            io.to(pin).emit('time_expired');
-            await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
-            sendAck(ack, { ok: true });
-            return;
-          }
-          const timerSync = timerService.getTimerSync(pin);
-          io.to(pin).emit('game_resumed', {
-            state: result.resumedState,
-            pauseDuration: result.pauseDuration,
-            timerSync
-          });
-          io.to(pin).emit('timer_started', timerInfo);
-        }
-      } else {
-        // Non-ANSWERING_PHASE resume (LEADERBOARD, SHOW_RESULTS) — always emit
-        io.to(pin).emit('game_resumed', {
-          state: result.resumedState,
-          pauseDuration: result.pauseDuration
-        });
+      // Acquire endAnsweringLocks to prevent race with concurrent answer submissions
+      // that trigger auto-advance. Same pattern as pause_game handler.
+      if (!endAnsweringLocks.acquire(pin)) {
+        sendAck(ack, { ok: false, error: 'Game state transition in progress' });
+        return;
       }
 
-      sendAck(ack, { ok: true });
+      try {
+        const result = await gameUseCases.resumeGame({
+          pin,
+          requesterId: socket.id
+        });
+
+        // If resuming to ANSWERING_PHASE, check if we can actually continue
+        // or need to auto-advance immediately. This prevents a brief ANSWERING_PHASE
+        // flash on clients before the inevitable transition to SHOW_RESULTS.
+        if (result.resumedState === RoomState.ANSWERING_PHASE) {
+          const needsAutoAdvance = result.shouldAutoAdvance
+            || !result.timerState || result.timerState.remainingMs <= 0;
+
+          if (needsAutoAdvance) {
+            // Skip emitting game_resumed with ANSWERING_PHASE — clients will receive
+            // show_results directly, avoiding a flash of the answering UI.
+            if (!result.shouldAutoAdvance) {
+              io.to(pin).emit('time_expired');
+            }
+            // Auto-advance inline since we already hold the lock
+            try {
+              timerService.stopTimer(pin);
+              io.to(pin).emit('all_players_answered');
+              const endResult = await gameUseCases.endAnsweringPhase({ pin, isSystemTriggered: true });
+              if (endResult) {
+                io.to(pin).emit('show_results', toShowResultsDTO(endResult));
+              }
+            } catch (err) {
+              console.warn(`Auto-advance on resume skipped for ${pin}: ${err.message}`);
+            }
+          } else {
+            // Emit state transition FIRST, then start timer — clients must know they're
+            // in ANSWERING_PHASE before receiving timer data.
+            const timerSync = result.timerState;
+            io.to(pin).emit('game_resumed', {
+              state: result.resumedState,
+              pauseDuration: result.pauseDuration,
+              timerSync
+            });
+
+            // Start timer after emitting state transition
+            const remainingSeconds = Math.max(1, Math.round(result.timerState.remainingMs / 1000));
+            let timerInfo;
+            try {
+              timerInfo = timerService.startTimer(pin, remainingSeconds, async () => {
+                io.to(pin).emit('time_expired');
+                await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
+              }, {
+                silent: true,
+                minDuration: 1,
+                maxDuration: MAX_EXTENDED_TIMER_SECONDS,
+                originalDurationMs: result.timerState.originalDurationMs
+              });
+            } catch (timerErr) {
+              // Timer failed after resume — auto-advance to prevent stuck state
+              io.to(pin).emit('time_expired');
+              try {
+                io.to(pin).emit('all_players_answered');
+                const endResult = await gameUseCases.endAnsweringPhase({ pin, isSystemTriggered: true });
+                if (endResult) {
+                  io.to(pin).emit('show_results', toShowResultsDTO(endResult));
+                }
+              } catch (err) {
+                console.warn(`Auto-advance on resume timer failure for ${pin}: ${err.message}`);
+              }
+              sendAck(ack, { ok: true });
+              return;
+            }
+            io.to(pin).emit('timer_started', timerInfo);
+          }
+        } else {
+          // Non-ANSWERING_PHASE resume (LEADERBOARD, SHOW_RESULTS) — always emit
+          io.to(pin).emit('game_resumed', {
+            state: result.resumedState,
+            pauseDuration: result.pauseDuration
+          });
+        }
+
+        sendAck(ack, { ok: true });
+      } finally {
+        endAnsweringLocks.release(pin);
+      }
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);

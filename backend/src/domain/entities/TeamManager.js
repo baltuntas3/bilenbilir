@@ -38,12 +38,14 @@ class TeamManager {
   }
 
   assignPlayer(playerId, teamId, getPlayerById) {
+    // Validate ALL preconditions BEFORE any mutation to prevent orphaning
     const player = getPlayerById(playerId);
     if (!player) throw new ValidationError('Player not found');
-    const team = this.teams.find(t => t.id === teamId);
-    if (!team) throw new ValidationError('Team not found');
+    const targetTeam = this.teams.find(t => t.id === teamId);
+    if (!targetTeam) throw new ValidationError('Team not found');
+    // All validations passed — now mutate
     for (const t of this.teams) t.removePlayer(playerId);
-    team.addPlayer(playerId);
+    targetTeam.addPlayer(playerId);
   }
 
   removePlayer(playerId) {

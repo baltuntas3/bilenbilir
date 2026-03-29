@@ -158,8 +158,12 @@ class AnswerUseCases extends SharedUseCases {
       if (!player) return;
       player.refundPowerUp(powerUpType);
       await this.roomRepository.save(room);
-    }).catch(() => {
-      // Lock contention — refund will be retried by caller or is no longer needed
+    }).catch((err) => {
+      // Lock contention is expected (ConflictError) — caller retries.
+      // Log unexpected errors so they don't silently disappear.
+      if (err?.constructor?.name !== 'ConflictError') {
+        console.error(`Power-up refund failed for pin=${pin}, socket=${socketId}, type=${powerUpType}:`, err.message);
+      }
     });
   }
 
