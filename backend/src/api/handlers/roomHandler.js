@@ -127,17 +127,13 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   };
 
   /**
-   * Check if all connected players have answered after a player is removed/left during ANSWERING_PHASE.
+   * Check if all connected players have answered after a player is removed/kicked during ANSWERING_PHASE.
    * If so, auto-transition to results to prevent the game from getting stuck.
    * @private
    */
   const checkAllAnsweredAfterRemoval = async (room) => {
     if (!gameUseCases) return;
-    if (room.state !== RoomState.ANSWERING_PHASE) return;
-
-    const noConnectedPlayers = room.getConnectedPlayerCount() === 0;
-    if (!room.haveAllPlayersAnswered() && !noConnectedPlayers) return;
-
+    if (!room.shouldAutoAdvance()) return;
     await autoAdvanceToResults({ io, pin: room.pin, endAnsweringLocks, timerService, gameUseCases });
   };
 
@@ -289,15 +285,17 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       socket.leave(pin);
 
       io.to(pin).emit('player_left', {
-        playerId: result.removedPlayer?.id || socket.id,
-        nickname: result.removedPlayer?.nickname || null,
+        playerId: result.player.id,
+        nickname: result.player.nickname,
         playerCount: result.room.getPlayerCount(),
         connectedPlayerCount: result.room.getConnectedPlayerCount(),
-        disconnected: false
+        disconnected: result.wasDisconnected
       });
 
       // Auto-advance if remaining connected players have all answered
-      await checkAllAnsweredAfterRemoval(result.room);
+      if (result.shouldAutoAdvance) {
+        await autoAdvanceToResults({ io, pin: result.room.pin, endAnsweringLocks, timerService, gameUseCases });
+      }
       sendAck(ack, { success: true, role: 'player' });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });

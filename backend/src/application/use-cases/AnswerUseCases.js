@@ -99,7 +99,7 @@ class AnswerUseCases extends SharedUseCases {
         answer,
         player,
         actualScore,
-        allAnswered: room.haveAllPlayersAnswered(),
+        allAnswered: room.shouldAutoAdvance(),
         answeredCount: room.getAnsweredCount(),
         totalPlayers: room.answeringPhasePlayerCount,
         connectedPlayerCount: room.getConnectedPlayerCount()

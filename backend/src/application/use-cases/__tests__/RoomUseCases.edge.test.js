@@ -59,7 +59,8 @@ describe('RoomUseCases comprehensive', () => {
       const create = await roomUseCases.createRoom({ hostId: 'host-sock', hostUserId: 'user-1', quizId: 'quiz-1' });
       await roomUseCases.joinRoom({ pin: create.room.pin, nickname: 'Player1', socketId: 'player-sock' });
       const result = await roomUseCases.leaveRoom({ pin: create.room.pin, socketId: 'player-sock' });
-      expect(result.removedPlayer).toBeDefined();
+      expect(result.player).toBeDefined();
+      expect(result.wasDisconnected).toBe(false);
     });
   });
 

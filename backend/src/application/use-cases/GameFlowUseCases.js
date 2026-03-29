@@ -1,6 +1,6 @@
 const { SharedUseCases } = require('./SharedUseCases');
 const { RoomState } = require('../../domain/entities');
-const { ValidationError, ConflictError } = require('../../shared/errors');
+const { ValidationError } = require('../../shared/errors');
 const { MIN_QUESTION_TIME } = require('../../shared/config/constants');
 
 class GameFlowUseCases extends SharedUseCases {
@@ -10,13 +10,8 @@ class GameFlowUseCases extends SharedUseCases {
 
   async startGame({ pin, requesterId, questionCount }) {
     const room = await this._getRoomOrThrow(pin);
-    this._throwIfNotHost(room, requesterId);
     const quiz = await this._getQuizOrThrow(room.quizId);
     if (quiz.getTotalQuestions() === 0) throw new ValidationError('Quiz must have at least one question');
-    if (room.getConnectedPlayerCount() === 0) throw new ValidationError('Cannot start game: all players are disconnected');
-
-    // Validate host/state first (no side effects)
-    room.startGame(requesterId);
 
     // Create snapshot BEFORE mutating room state — if this fails, room stays in WAITING_PLAYERS
     let quizSnapshot;
@@ -28,9 +23,8 @@ class GameFlowUseCases extends SharedUseCases {
 
     if (!Object.isFrozen(quizSnapshot)) throw new ValidationError('Failed to create immutable quiz snapshot - quiz not frozen');
 
-    // All validations passed — atomically set snapshot + state together
-    // Prevents room from becoming unrecoverable if state transition fails
-    room.startGameSession(quizSnapshot);
+    // Single atomic operation: validates host, player count, state, then sets snapshot + state
+    room.startGameSession(requesterId, quizSnapshot);
     await this.roomRepository.save(room);
     // Non-critical: increment play count. Failure should not affect game start.
     try {
@@ -72,7 +66,7 @@ class GameFlowUseCases extends SharedUseCases {
 
   async endAnsweringPhase({ pin, requesterId, isSystemTriggered = false }) {
     const room = await this._getRoomOrThrow(pin);
-    if (room.state !== RoomState.ANSWERING_PHASE) throw new ConflictError('Not in answering phase');
+    if (room.state !== RoomState.ANSWERING_PHASE) throw new ValidationError('Not in answering phase');
     if (!isSystemTriggered) this._throwIfNotHost(room, requesterId);
 
     room.setState(RoomState.SHOW_RESULTS);
@@ -100,6 +94,9 @@ class GameFlowUseCases extends SharedUseCases {
   async showLeaderboard({ pin, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
     this._throwIfNotHost(room, requesterId);
+    if (room.state !== RoomState.SHOW_RESULTS) {
+      throw new ValidationError('Leaderboard can only be shown after results');
+    }
     room.setState(RoomState.LEADERBOARD);
     await this.roomRepository.save(room);
 

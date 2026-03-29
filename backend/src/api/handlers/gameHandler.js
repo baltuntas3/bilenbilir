@@ -488,14 +488,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       const { pin } = data || {};
       if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
-      // Stop timer before pause to prevent desync — if pause fails, timer is already idle
-      // (no active answering phase timer should keep running while paused)
-      timerService.stopTimer(pin);
-
+      // Pause FIRST, then stop timer — if pause fails (wrong state), timer stays intact
       const result = await gameUseCases.pauseGame({
         pin,
         requesterId: socket.id
       });
+
+      // Only stop timer after successful state transition to prevent orphaned ANSWERING_PHASE
+      timerService.stopTimer(pin);
 
       io.to(pin).emit('game_paused', {
         pausedAt: result.pausedAt,

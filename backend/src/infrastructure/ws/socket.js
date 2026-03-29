@@ -103,7 +103,7 @@ const initializeSocket = (server) => {
           });
 
           // Auto-advance if remaining connected players have all answered
-          if (result.allAnswered) {
+          if (result.shouldAutoAdvance) {
             await autoAdvanceToResults({ io, pin: result.pin, endAnsweringLocks, timerService, gameUseCases });
           }
         } else if (result.type === 'spectator_disconnected') {

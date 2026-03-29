@@ -1,4 +1,10 @@
 const { RoomState } = require('../../domain/entities');
+const {
+  HOST_GRACE_PERIOD_MS,
+  PLAYER_GRACE_PERIOD_MS,
+  SPECTATOR_GRACE_PERIOD_MS,
+  ROOM_CLEANUP_INTERVAL_MS
+} = require('../../shared/config/constants');
 
 /**
  * Room Cleanup Service
@@ -19,11 +25,11 @@ class RoomCleanupService {
     this.intervalId = null;
     this.isCleanupRunning = false;
 
-    // Configuration
-    this.checkInterval = options.checkInterval || 30000; // Check every 30 seconds
-    this.hostGracePeriod = options.hostGracePeriod || 60000; // 1 minute for host to reconnect
-    this.playerGracePeriod = options.playerGracePeriod || 120000; // 2 minutes for player to reconnect
-    this.spectatorGracePeriod = options.spectatorGracePeriod || this.playerGracePeriod; // fallback for backward compatibility
+    // Configuration — defaults sourced from shared constants to prevent drift
+    this.checkInterval = options.checkInterval || ROOM_CLEANUP_INTERVAL_MS;
+    this.hostGracePeriod = options.hostGracePeriod || HOST_GRACE_PERIOD_MS;
+    this.playerGracePeriod = options.playerGracePeriod || PLAYER_GRACE_PERIOD_MS;
+    this.spectatorGracePeriod = options.spectatorGracePeriod || SPECTATOR_GRACE_PERIOD_MS;
     this.emptyRoomTimeout = options.emptyRoomTimeout || 300000; // 5 minutes for empty rooms
     this.idleRoomTimeout = options.idleRoomTimeout || 3600000; // 1 hour for idle rooms
     this.maxPauseDuration = options.maxPauseDuration || 1800000; // 30 minutes max pause
@@ -70,9 +76,7 @@ class RoomCleanupService {
    */
   async _checkAutoAdvanceAfterRemoval(room) {
     if (!this.autoAdvanceToResults || !this.io) return;
-    if (room.state !== RoomState.ANSWERING_PHASE) return;
-    const noConnected = room.getConnectedPlayerCount() === 0;
-    if (!room.haveAllPlayersAnswered() && !noConnected) return;
+    if (!room.shouldAutoAdvance()) return;
     await this.autoAdvanceToResults({
       io: this.io,
       pin: room.pin,
@@ -124,10 +128,13 @@ class RoomCleanupService {
           // Fast path: skip rooms that are clearly healthy
           // (host connected, has players, not idle, game active or recently created)
           if (!hasDisconnectedHost && !hasNoPlayers && roomAge < this.emptyRoomTimeout) {
-            // Still check for stale disconnected players
+            // Collect all stale removals BEFORE saving — single save prevents stale reference issues
             const stalePlayers = room.removeStaleDisconnectedPlayers(this.playerGracePeriod);
-            if (stalePlayers.length > 0) {
-              console.log(`Removed ${stalePlayers.length} stale players from room ${room.pin}`);
+            const staleSpectators = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
+            const hasChanges = stalePlayers.length > 0 || staleSpectators.length > 0;
+
+            if (hasChanges) {
+              // Emit notifications
               if (this.io) {
                 stalePlayers.forEach(player => {
                   this.io.to(room.pin).emit('player_removed', {
@@ -136,15 +143,7 @@ class RoomCleanupService {
                     reason: 'reconnection_timeout'
                   });
                 });
-              }
-              await this.roomRepository.save(room);
-              await this._checkAutoAdvanceAfterRemoval(room);
-            }
-            // Also clean up stale spectators in fast path
-            const staleSpecsFast = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
-            if (staleSpecsFast.length > 0) {
-              if (this.io) {
-                staleSpecsFast.forEach(spectator => {
+                staleSpectators.forEach(spectator => {
                   this.io.to(room.pin).emit('spectator_left', {
                     spectatorId: spectator.id,
                     nickname: spectator.nickname,
@@ -152,7 +151,12 @@ class RoomCleanupService {
                   });
                 });
               }
+              // Single save for all mutations
               await this.roomRepository.save(room);
+            }
+            // Auto-advance check AFTER save — autoAdvance loads fresh room from repo
+            if (stalePlayers.length > 0) {
+              await this._checkAutoAdvanceAfterRemoval(room);
             }
             continue;
           }
@@ -160,12 +164,14 @@ class RoomCleanupService {
           let shouldDelete = false;
           let reason = '';
 
-          // Clean up stale disconnected players (always do this, even in active games)
+          // Collect all stale removals BEFORE saving — single save prevents stale reference issues
           const stalePlayers = room.removeStaleDisconnectedPlayers(this.playerGracePeriod);
-          if (stalePlayers.length > 0) {
-            console.log(`Removed ${stalePlayers.length} stale players from room ${room.pin}`);
+          const staleSpectators = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
 
-            // Notify room about removed players
+          if (stalePlayers.length > 0 || staleSpectators.length > 0) {
+            if (stalePlayers.length > 0) console.log(`Removed ${stalePlayers.length} stale players from room ${room.pin}`);
+            if (staleSpectators.length > 0) console.log(`Removed ${staleSpectators.length} stale spectators from room ${room.pin}`);
+
             if (this.io) {
               stalePlayers.forEach(player => {
                 this.io.to(room.pin).emit('player_removed', {
@@ -174,17 +180,6 @@ class RoomCleanupService {
                   reason: 'reconnection_timeout'
                 });
               });
-            }
-
-            await this.roomRepository.save(room);
-            await this._checkAutoAdvanceAfterRemoval(room);
-          }
-
-          // Clean up stale disconnected spectators to prevent memory leak
-          const staleSpectators = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
-          if (staleSpectators.length > 0) {
-            console.log(`Removed ${staleSpectators.length} stale spectators from room ${room.pin}`);
-            if (this.io) {
               staleSpectators.forEach(spectator => {
                 this.io.to(room.pin).emit('spectator_left', {
                   spectatorId: spectator.id,
@@ -193,7 +188,14 @@ class RoomCleanupService {
                 });
               });
             }
+
+            // Single save for all mutations
             await this.roomRepository.save(room);
+
+            // Auto-advance check AFTER save — autoAdvance loads fresh room from repo
+            if (stalePlayers.length > 0) {
+              await this._checkAutoAdvanceAfterRemoval(room);
+            }
           }
 
           // Check if host has been disconnected too long

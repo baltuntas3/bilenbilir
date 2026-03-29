@@ -97,15 +97,22 @@ class Room {
 
   /**
    * Atomically transition from WAITING_PLAYERS to QUESTION_INTRO with a quiz snapshot.
-   * Ensures snapshot + state are set together — if state transition fails,
-   * no side effects are written. Prevents the room from becoming unrecoverable.
+   * Validates host, player count, snapshot, and state — all BEFORE any side effects.
+   * Prevents the room from becoming unrecoverable if any check fails.
+   * @param {string} requesterId - Socket ID of the requester (must be host)
    * @param {Quiz} quizSnapshot - Frozen quiz snapshot
    */
-  startGameSession(quizSnapshot) {
+  startGameSession(requesterId, quizSnapshot) {
+    // All validations BEFORE any mutation
+    if (!this.isHost(requesterId)) {
+      throw new ForbiddenError('Only host can start the game');
+    }
     if (this.quizSnapshot !== null) {
       throw new ValidationError('Quiz snapshot already set');
     }
-    // Validate state transition BEFORE any side effects
+    if (this.getConnectedPlayerCount() === 0) {
+      throw new ValidationError('At least one connected player required');
+    }
     const allowedTransitions = validTransitions[this.state];
     if (!allowedTransitions || !allowedTransitions.includes(RoomState.QUESTION_INTRO)) {
       throw new ValidationError(`Invalid state transition: ${this.state} → ${RoomState.QUESTION_INTRO}`);
@@ -236,6 +243,11 @@ class Room {
   removePlayer(socketId) {
     const player = this.getPlayer(socketId);
     if (player) {
+      // Update answeringPhasePlayerCount when a connected player is permanently removed during ANSWERING_PHASE.
+      // Same logic as kickPlayer — permanent removal must adjust the snapshot.
+      if (this.state === RoomState.ANSWERING_PHASE && !player.isDisconnected() && this.answeringPhasePlayerCount > 0) {
+        this.answeringPhasePlayerCount--;
+      }
       this._teamManager.removePlayer(player.id);
     }
     this.players = this.players.filter(p => p.socketId !== socketId);
@@ -367,15 +379,26 @@ class Room {
   }
 
   /**
-   * Check if all connected players have answered
-   * Disconnected players are excluded from this check
-   * Returns false if no connected players exist to prevent incorrect game advancement
+   * Check if all connected players have answered.
+   * Disconnected players are excluded from this check.
+   * Returns false if no connected players exist (use shouldAutoAdvance for game flow decisions).
    */
   haveAllPlayersAnswered() {
     const connectedPlayers = this.players.filter(p => !p.isDisconnected());
-    // Return false if no connected players - game should not advance automatically
     if (connectedPlayers.length === 0) return false;
     return connectedPlayers.every(p => p.hasAnswered());
+  }
+
+  /**
+   * Single source of truth for auto-advance decision during ANSWERING_PHASE.
+   * Returns true when the game should transition to SHOW_RESULTS:
+   * - All connected players have answered, OR
+   * - No connected players remain (prevents stuck ANSWERING_PHASE)
+   * Only meaningful when state is ANSWERING_PHASE.
+   */
+  shouldAutoAdvance() {
+    if (this.state !== RoomState.ANSWERING_PHASE) return false;
+    return this.haveAllPlayersAnswered() || this.getConnectedPlayerCount() === 0;
   }
 
   /**
@@ -394,18 +417,6 @@ class Room {
 
   isHost(socketId) {
     return this.hostId === socketId;
-  }
-
-  startGame(requesterId) {
-    if (!this.isHost(requesterId)) {
-      throw new ForbiddenError('Only host can start the game');
-    }
-    if (this.state !== RoomState.WAITING_PLAYERS) {
-      throw new ValidationError('Game can only start from lobby');
-    }
-    if (this.players.length === 0) {
-      throw new ValidationError('At least one player required');
-    }
   }
 
   nextQuestion(requesterId, totalQuestions) {
@@ -632,16 +643,8 @@ class Room {
       throw new ValidationError('Player not found');
     }
 
-    // Update answeringPhasePlayerCount when a connected player is removed during ANSWERING_PHASE.
-    // Unlike disconnect (where the player stays in the list), kick permanently removes the player,
-    // so the snapshot must reflect the actual participants.
-    if (this.state === RoomState.ANSWERING_PHASE && !player.isDisconnected() && this.answeringPhasePlayerCount > 0) {
-      this.answeringPhasePlayerCount--;
-    }
-
-    this._teamManager.removePlayer(playerId);
-    this.players = this.players.filter(p => p.id !== playerId);
-    return player;
+    // Delegate to removePlayer which handles answeringPhasePlayerCount and team cleanup
+    return this.removePlayer(player.socketId);
   }
 
   banPlayer(playerId, requesterId) {

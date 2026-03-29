@@ -107,9 +107,45 @@ describe('Room', () => {
       room.removePlayer('socket-1');
       expect(room.getPlayerCount()).toBe(0);
     });
+
+    it('should decrement answeringPhasePlayerCount when removing connected player during ANSWERING_PHASE', () => {
+      const player = new Player({ id: 'p1', socketId: 's1', nickname: 'P1', roomPin: '123456' });
+      room.addPlayer(player);
+
+      const quiz = new Quiz({
+        id: 'q1', title: 'Test', createdBy: 'u1',
+        questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
+      });
+      room.startGameSession('host-socket-id', quiz.clone());
+      room.beginAnsweringPhase();
+
+      expect(room.answeringPhasePlayerCount).toBe(1);
+      room.removePlayer('s1');
+      expect(room.answeringPhasePlayerCount).toBe(0);
+    });
+
+    it('should NOT decrement answeringPhasePlayerCount when removing disconnected player during ANSWERING_PHASE', () => {
+      const p1 = new Player({ id: 'p1', socketId: 's1', nickname: 'P1', roomPin: '123456' });
+      const p2 = new Player({ id: 'p2', socketId: 's2', nickname: 'P2', roomPin: '123456' });
+      room.addPlayer(p1);
+      room.addPlayer(p2);
+
+      const quiz = new Quiz({
+        id: 'q1', title: 'Test', createdBy: 'u1',
+        questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
+      });
+      room.startGameSession('host-socket-id', quiz.clone());
+      room.beginAnsweringPhase();
+
+      expect(room.answeringPhasePlayerCount).toBe(2);
+      p1.setDisconnected();
+      room.removePlayer('s1');
+      expect(room.answeringPhasePlayerCount).toBe(2);
+    });
   });
 
-  describe('startGame', () => {
+  describe('startGameSession', () => {
+    let quiz;
     beforeEach(() => {
       const player = new Player({
         id: 'player-1',
@@ -118,18 +154,23 @@ describe('Room', () => {
         roomPin: '123456'
       });
       room.addPlayer(player);
+      quiz = new Quiz({
+        id: 'q1', title: 'Test', createdBy: 'u1',
+        questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
+      });
     });
 
     it('should allow starting game when called by host', () => {
-      expect(() => room.startGame('host-socket-id')).not.toThrow();
+      expect(() => room.startGameSession('host-socket-id', quiz.clone())).not.toThrow();
+      expect(room.state).toBe(RoomState.QUESTION_INTRO);
     });
 
     it('should throw error when called by non-host', () => {
-      expect(() => room.startGame('player-socket-id')).toThrow('Only host can start the game');
+      expect(() => room.startGameSession('player-socket-id', quiz.clone())).toThrow('Only host can start the game');
     });
 
     it('should throw error when not in lobby state', () => {
-      // Create room in different state
+      // Create room in different state with a player (bypasses player count check)
       const gameRoom = new Room({
         id: 'room-2',
         pin: '654321',
@@ -137,14 +178,15 @@ describe('Room', () => {
         quizId: 'quiz-1',
         state: RoomState.ANSWERING_PHASE
       });
+      gameRoom.players.push(new Player({ id: 'p1', socketId: 's1', nickname: 'Player', roomPin: '654321' }));
 
-      expect(() => gameRoom.startGame('host-socket-id')).toThrow('Game can only start from lobby');
+      expect(() => gameRoom.startGameSession('host-socket-id', quiz.clone())).toThrow('Invalid state transition');
     });
 
-    it('should throw error when no players', () => {
+    it('should throw error when no connected players', () => {
       room.removePlayer('socket-1');
 
-      expect(() => room.startGame('host-socket-id')).toThrow('At least one player required');
+      expect(() => room.startGameSession('host-socket-id', quiz.clone())).toThrow('At least one connected player required');
     });
   });
 
@@ -500,6 +542,22 @@ describe('Room', () => {
     it('should throw error for non-existent player', () => {
       expect(() => room.kickPlayer('non-existent', 'host-socket-id'))
         .toThrow('Player not found');
+    });
+
+    it('should decrement answeringPhasePlayerCount during ANSWERING_PHASE', () => {
+      const p2 = new Player({ id: 'p2', socketId: 's2', nickname: 'P2', roomPin: '123456' });
+      room.addPlayer(p2);
+
+      const quiz = new Quiz({
+        id: 'q1', title: 'Test', createdBy: 'u1',
+        questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
+      });
+      room.startGameSession('host-socket-id', quiz.clone());
+      room.beginAnsweringPhase();
+
+      expect(room.answeringPhasePlayerCount).toBe(2);
+      room.kickPlayer('player-1', 'host-socket-id');
+      expect(room.answeringPhasePlayerCount).toBe(1);
     });
   });
 
@@ -1060,7 +1118,7 @@ describe('Room', () => {
         id: 'q1', title: 'Test', createdBy: 'u1',
         questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
       });
-      room.startGameSession(quiz.clone());
+      room.startGameSession('host-socket-id', quiz.clone());
 
       player1.submitAnswer(0, 1000);
       player2.submitAnswer(1, 2000);
@@ -1083,11 +1141,15 @@ describe('Room', () => {
     });
 
     it('should throw if no connected players', () => {
+      const player = new Player({ id: 'p1', socketId: 's1', nickname: 'P1', roomPin: '123456' });
+      room.addPlayer(player);
       const quiz = new Quiz({
         id: 'q1', title: 'Test', createdBy: 'u1',
         questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
       });
-      room.startGameSession(quiz.clone());
+      room.startGameSession('host-socket-id', quiz.clone());
+      // Disconnect the only player so no connected players remain
+      room.getPlayer('s1').setDisconnected();
       expect(() => room.beginAnsweringPhase()).toThrow('no connected players');
     });
   });
@@ -1115,6 +1177,52 @@ describe('Room', () => {
 
       expect(() => room.addPlayer(extraPlayer))
         .toThrow(`Room is full (maximum ${Room.MAX_PLAYERS} players)`);
+    });
+  });
+
+  describe('shouldAutoAdvance', () => {
+    let quiz;
+
+    beforeEach(() => {
+      const p1 = new Player({ id: 'p1', socketId: 's1', nickname: 'P1', roomPin: '123456' });
+      const p2 = new Player({ id: 'p2', socketId: 's2', nickname: 'P2', roomPin: '123456' });
+      room.addPlayer(p1);
+      room.addPlayer(p2);
+
+      quiz = new Quiz({
+        id: 'q1', title: 'Test', createdBy: 'u1',
+        questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
+      });
+      room.startGameSession('host-socket-id', quiz.clone());
+      room.beginAnsweringPhase();
+    });
+
+    it('should return false when not in ANSWERING_PHASE', () => {
+      room.setState(RoomState.SHOW_RESULTS);
+      expect(room.shouldAutoAdvance()).toBe(false);
+    });
+
+    it('should return false when not all connected players answered', () => {
+      room.getPlayer('s1').submitAnswer(0, 1000);
+      expect(room.shouldAutoAdvance()).toBe(false);
+    });
+
+    it('should return true when all connected players answered', () => {
+      room.getPlayer('s1').submitAnswer(0, 1000);
+      room.getPlayer('s2').submitAnswer(1, 2000);
+      expect(room.shouldAutoAdvance()).toBe(true);
+    });
+
+    it('should return true when all connected players answered (excluding disconnected)', () => {
+      room.getPlayer('s1').submitAnswer(0, 1000);
+      room.getPlayer('s2').setDisconnected();
+      expect(room.shouldAutoAdvance()).toBe(true);
+    });
+
+    it('should return true when no connected players remain', () => {
+      room.getPlayer('s1').setDisconnected();
+      room.getPlayer('s2').setDisconnected();
+      expect(room.shouldAutoAdvance()).toBe(true);
     });
   });
 

@@ -98,14 +98,24 @@ class RoomUseCases extends SharedUseCases {
 
   async leaveRoom({ pin, socketId }) {
     const room = await this._getRoomOrThrow(pin);
-    const removedPlayer = room.removePlayer(socketId);
-    if (!removedPlayer) {
+
+    const player = room.getPlayer(socketId);
+    if (!player) {
       throw new ValidationError('Player is not in this room');
     }
 
-    await this.roomRepository.save(room);
+    if (room.state === RoomState.WAITING_PLAYERS) {
+      // Lobby: permanently remove — no game data to preserve
+      room.removePlayer(socketId);
+      await this.roomRepository.save(room);
+      return { room, player, wasDisconnected: false };
+    }
 
-    return { room, removedPlayer };
+    // Active game: disconnect instead of remove to preserve score, history and team data.
+    // Consistent with handleDisconnect behavior during active game.
+    room.setPlayerDisconnected(socketId);
+    await this.roomRepository.save(room);
+    return { room, player, wasDisconnected: true, shouldAutoAdvance: room.shouldAutoAdvance() };
   }
 
   async getRoom({ pin }) {
@@ -164,12 +174,6 @@ class RoomUseCases extends SharedUseCases {
       }
       await this.roomRepository.save(room);
 
-      // Check if remaining connected players have all answered (auto-advance trigger)
-      // Also trigger when no connected players remain to prevent stuck ANSWERING_PHASE
-      const isAnswering = room.state === RoomState.ANSWERING_PHASE;
-      const noConnectedPlayers = room.getConnectedPlayerCount() === 0;
-      const allAnswered = isAnswering && (room.haveAllPlayersAnswered() || noConnectedPlayers);
-
       return {
         type: 'player_disconnected',
         pin: room.pin,
@@ -177,7 +181,7 @@ class RoomUseCases extends SharedUseCases {
         playerCount: room.getPlayerCount(),
         connectedPlayerCount: room.getConnectedPlayerCount(),
         canReconnect: room.state !== RoomState.WAITING_PLAYERS,
-        allAnswered
+        shouldAutoAdvance: room.shouldAutoAdvance()
       };
     }
 
@@ -209,11 +213,10 @@ class RoomUseCases extends SharedUseCases {
     const room = await this._getRoomOrThrow(pin);
     const newPlayerToken = generateId();
     const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod, newPlayerToken);
-    // Only clear power-up state if the player has already answered the current question
-    // (if they haven't answered, they may still use their power-up from before disconnect)
+    // Only clear active power-up if the player has already answered — eliminatedOptions
+    // are preserved for UI display (50:50 visual state should survive reconnect)
     if (player.hasAnswered()) {
       player.clearActivePowerUp();
-      player.eliminatedOptions = [];
     }
     await this.roomRepository.save(room);
     return { room, player, newPlayerToken };
