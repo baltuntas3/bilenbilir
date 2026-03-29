@@ -22,8 +22,8 @@ class Nickname {
     }
 
     this.value = trimmed;
-    // Store normalized (lowercase) version for consistent comparisons
-    this._normalized = trimmed.toLowerCase();
+    // Use Turkish locale for correct İ→i and I→ı lowercasing
+    this._normalized = trimmed.toLocaleLowerCase('tr');
     Object.freeze(this);
   }
 
@@ -59,7 +59,7 @@ class Nickname {
       return this._normalized === other._normalized;
     }
     if (typeof other === 'string') {
-      return this._normalized === other.toLowerCase();
+      return this._normalized === other.toLocaleLowerCase('tr');
     }
     return false;
   }

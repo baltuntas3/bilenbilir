@@ -25,7 +25,7 @@ class TeamManager {
       throw new ValidationError(`Maximum ${MAX_TEAMS} teams allowed`);
     }
     const nameExists = this.teams.some(
-      t => t.name.toLowerCase() === team.name.toLowerCase()
+      t => t.name.toLocaleLowerCase('tr') === team.name.toLocaleLowerCase('tr')
     );
     if (nameExists) throw new ConflictError('Team name already exists');
     this.teams.push(team);

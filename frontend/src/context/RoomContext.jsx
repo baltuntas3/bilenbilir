@@ -68,6 +68,15 @@ const clearSession = () => {
   Object.values(SESSION_KEYS).forEach(key => localStorage.removeItem(key));
 };
 
+// Static list of room-level socket events — declared outside component to avoid
+// re-creation on every render and stale closure issues in cleanupRoomListeners.
+const ROOM_EVENTS = [
+  'player_joined', 'player_left', 'player_removed', 'player_kicked', 'player_banned',
+  'player_returned', 'spectator_joined', 'spectator_left', 'spectator_returned',
+  'team_mode_updated', 'teams_updated', 'lightning_round_updated',
+  'banned_nicknames', 'nickname_unbanned',
+];
+
 const initialRoomState = {
   roomPin: null,
   isHost: false,
@@ -121,18 +130,10 @@ export function RoomProvider({ children }) {
   const roomListenersSetupRef = useRef(false);
   const lastRoomSocketIdRef = useRef(null);
 
-  const roomEvents = [
-    'player_joined', 'player_left', 'player_removed', 'player_kicked', 'player_banned',
-    'player_returned', 'spectator_joined', 'spectator_left', 'spectator_returned',
-    'team_mode_updated', 'teams_updated', 'lightning_round_updated',
-    'banned_nicknames', 'nickname_unbanned',
-  ];
-
   const cleanupRoomListeners = useCallback(() => {
-    roomEvents.forEach(event => socketService.off(event));
+    ROOM_EVENTS.forEach(event => socketService.off(event));
     roomListenersSetupRef.current = false;
     lastRoomSocketIdRef.current = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setupRoomListeners = useCallback(() => {

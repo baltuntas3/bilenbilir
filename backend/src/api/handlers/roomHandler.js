@@ -201,6 +201,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       const { pin, nickname } = sanitizeObject(data || {});
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
       await ensureNotInRoom();
 
       // Prevent host from joining their own game as a player
@@ -364,6 +365,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const { room } = await roomUseCases.getRoom({ pin });
       await cleanupBeforeRoomClose(pin, room);
@@ -392,6 +394,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       const { pin, hostToken } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       // Early token format validation
       if (!validateToken(socket, hostToken, 'Host token')) {
@@ -463,6 +466,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       const { pin, playerToken } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       // Early token format validation
       if (!validateToken(socket, playerToken, 'Player token')) {
@@ -617,6 +621,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin, enabled, questionCount } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
       const parsedEnabled = !!enabled;
       const parsedCount = questionCount ? parseInt(questionCount, 10) : 3;
 
@@ -679,6 +684,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
       requireAuth();
       const { pin, playerId } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
       await handleKickOrBan(pin, playerId, false, ack);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
@@ -695,6 +701,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
       requireAuth();
       const { pin, playerId } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
       await handleKickOrBan(pin, playerId, true, ack);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
@@ -712,6 +719,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin, nickname } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       await roomUseCases.unbanNickname({
         pin,
@@ -736,6 +744,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
       requireAuth();
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await roomUseCases.getBannedNicknames({ pin });
 
@@ -763,6 +772,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       const { pin, nickname } = sanitizeObject(data || {});
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
       await ensureNotInRoom();
 
       // Prevent host from joining their own game as a spectator
@@ -850,6 +860,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       const { pin, spectatorToken } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       // Early token format validation
       if (!validateToken(socket, spectatorToken, 'Spectator token')) {
@@ -927,6 +938,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await roomUseCases.enableTeamMode({
         pin,
@@ -954,6 +966,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       await roomUseCases.disableTeamMode({
         pin,
@@ -981,6 +994,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin, name } = sanitizeObject(data || {});
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await roomUseCases.addTeam({
         pin,
@@ -1008,6 +1022,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin, teamId } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await roomUseCases.removeTeam({
         pin,
@@ -1035,6 +1050,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin, playerId, teamId } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await roomUseCases.assignPlayerToTeam({
         pin,

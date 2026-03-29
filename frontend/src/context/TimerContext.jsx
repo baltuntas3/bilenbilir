@@ -4,20 +4,22 @@ const TimerContext = createContext(null);
 
 /**
  * Shared tick logic: only calls setRemainingTime when the displayed second changes.
- * Returns the interval ID so the caller can store it.
+ * When timer reaches 0, self-clears and nulls out timerRef so syncTimer knows
+ * no interval is running.
  */
-function createTimerInterval(endTimeRef, lastSecondRef, setRemainingTime) {
-  return setInterval(() => {
+function createTimerInterval(endTimeRef, lastSecondRef, timerRef, setRemainingTime) {
+  const id = setInterval(() => {
     const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
     if (remaining !== lastSecondRef.current) {
       lastSecondRef.current = remaining;
       setRemainingTime(remaining);
     }
     if (remaining <= 0) {
-      clearInterval(endTimeRef._intervalId);
-      endTimeRef._intervalId = null;
+      clearInterval(id);
+      timerRef.current = null;
     }
   }, 100);
+  return id;
 }
 
 export function TimerProvider({ children }) {
@@ -34,8 +36,7 @@ export function TimerProvider({ children }) {
     setRemainingTime(duration);
     if (!isSync) setTimeLimit(duration);
 
-    timerRef.current = createTimerInterval(endTimeRef, lastSecondRef, setRemainingTime);
-    endTimeRef._intervalId = timerRef.current;
+    timerRef.current = createTimerInterval(endTimeRef, lastSecondRef, timerRef, setRemainingTime);
   }, []);
 
   const stopTimer = useCallback(() => {
@@ -59,8 +60,7 @@ export function TimerProvider({ children }) {
     lastSecondRef.current = remaining;
     setRemainingTime(remaining);
     if (remaining <= 0) return;
-    timerRef.current = createTimerInterval(endTimeRef, lastSecondRef, setRemainingTime);
-    endTimeRef._intervalId = timerRef.current;
+    timerRef.current = createTimerInterval(endTimeRef, lastSecondRef, timerRef, setRemainingTime);
   }, []);
 
   // Lightweight sync: only update endTime reference without resetting interval.

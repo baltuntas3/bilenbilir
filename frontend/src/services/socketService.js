@@ -29,6 +29,33 @@ class SocketService {
       return Promise.resolve(this.socket);
     }
 
+    // If socket exists but is reconnecting, wait for it instead of replacing
+    if (this.socket && !this.socket.connected) {
+      if (this.connectionPromise) return this.connectionPromise;
+      // Socket exists but disconnected and no pending promise — wait for reconnect
+      this.connectionPromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          this.connectionPromise = null;
+          reject(new Error('Reconnection timeout'));
+        }, 10000);
+
+        const onConnect = () => {
+          clearTimeout(timeout);
+          this.currentSocketId = this.socket.id;
+          this.connectionPromise = null;
+          resolve(this.socket);
+        };
+
+        if (this.socket.connected) {
+          clearTimeout(timeout);
+          resolve(this.socket);
+        } else {
+          this.socket.once('connect', onConnect);
+        }
+      });
+      return this.connectionPromise;
+    }
+
     // If connection is in progress, return existing promise
     if (this.connectionPromise) {
       return this.connectionPromise;
@@ -36,9 +63,6 @@ class SocketService {
 
     const authPayload = token || getAuthToken();
     const auth = authPayload ? { token: authPayload } : {};
-
-    // Store if we had a previous socket (need to re-attach listeners)
-    const hadPreviousSocket = this.socket !== null;
 
     this.socket = io(SOCKET_URL, {
       auth,
@@ -60,19 +84,7 @@ class SocketService {
       this.socket.on('connect', () => {
         clearTimeout(timeout);
         this.currentSocketId = this.socket.id;
-
-        // Re-attach stored listeners to the new socket instance.
-        // Contexts will cleanup and re-add their own listeners via reconnect callback.
-        // Clone the Map to avoid mutation during iteration.
-        if (hadPreviousSocket && this.listeners.size > 0) {
-          const snapshot = new Map(this.listeners);
-          snapshot.forEach((callbacks, event) => {
-            callbacks.forEach(callback => {
-              this.socket.on(event, callback);
-            });
-          });
-        }
-
+        this.connectionPromise = null;
         resolve(this.socket);
       });
 
@@ -91,7 +103,11 @@ class SocketService {
       }
     });
 
-    this.socket.on('reconnect', () => {
+    // Socket.IO v4: 'reconnect' fires on the Manager (socket.io), not the socket instance.
+    // Re-attach stored listeners after transport-level reconnect since the underlying
+    // connection is new but the socket object is reused.
+    this.socket.io.on('reconnect', () => {
+      this.currentSocketId = this.socket.id;
       if (this.reconnectCallback) {
         this.reconnectCallback();
       }

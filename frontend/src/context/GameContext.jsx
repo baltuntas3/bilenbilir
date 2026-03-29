@@ -306,21 +306,26 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('answering_started', ({ timeLimit, isLightning, connectedPlayerCount }) => {
-      const updates = {
-        gameState: GAME_STATES.ANSWERING_PHASE,
-        timeLimit,
-        isLightning: isLightning || false,
-        answeredCount: 0,
-        // Defensive reset: if question_intro was missed (network hiccup),
-        // ensure player can still answer in this phase
-        hasAnswered: false,
-        lastAnswer: null,
-      };
-      if (typeof connectedPlayerCount === 'number') {
-        updates.totalPlayersInPhase = connectedPlayerCount;
-        updates.connectedPlayerCount = connectedPlayerCount;
-      }
-      updateState(updates);
+      setState(prev => {
+        const updates = {
+          ...prev,
+          gameState: GAME_STATES.ANSWERING_PHASE,
+          timeLimit,
+          isLightning: isLightning || false,
+          answeredCount: 0,
+        };
+        // Only reset hasAnswered if transitioning from a non-answered state.
+        // Prevents discarding a valid answer if answer_received arrived before answering_started (out-of-order).
+        if (prev.gameState !== GAME_STATES.ANSWERING_PHASE) {
+          updates.hasAnswered = false;
+          updates.lastAnswer = null;
+        }
+        if (typeof connectedPlayerCount === 'number') {
+          updates.totalPlayersInPhase = connectedPlayerCount;
+          updates.connectedPlayerCount = connectedPlayerCount;
+        }
+        return updates;
+      });
     });
 
     socketService.on('answer_received', ({ isCorrect, score, totalScore, streak, streakBonus, doublePointsRefunded }) => {
