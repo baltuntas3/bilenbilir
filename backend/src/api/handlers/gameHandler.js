@@ -1,6 +1,7 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults, isValidPin } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toLeaderboardPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults, isValidPin } = require('./socketHandlerUtils');
 const { MAX_TIMER_EXTENSION_MS, GAME_FLOW_LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
+const { RoomState } = require('../../domain/entities');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { DEFAULT_POWER_UPS } = require('../../domain/value-objects/PowerUp');
 
@@ -88,18 +89,21 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         pin,
         requesterId: socket.id
       });
-      // Start server-side timer
-      timerService.startTimer(pin, result.timeLimit, async () => {
+      // Start server-side timer silently — emit timer_started AFTER answering_started
+      // to guarantee clients receive state transition before timer data.
+      const timerInfo = timerService.startTimer(pin, result.timeLimit, async () => {
         // Timer expired — emit time_expired before auto-advancing
         io.to(pin).emit('time_expired');
         await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
-      });
+      }, { silent: true });
 
       io.to(pin).emit('answering_started', {
         timeLimit: result.timeLimit,
         optionCount: result.optionCount,
-        isLightning: result.isLightning || false
+        isLightning: result.isLightning || false,
+        fiftyFiftyAvailable: result.optionCount > 2
       });
+      io.to(pin).emit('timer_started', timerInfo);
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
@@ -132,9 +136,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         return;
       }
 
-      // Pass effective timer duration so scoring accounts for TIME_EXTENSION and lightning rounds
-      const timerSync = timerService.getTimerSync(pin);
-      const effectiveTimeLimitMs = timerSync?.duration || null;
+      // Use ORIGINAL timer duration (before extensions) for fair scoring.
+      // TIME_EXTENSION gives more time to answer but should not inflate scores.
+      const effectiveTimeLimitMs = timerService.getOriginalDuration(pin);
 
       const result = await gameUseCases.submitAnswer({
         pin,
@@ -164,7 +168,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       io.to(pin).emit('answer_count_updated', {
         answeredCount: result.answeredCount,
         totalPlayersInPhase: result.totalPlayers,
-        connectedPlayerCount: result.connectedPlayerCount
+        connectedPlayerCount: result.connectedPlayerCount,
+        disconnectedPlayerCount: result.disconnectedPlayerCount
       });
 
       if (result.allAnswered) {
@@ -205,6 +210,9 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
         io.to(pin).emit('show_results', toShowResultsDTO(result));
         sendAck(ack, { ok: true });
+      } catch (error) {
+        sendAck(ack, { ok: false, error: error.message });
+        handleSocketError(socket, error);
       } finally {
         endAnsweringLocks.release(pin);
       }
@@ -233,7 +241,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       });
 
       const leaderboardPayload = {
-        leaderboard: result.leaderboard.map(toPlayerDTO)
+        leaderboard: result.leaderboard.map(toLeaderboardPlayerDTO)
       };
       if (result.teamLeaderboard) {
         leaderboardPayload.teamLeaderboard = result.teamLeaderboard;
@@ -273,8 +281,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
         if (result.isGameOver) {
           const gameOverPayload = {
-            podium: result.podium.map(toPlayerDTO),
-            leaderboard: result.room.getLeaderboard().map(toPlayerDTO)
+            podium: result.podium.map(toLeaderboardPlayerDTO),
+            leaderboard: result.room.getLeaderboard().map(toLeaderboardPlayerDTO)
           };
           if (result.teamPodium) {
             gameOverPayload.teamPodium = result.teamPodium;
@@ -336,8 +344,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       const result = await gameUseCases.getResults({ pin });
 
       const finalResultsPayload = {
-        leaderboard: result.leaderboard.map(toPlayerDTO),
-        podium: result.podium.map(toPlayerDTO)
+        leaderboard: result.leaderboard.map(toLeaderboardPlayerDTO),
+        podium: result.podium.map(toLeaderboardPlayerDTO)
       };
       if (result.teamLeaderboard) {
         finalResultsPayload.teamLeaderboard = result.teamLeaderboard;
@@ -476,7 +484,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
   // ==================== PAUSE/RESUME EVENTS ====================
 
-  // Host pauses the game (only from LEADERBOARD state)
+  // Host pauses the game (from LEADERBOARD, SHOW_RESULTS, or ANSWERING_PHASE)
   socket.on('pause_game', async (data, ack) => {
     try {
       if (!checkRateLimit('pause_game')) {
@@ -488,20 +496,37 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       const { pin } = data || {};
       if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
-      // Pause FIRST, then stop timer — if pause fails (wrong state), timer stays intact
-      const result = await gameUseCases.pauseGame({
-        pin,
-        requesterId: socket.id
-      });
+      // Acquire endAnsweringLocks to prevent race with concurrent answer submissions
+      // that trigger auto-advance. This ensures pause and end-answering are mutually exclusive.
+      if (!endAnsweringLocks.acquire(pin)) {
+        sendAck(ack, { ok: false, error: 'Game state transition in progress' });
+        return;
+      }
 
-      // Only stop timer after successful state transition to prevent orphaned ANSWERING_PHASE
-      timerService.stopTimer(pin);
+      try {
+        // Capture timer state BEFORE pause — needed for ANSWERING_PHASE resume
+        const timerRemainingMs = timerService.getRemainingTime(pin);
+        const originalDurationMs = timerService.getOriginalDuration(pin);
 
-      io.to(pin).emit('game_paused', {
-        pausedAt: result.pausedAt,
-        pausedFromState: result.room.pausedFromState
-      });
-      sendAck(ack, { ok: true });
+        // Pause FIRST — if pause fails (wrong state), timer stays intact
+        const result = await gameUseCases.pauseGame({
+          pin,
+          requesterId: socket.id,
+          timerRemainingMs,
+          originalDurationMs
+        });
+
+        // Only stop timer after successful state transition
+        timerService.stopTimer(pin);
+
+        io.to(pin).emit('game_paused', {
+          pausedAt: result.pausedAt,
+          pausedFromState: result.pausedFromState
+        });
+        sendAck(ack, { ok: true });
+      } finally {
+        endAnsweringLocks.release(pin);
+      }
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
@@ -525,10 +550,34 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         requesterId: socket.id
       });
 
+      // Emit game_resumed BEFORE any auto-advance logic so clients receive
+      // the correct state ordering: resume first, then potential transition.
       io.to(pin).emit('game_resumed', {
         state: result.resumedState,
         pauseDuration: result.pauseDuration
       });
+
+      // If resuming to ANSWERING_PHASE, restart timer or auto-advance
+      if (result.resumedState === RoomState.ANSWERING_PHASE) {
+        if (result.shouldAutoAdvance) {
+          // All connected players already answered during pause — advance immediately
+          await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
+        } else if (result.timerState && result.timerState.remainingMs > 0) {
+          const remainingSeconds = Math.max(1, Math.round(result.timerState.remainingMs / 1000));
+          timerService.startTimer(pin, remainingSeconds, async () => {
+            io.to(pin).emit('time_expired');
+            await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
+          }, {
+            minDuration: 1,
+            originalDurationMs: result.timerState.originalDurationMs
+          });
+        } else {
+          // No time remaining — auto-advance
+          io.to(pin).emit('time_expired');
+          await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
+        }
+      }
+
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });

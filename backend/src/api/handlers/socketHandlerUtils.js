@@ -42,6 +42,20 @@ const toPlayerDTO = (player) => ({
 });
 
 /**
+ * Map player data with extended stats for leaderboard/podium contexts
+ * @param {Player} player - Player entity
+ * @returns {Object} Player data with scoring stats
+ */
+const toLeaderboardPlayerDTO = (player) => ({
+  id: player.id,
+  nickname: player.nickname,
+  score: player.score,
+  streak: player.streak,
+  correctAnswers: player.correctAnswers,
+  longestStreak: player.longestStreak
+});
+
+/**
  * Strip correct answer info from question data for players
  * @param {Object} questionData - Host question data
  * @returns {Object|null} Player-safe question data
@@ -104,6 +118,8 @@ const validateToken = (socket, token, tokenName) => {
 const autoAdvanceToResults = async ({ io, pin, endAnsweringLocks, timerService, gameUseCases }) => {
   if (!endAnsweringLocks.acquire(pin)) return;
   try {
+    // Stop timer FIRST to prevent timer callback from firing concurrently.
+    // This eliminates the race where time_expired is emitted after all players answered.
     if (timerService) timerService.stopTimer(pin);
     io.to(pin).emit('all_players_answered');
     const endResult = await gameUseCases.endAnsweringPhase({ pin, isSystemTriggered: true });
@@ -111,8 +127,13 @@ const autoAdvanceToResults = async ({ io, pin, endAnsweringLocks, timerService, 
       io.to(pin).emit('show_results', toShowResultsDTO(endResult));
     }
   } catch (err) {
-    const isExpected = err instanceof ValidationError || err instanceof NotFoundError || err instanceof ConflictError;
-    if (!isExpected) {
+    // Expected errors: state already transitioned (race with manual end/pause), room deleted, etc.
+    // Only "Not in answering phase" and "not found" are truly benign — log others at warn level.
+    if (err instanceof NotFoundError) {
+      // Room was deleted — nothing to do
+    } else if (err instanceof ValidationError || err instanceof ConflictError) {
+      console.warn(`Auto-advance skipped for ${pin}: ${err.message}`);
+    } else {
       console.error('Auto-advance to results error:', err.message);
     }
   } finally {
@@ -126,7 +147,7 @@ const autoAdvanceToResults = async ({ io, pin, endAnsweringLocks, timerService, 
  */
 const buildShowResultsPayload = (room, snapshot) => {
   const question = snapshot.getQuestion(room.currentQuestionIndex);
-  if (!question) return {};
+  if (!question) return null;
   const { distribution, correctCount, skippedCount } = room.getAnswerDistribution(
     question.options.length,
     (idx) => question.isCorrect(idx)
@@ -147,7 +168,7 @@ const buildShowResultsPayload = (room, snapshot) => {
  * Build LEADERBOARD phase data from room.
  */
 const buildLeaderboardPayload = (room) => {
-  const payload = { leaderboard: room.getLeaderboard().map(toPlayerDTO) };
+  const payload = { leaderboard: room.getLeaderboard().map(toLeaderboardPlayerDTO) };
   if (room.isTeamMode()) payload.teamLeaderboard = room.getTeamLeaderboard();
   return payload;
 };
@@ -157,8 +178,8 @@ const buildLeaderboardPayload = (room) => {
  */
 const buildPodiumPayload = (room) => {
   const payload = {
-    podium: room.getPodium().map(toPlayerDTO),
-    leaderboard: room.getLeaderboard().map(toPlayerDTO)
+    podium: room.getPodium().map(toLeaderboardPlayerDTO),
+    leaderboard: room.getLeaderboard().map(toLeaderboardPlayerDTO)
   };
   if (room.isTeamMode()) payload.teamPodium = room.getTeamPodium();
   return payload;
@@ -172,6 +193,6 @@ const buildPodiumPayload = (room) => {
 const isValidPin = (pin) => !!pin && typeof pin === 'string' && pin.trim().length > 0;
 
 module.exports = {
-  createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults,
+  createRateLimiter, createAuthChecker, toPlayerDTO, toLeaderboardPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults,
   buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload, isValidPin
 };

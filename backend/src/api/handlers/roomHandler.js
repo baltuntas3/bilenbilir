@@ -2,7 +2,7 @@ const { handleSocketError } = require('../middlewares/errorHandler');
 const { ConflictError } = require('../../shared/errors');
 const { RoomState } = require('../../domain/entities');
 const { sanitizeObject, sanitizeNickname } = require('../../shared/utils/sanitize');
-const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults, buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toLeaderboardPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults, buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload, isValidPin } = require('./socketHandlerUtils');
 const { endAnsweringLocks } = require('./gameHandler');
 
 /**
@@ -31,9 +31,19 @@ const appendPhasePayload = (payload, room, snapshot) => {
 
   if (state === RoomState.PAUSED) {
     payload.pausedFromState = room.pausedFromState;
-    Object.assign(payload, buildLeaderboardPayload(room));
-    if (room.pausedFromState === RoomState.SHOW_RESULTS && snapshot) {
+    if (room.pausedFromState === RoomState.ANSWERING_PHASE) {
+      // Paused during answering — provide answer progress and timer state for UI
+      payload.answeredCount = room.getAnsweredCount();
+      payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
+      payload.connectedPlayerCount = room.getConnectedPlayerCount();
+      const pausedTimerState = room.getPausedTimerState();
+      if (pausedTimerState) payload.pausedTimerState = pausedTimerState;
+    } else if (room.pausedFromState === RoomState.SHOW_RESULTS && snapshot) {
+      // Paused during results — provide results data (not leaderboard)
       Object.assign(payload, buildShowResultsPayload(room, snapshot));
+    } else if (room.pausedFromState === RoomState.LEADERBOARD) {
+      // Paused during leaderboard — provide leaderboard data
+      Object.assign(payload, buildLeaderboardPayload(room));
     }
   }
 
@@ -237,6 +247,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       if (!checkRateLimit('leave_room')) return;
 
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const { room } = await roomUseCases.getRoom({ pin });
 
@@ -289,7 +300,8 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         nickname: result.player.nickname,
         playerCount: result.room.getPlayerCount(),
         connectedPlayerCount: result.room.getConnectedPlayerCount(),
-        disconnected: result.wasDisconnected
+        disconnected: result.wasDisconnected,
+        reason: result.wasDisconnected ? 'left_active_game' : 'left'
       });
 
       // Auto-advance if remaining connected players have all answered
@@ -596,17 +608,19 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       requireAuth();
 
       const { pin, enabled, questionCount } = data || {};
+      const parsedEnabled = !!enabled;
+      const parsedCount = questionCount ? parseInt(questionCount, 10) : 3;
 
       await roomUseCases.setLightningRound({
         pin,
-        enabled: !!enabled,
-        questionCount: questionCount ? parseInt(questionCount, 10) : 3,
+        enabled: parsedEnabled,
+        questionCount: parsedCount,
         requesterId: socket.id
       });
 
       io.to(pin).emit('lightning_round_updated', {
-        enabled: !!enabled,
-        questionCount: questionCount ? parseInt(questionCount, 10) : 3
+        enabled: parsedEnabled,
+        questionCount: parsedCount
       });
       sendAck(ack, { ok: true });
     } catch (error) {
@@ -813,10 +827,11 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
   });
 
   // Leave as spectator
-  socket.on('leave_spectator', async (data) => {
+  socket.on('leave_spectator', async (data, ack) => {
     try {
       if (!checkRateLimit('leave_spectator')) return;
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await roomUseCases.leaveAsSpectator({
         pin,
@@ -830,7 +845,9 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
         nickname: result.removedSpectator?.nickname || null,
         spectatorCount: result.room.getSpectatorCount()
       });
+      sendAck(ack, { ok: true });
     } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
       handleSocketError(socket, error);
     }
   });

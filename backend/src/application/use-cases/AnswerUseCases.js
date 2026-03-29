@@ -102,7 +102,8 @@ class AnswerUseCases extends SharedUseCases {
         allAnswered: room.shouldAutoAdvance(),
         answeredCount: room.getAnsweredCount(),
         totalPlayers: room.answeringPhasePlayerCount,
-        connectedPlayerCount: room.getConnectedPlayerCount()
+        connectedPlayerCount: room.getConnectedPlayerCount(),
+        disconnectedPlayerCount: room.getDisconnectedPlayers().length
       };
     });
   }
@@ -153,9 +154,10 @@ class AnswerUseCases extends SharedUseCases {
     if (elapsedTimeMs === null || timerService.isTimeExpired(pin)) {
       throw new ValidationError('Time expired');
     }
-    // Cap elapsed time to timer duration to prevent score underflow
-    const timerSync = timerService.getTimerSync(pin);
-    const maxTime = timerSync?.duration || Infinity;
+    // Cap elapsed time to original duration (before extensions) for consistent scoring.
+    // TIME_EXTENSION increases total timer but scoring uses original time limit.
+    const originalDuration = timerService.getOriginalDuration(pin);
+    const maxTime = originalDuration || Infinity;
     return Math.min(elapsedTimeMs, maxTime);
   }
 }

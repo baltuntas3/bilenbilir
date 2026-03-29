@@ -99,7 +99,8 @@ const initializeSocket = (server) => {
             nickname: result.player.nickname,
             playerCount: result.playerCount,
             connectedPlayerCount: result.connectedPlayerCount,
-            disconnected: true
+            disconnected: true,
+            reason: 'connection_lost'
           });
 
           // Auto-advance if remaining connected players have all answered

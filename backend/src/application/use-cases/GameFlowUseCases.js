@@ -147,19 +147,30 @@ class GameFlowUseCases extends SharedUseCases {
     return result;
   }
 
-  async pauseGame({ pin, requesterId }) {
+  async pauseGame({ pin, requesterId, timerRemainingMs = null, originalDurationMs = null }) {
     const room = await this._getRoomOrThrow(pin);
-    room.pause(requesterId);
+    // Build timer state only if there's remaining time (i.e. pausing from ANSWERING_PHASE)
+    const timerState = (typeof timerRemainingMs === 'number' && timerRemainingMs > 0)
+      ? { remainingMs: timerRemainingMs, originalDurationMs }
+      : null;
+    room.pause(requesterId, timerState);
     await this.roomRepository.save(room);
-    return { room, pausedAt: room.pausedAt };
+    return { room, pausedAt: room.pausedAt, pausedFromState: room.pausedFromState };
   }
 
   async resumeGame({ pin, requesterId }) {
     const room = await this._getRoomOrThrow(pin);
     const pauseDuration = room.getPauseDuration();
+    const timerState = room.getPausedTimerState();
     room.resume(requesterId);
     await this.roomRepository.save(room);
-    return { room, pauseDuration, resumedState: room.state };
+    return {
+      room,
+      pauseDuration,
+      resumedState: room.state,
+      timerState,
+      shouldAutoAdvance: room.state === RoomState.ANSWERING_PHASE ? room.shouldAutoAdvance() : false
+    };
   }
 }
 

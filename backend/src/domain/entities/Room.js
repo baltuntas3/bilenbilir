@@ -26,10 +26,10 @@ const RoomState = {
 const validTransitions = {
   [RoomState.WAITING_PLAYERS]: [RoomState.QUESTION_INTRO],
   [RoomState.QUESTION_INTRO]: [RoomState.ANSWERING_PHASE],
-  [RoomState.ANSWERING_PHASE]: [RoomState.SHOW_RESULTS],
+  [RoomState.ANSWERING_PHASE]: [RoomState.SHOW_RESULTS, RoomState.PAUSED],
   [RoomState.SHOW_RESULTS]: [RoomState.LEADERBOARD, RoomState.PAUSED],
   [RoomState.LEADERBOARD]: [RoomState.QUESTION_INTRO, RoomState.PODIUM, RoomState.PAUSED],
-  [RoomState.PAUSED]: [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS],
+  [RoomState.PAUSED]: [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS, RoomState.ANSWERING_PHASE],
   [RoomState.PODIUM]: [] // Terminal state
 };
 
@@ -112,6 +112,9 @@ class Room {
     }
     if (this.getConnectedPlayerCount() === 0) {
       throw new ValidationError('At least one connected player required');
+    }
+    if (this._teamManager.isEnabled() && this._teamManager.getAll().length === 0) {
+      throw new ValidationError('Team mode is enabled but no teams have been created');
     }
     const allowedTransitions = validTransitions[this.state];
     if (!allowedTransitions || !allowedTransitions.includes(RoomState.QUESTION_INTRO)) {
@@ -318,8 +321,10 @@ class Room {
         !p.isDisconnected() || p.getDisconnectedDuration() <= gracePeriodMs
       );
 
-      // answeringPhasePlayerCount is intentionally NOT decremented here.
-      // It is a snapshot taken at phase start for consistent progress reporting.
+      // answeringPhasePlayerCount is NOT decremented here because stale players
+      // are by definition disconnected. The snapshot only tracks connected players
+      // at phase start, and setPlayerDisconnected() already excludes them from
+      // auto-advance checks via haveAllPlayersAnswered().
     }
 
     return stalePlayers;
@@ -748,24 +753,23 @@ class Room {
 
   // ==================== PAUSE/RESUME METHODS (delegated to PauseManager) ====================
 
-  pause(requesterId) {
+  pause(requesterId, timerState = null) {
     const { pausedState, fromState } = this._pauseManager.pause(
       this.state,
       this.isHost(requesterId),
-      [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS],
+      [RoomState.LEADERBOARD, RoomState.SHOW_RESULTS, RoomState.ANSWERING_PHASE],
       RoomState.PAUSED
     );
     // setState validates the transition — if it throws, no pause state is written
     this.setState(pausedState);
-    this._pauseManager.applyPause(fromState);
+    this._pauseManager.applyPause(fromState, timerState);
   }
 
   resume(requesterId) {
     const resumeState = this._pauseManager.resume(
       this.state,
       this.isHost(requesterId),
-      RoomState.PAUSED,
-      RoomState.LEADERBOARD
+      RoomState.PAUSED
     );
     // setState validates the transition — if it throws, pause state is preserved
     this.setState(resumeState);
@@ -778,6 +782,10 @@ class Room {
 
   getPauseDuration() {
     return this._pauseManager.getDuration();
+  }
+
+  getPausedTimerState() {
+    return this._pauseManager.getTimerState();
   }
 
   // ==================== LIGHTNING ROUND METHODS ====================
@@ -838,6 +846,9 @@ class Room {
   }
 
   assignPlayerToTeam(playerId, teamId) {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Team assignments can only be changed in lobby');
+    }
     this._teamManager.assignPlayer(playerId, teamId, (id) => this.getPlayerById(id));
   }
 

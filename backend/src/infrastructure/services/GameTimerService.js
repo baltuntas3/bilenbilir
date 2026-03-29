@@ -35,15 +35,23 @@ class GameTimerService {
 
   /**
    * Start a timer for a room's answering phase
+   * @param {string} pin - Room PIN
+   * @param {number} durationSeconds - Timer duration in seconds
+   * @param {Function} onExpire - Callback when timer expires
+   * @param {Object} [options]
+   * @param {number} [options.minDuration] - Minimum allowed duration (default: MIN_DURATION_SECONDS, lower for resumed timers)
+   * @param {number|null} [options.originalDurationMs] - Original question time limit in ms (preserved across pause/resume for fair scoring)
    * @throws {ValidationError} If duration is invalid
    */
-  startTimer(pin, durationSeconds, onExpire) {
+  startTimer(pin, durationSeconds, onExpire, options = {}) {
+    const { minDuration = MIN_DURATION_SECONDS, originalDurationMs = null, silent = false } = options;
+
     // Validate duration - throw error instead of silent fallback
     if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds)) {
       throw new ValidationError('Timer duration must be a valid number');
     }
-    if (durationSeconds < MIN_DURATION_SECONDS || durationSeconds > MAX_DURATION_SECONDS) {
-      throw new ValidationError(`Timer duration must be between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS} seconds`);
+    if (durationSeconds < minDuration || durationSeconds > MAX_DURATION_SECONDS) {
+      throw new ValidationError(`Timer duration must be between ${minDuration} and ${MAX_DURATION_SECONDS} seconds`);
     }
 
     this.stopTimer(pin);
@@ -59,6 +67,9 @@ class GameTimerService {
       endTime,
       startTime,
       duration: durationMs,
+      // Original question time limit (before extensions/pause), used for fair scoring.
+      // If not provided (first start), defaults to the initial duration.
+      originalDuration: originalDurationMs || durationMs,
       stopped: false, // Flag to prevent race conditions
       onExpire: onExpire || null, // Store callback for timer extension
       totalExtensionMs: 0 // Track cumulative extensions per question
@@ -91,15 +102,21 @@ class GameTimerService {
 
     this.activeTimers.set(pin, timerEntry);
 
-    this.io.to(pin).emit('timer_started', {
-      duration: durationSeconds,
-      durationMs,
-      serverTime: startTime,
-      endTime
-    });
+    // When silent=true, caller is responsible for emitting timer_started
+    // after its own state event (e.g. answering_started) to guarantee ordering.
+    if (!silent) {
+      this.io.to(pin).emit('timer_started', {
+        duration: durationSeconds,
+        durationMs,
+        serverTime: startTime,
+        endTime
+      });
+    }
 
     // Emit first tick for compatibility
     this.io.to(pin).emit('timer_tick', this._buildTimerSync(endTime));
+
+    return { duration: durationSeconds, durationMs, serverTime: startTime, endTime };
   }
 
   /**
@@ -160,6 +177,17 @@ class GameTimerService {
       return true; // No timer = expired
     }
     return Date.now() >= timer.endTime;
+  }
+
+  /**
+   * Get original timer duration (before extensions/pause) for fair scoring.
+   * TIME_EXTENSION increases total duration but should not inflate scores.
+   * @returns {number|null} Original duration in ms, or null if no timer
+   */
+  getOriginalDuration(pin) {
+    const timer = this.activeTimers.get(pin);
+    if (!timer) return null;
+    return timer.originalDuration;
   }
 
   /**

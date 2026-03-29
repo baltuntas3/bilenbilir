@@ -113,21 +113,21 @@ describe('AnswerUseCases', () => {
       expect(() => answerUC.getServerElapsedTime(timerService, roomPin)).toThrow('Time expired');
     });
 
-    it('should clamp elapsed time to timer duration', () => {
+    it('should clamp elapsed time to original duration', () => {
       const timerService = {
         isTimeExpired: jest.fn().mockReturnValue(false),
         getElapsedTime: jest.fn().mockReturnValue(50000),
-        getTimerSync: jest.fn().mockReturnValue({ duration: 30000 })
+        getOriginalDuration: jest.fn().mockReturnValue(30000)
       };
       const result = answerUC.getServerElapsedTime(timerService, roomPin);
       expect(result).toBe(30000);
     });
 
-    it('should return elapsed time without clamping', () => {
+    it('should return elapsed time without clamping when no original duration', () => {
       const timerService = {
         isTimeExpired: jest.fn().mockReturnValue(false),
         getElapsedTime: jest.fn().mockReturnValue(5000),
-        getTimerSync: jest.fn().mockReturnValue(null)
+        getOriginalDuration: jest.fn().mockReturnValue(null)
       };
       const result = answerUC.getServerElapsedTime(timerService, roomPin);
       expect(result).toBe(5000);
@@ -137,7 +137,7 @@ describe('AnswerUseCases', () => {
       const timerService = {
         isTimeExpired: jest.fn().mockReturnValue(false),
         getElapsedTime: jest.fn().mockReturnValue(5000),
-        getTimerSync: jest.fn().mockReturnValue({ duration: 30000 })
+        getOriginalDuration: jest.fn().mockReturnValue(30000)
       };
       const result = answerUC.getServerElapsedTime(timerService, roomPin);
       expect(result).toBe(5000);

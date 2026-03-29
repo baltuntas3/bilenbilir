@@ -4,6 +4,8 @@ class PauseManager {
   constructor() {
     this.pausedAt = null;
     this.pausedFromState = null;
+    // Timer state preserved when pausing from ANSWERING_PHASE
+    this.pausedTimerState = null;
   }
 
   /**
@@ -24,10 +26,14 @@ class PauseManager {
   /**
    * Apply pause state after successful state transition.
    * Must be called only after Room.setState() succeeds.
+   * @param {string} fromState - The state before pausing
+   * @param {Object|null} timerState - Timer state to preserve when pausing from ANSWERING_PHASE
+   *   { remainingMs: number, originalDurationMs: number }
    */
-  applyPause(fromState) {
+  applyPause(fromState, timerState = null) {
     this.pausedFromState = fromState;
     this.pausedAt = new Date();
+    this.pausedTimerState = timerState;
   }
 
   /**
@@ -35,12 +41,15 @@ class PauseManager {
    * All validation happens before any state mutation.
    * @returns {string} The state to resume to
    */
-  resume(currentState, isHost, pausedState, defaultResumeState) {
+  resume(currentState, isHost, pausedState) {
     if (!isHost) throw new ForbiddenError('Only host can resume the game');
     if (currentState !== pausedState) {
       throw new ValidationError('Game is not paused');
     }
-    return this.pausedFromState || defaultResumeState;
+    if (!this.pausedFromState) {
+      throw new ValidationError('Cannot resume: previous state is unknown');
+    }
+    return this.pausedFromState;
   }
 
   /**
@@ -50,6 +59,15 @@ class PauseManager {
   applyResume() {
     this.pausedAt = null;
     this.pausedFromState = null;
+    this.pausedTimerState = null;
+  }
+
+  /**
+   * Get preserved timer state (only meaningful when paused from ANSWERING_PHASE)
+   * @returns {Object|null} { remainingMs, originalDurationMs } or null
+   */
+  getTimerState() {
+    return this.pausedTimerState;
   }
 
   isPaused(currentState, pausedState) {

@@ -77,13 +77,49 @@ class RoomCleanupService {
   async _checkAutoAdvanceAfterRemoval(room) {
     if (!this.autoAdvanceToResults || !this.io) return;
     if (!room.shouldAutoAdvance()) return;
+    await this._forceAutoAdvance(room.pin);
+  }
+
+  /**
+   * Force auto-advance from ANSWERING_PHASE to SHOW_RESULTS.
+   * Shared by stale-player removal and paused-game resume paths.
+   * @private
+   */
+  async _forceAutoAdvance(pin) {
+    if (!this.autoAdvanceToResults || !this.io) return;
     await this.autoAdvanceToResults({
       io: this.io,
-      pin: room.pin,
+      pin,
       endAnsweringLocks: this.endAnsweringLocks,
       timerService: this.timerService,
       gameUseCases: this.gameUseCases
     });
+  }
+
+  /**
+   * Handle timer restart or auto-advance after resuming to ANSWERING_PHASE.
+   * Prevents the game from getting stuck without a running timer.
+   * @private
+   */
+  async _handleAnsweringPhaseResume(room, pausedTimerState) {
+    if (room.shouldAutoAdvance()) {
+      await this._forceAutoAdvance(room.pin);
+      return;
+    }
+    if (this.timerService && pausedTimerState && pausedTimerState.remainingMs > 0) {
+      const remainingSeconds = Math.max(1, Math.round(pausedTimerState.remainingMs / 1000));
+      this.timerService.startTimer(room.pin, remainingSeconds, async () => {
+        if (this.io) this.io.to(room.pin).emit('time_expired');
+        await this._forceAutoAdvance(room.pin);
+      }, {
+        minDuration: 1,
+        originalDurationMs: pausedTimerState.originalDurationMs
+      });
+    } else {
+      // No timer state or no time remaining — force end
+      if (this.io) this.io.to(room.pin).emit('time_expired');
+      await this._forceAutoAdvance(room.pin);
+    }
   }
 
   /**
@@ -240,6 +276,8 @@ class RoomCleanupService {
               } else {
                 // Host is connected: auto-resume to previous state
                 try {
+                  // Capture timer state BEFORE resume clears it
+                  const pausedTimerState = room.getPausedTimerState();
                   room.resume(room.hostId);
                   await this.roomRepository.save(room);
                   if (this.io) {
@@ -249,7 +287,12 @@ class RoomCleanupService {
                     });
                   }
                   console.log(`Auto-resumed room ${room.pin} after ${Math.round(pauseDuration / 1000)}s pause`);
-                } catch {
+                  // Handle ANSWERING_PHASE: restart timer or auto-advance to prevent stuck game
+                  if (room.state === RoomState.ANSWERING_PHASE) {
+                    await this._handleAnsweringPhaseResume(room, pausedTimerState);
+                  }
+                } catch (resumeError) {
+                  console.error(`Auto-resume failed for room ${room.pin}:`, resumeError.message);
                   shouldDelete = true;
                   reason = 'Paused game timeout (resume failed)';
                 }
