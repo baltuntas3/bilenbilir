@@ -85,25 +85,6 @@ describe('Tournament', () => {
     });
   });
 
-  describe('reorderRounds', () => {
-    it('should reorder rounds', () => {
-      const t = new Tournament(validData);
-      t.addRound('q1', 'Quiz 1');
-      t.addRound('q2', 'Quiz 2');
-      t.addRound('q3', 'Quiz 3');
-      t.reorderRounds(0, 2);
-      expect(t.rounds[0].quizId).toBe('q2');
-      expect(t.rounds[2].quizId).toBe('q1');
-    });
-
-    it('should throw for invalid indices', () => {
-      const t = new Tournament(validData);
-      t.addRound('q1', 'Quiz 1');
-      expect(() => t.reorderRounds(-1, 0)).toThrow('Invalid round indices');
-      expect(() => t.reorderRounds(0, 5)).toThrow('Invalid round indices');
-    });
-  });
-
   describe('start', () => {
     it('should start tournament with enough rounds', () => {
       const t = new Tournament(validData);
@@ -119,21 +100,6 @@ describe('Tournament', () => {
       const t = new Tournament(validData);
       t.addRound('q1', 'Quiz 1');
       expect(() => t.start()).toThrow('at least');
-    });
-  });
-
-  describe('setRoomPin', () => {
-    it('should set room pin for a round', () => {
-      const t = new Tournament(validData);
-      t.addRound('q1', 'Quiz 1');
-      t.setRoomPin(0, '123456');
-      expect(t.rounds[0].roomPin).toBe('123456');
-    });
-
-    it('should throw for invalid index', () => {
-      const t = new Tournament(validData);
-      expect(() => t.setRoomPin(0, '123456')).toThrow('Invalid round index');
-      expect(() => t.setRoomPin(-1, '123456')).toThrow('Invalid round index');
     });
   });
 

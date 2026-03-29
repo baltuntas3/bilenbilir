@@ -26,15 +26,6 @@ class Answer {
     return Math.min(total, MAX_ANSWER_SCORE);
   }
 
-  equals(other) {
-    if (!(other instanceof Answer)) return false;
-    return (
-      this.playerId === other.playerId &&
-      this.questionId === other.questionId &&
-      this.answerIndex === other.answerIndex
-    );
-  }
-
   static create({ playerId, questionId, roomPin, answerIndex, question, elapsedTimeMs, currentStreak, effectiveTimeLimitMs = null }) {
     // Validate required IDs
     if (!playerId || typeof playerId !== 'string') {

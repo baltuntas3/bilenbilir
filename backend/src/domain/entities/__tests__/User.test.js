@@ -111,30 +111,6 @@ describe('User', () => {
     });
   });
 
-  describe('updateUsername', () => {
-    it('should update username', () => {
-      const oldUpdatedAt = user.updatedAt;
-      user.updateUsername('newname');
-      expect(user.username).toBe('newname');
-      expect(user.updatedAt.getTime()).toBeGreaterThanOrEqual(oldUpdatedAt.getTime());
-    });
-
-    it('should trim new username', () => {
-      user.updateUsername('  spacedname  ');
-      expect(user.username).toBe('spacedname');
-    });
-
-    it('should throw error for empty username', () => {
-      expect(() => user.updateUsername('')).toThrow('Username is required');
-      expect(() => user.updateUsername('   ')).toThrow('Username is required');
-    });
-
-    it('should throw error for invalid length', () => {
-      expect(() => user.updateUsername('a')).toThrow('Username must be between 2 and 30 characters');
-      expect(() => user.updateUsername('a'.repeat(31))).toThrow('Username must be between 2 and 30 characters');
-    });
-  });
-
   describe('password reset token', () => {
     it('should set password reset token', () => {
       const hashedToken = 'hashed-token-123';

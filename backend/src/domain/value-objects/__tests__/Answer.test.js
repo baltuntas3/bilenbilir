@@ -66,52 +66,6 @@ describe('Answer', () => {
     });
   });
 
-  describe('equals', () => {
-    it('should return true for same player, question, and answer', () => {
-      const answer1 = new Answer({
-        playerId: 'player-1',
-        questionId: 'q-1',
-        roomPin: '123456',
-        answerIndex: 1,
-        isCorrect: true,
-        elapsedTimeMs: 5000
-      });
-
-      const answer2 = new Answer({
-        playerId: 'player-1',
-        questionId: 'q-1',
-        roomPin: '123456',
-        answerIndex: 1,
-        isCorrect: true,
-        elapsedTimeMs: 10000 // Different time, but same answer
-      });
-
-      expect(answer1.equals(answer2)).toBe(true);
-    });
-
-    it('should return false for different answer index', () => {
-      const answer1 = new Answer({
-        playerId: 'player-1',
-        questionId: 'q-1',
-        roomPin: '123456',
-        answerIndex: 1,
-        isCorrect: true,
-        elapsedTimeMs: 5000
-      });
-
-      const answer2 = new Answer({
-        playerId: 'player-1',
-        questionId: 'q-1',
-        roomPin: '123456',
-        answerIndex: 2,
-        isCorrect: false,
-        elapsedTimeMs: 5000
-      });
-
-      expect(answer1.equals(answer2)).toBe(false);
-    });
-  });
-
   describe('static create', () => {
     it('should create Answer with correct score for correct answer', () => {
       const answer = Answer.create({

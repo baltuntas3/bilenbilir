@@ -44,24 +44,6 @@ class EmailService {
   }
 
   /**
-   * Verify SMTP connection
-   * @returns {Promise<boolean>}
-   */
-  async verifyConnection() {
-    if (!this.isConfigured) {
-      return false;
-    }
-
-    try {
-      await this.transporter.verify();
-      return true;
-    } catch (error) {
-      console.error('Email service connection failed:', error.message);
-      return false;
-    }
-  }
-
-  /**
    * Send an email with retry mechanism
    * @param {Object} options - Email options
    * @param {string} options.to - Recipient email

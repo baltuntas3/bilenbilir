@@ -45,11 +45,6 @@ describe('Question edge cases', () => {
       expect(() => new Question({ ...validData, explanation: 'A'.repeat(501) })).toThrow('500 characters');
     });
 
-    it('should update explanation', () => {
-      const q = new Question(validData);
-      q.updateExplanation('New explanation');
-      expect(q.explanation).toBe('New explanation');
-    });
   });
 
   describe('imageUrl validation', () => {

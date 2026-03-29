@@ -59,15 +59,6 @@ class Tournament {
     this.rounds.splice(index, 1);
   }
 
-  reorderRounds(fromIndex, toIndex) {
-    this._requireSetup();
-    if (fromIndex < 0 || fromIndex >= this.rounds.length || toIndex < 0 || toIndex >= this.rounds.length) {
-      throw new ValidationError('Invalid round indices');
-    }
-    const [round] = this.rounds.splice(fromIndex, 1);
-    this.rounds.splice(toIndex, 0, round);
-  }
-
   start() {
     this._requireSetup();
     if (this.rounds.length < MIN_TOURNAMENT_ROUNDS) {
@@ -76,13 +67,6 @@ class Tournament {
     this.state = TournamentState.IN_PROGRESS;
     this.currentRoundIndex = 0;
     this.rounds[0].status = 'in_progress';
-  }
-
-  setRoomPin(roundIndex, pin) {
-    if (roundIndex < 0 || roundIndex >= this.rounds.length) {
-      throw new ValidationError('Invalid round index');
-    }
-    this.rounds[roundIndex].roomPin = pin;
   }
 
   completeRound(roundIndex, results) {

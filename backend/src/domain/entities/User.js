@@ -73,22 +73,6 @@ class User {
   }
 
   /**
-   * Update username
-   * @param {string} newUsername
-   */
-  updateUsername(newUsername) {
-    if (!newUsername || !newUsername.trim()) {
-      throw new ValidationError('Username is required');
-    }
-    const trimmed = newUsername.trim();
-    if (trimmed.length < User.MIN_USERNAME_LENGTH || trimmed.length > User.MAX_USERNAME_LENGTH) {
-      throw new ValidationError(`Username must be between ${User.MIN_USERNAME_LENGTH} and ${User.MAX_USERNAME_LENGTH} characters`);
-    }
-    this.username = trimmed;
-    this.updatedAt = new Date();
-  }
-
-  /**
    * Set password reset token
    * @param {string} hashedToken - SHA256 hashed token
    * @param {number} expiresInMs - Expiration time in milliseconds (default 1 hour)

@@ -169,19 +169,6 @@ class SocketService {
     }
   }
 
-  removeAllListeners() {
-    if (this.socket) {
-      this.listeners.forEach((_, event) => {
-        this.socket.off(event);
-      });
-      this.listeners.clear();
-    }
-  }
-
-  isConnected() {
-    return this.socket?.connected || false;
-  }
-
   getSocketId() {
     return this.socket?.id;
   }

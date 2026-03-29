@@ -55,9 +55,6 @@ module.exports = {
   BCRYPT_SALT_ROUNDS: 10,
   PASSWORD_RESET_EXPIRY_MS: 60 * 60 * 1000,  // 1 hour
 
-  // PIN
-  PIN_GENERATION_MAX_ATTEMPTS: 50,
-
   // Cleanup
   ROOM_CLEANUP_INTERVAL_MS: 30 * 1000,       // 30 seconds
 
@@ -71,10 +68,6 @@ module.exports = {
   // Search
   MAX_RAW_QUERY_LENGTH: 100,
   MAX_ESCAPED_QUERY_LENGTH: 200,
-
-  // Reactions
-  MAX_VISIBLE_REACTIONS: 20,
-  REACTION_LIFETIME_MS: 3000,
 
   // Analytics
   ANALYTICS_MAX_SESSIONS: 1000,

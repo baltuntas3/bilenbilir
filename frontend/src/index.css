@@ -138,10 +138,7 @@ body {
 }
 
 .theme-text-primary   { color: var(--theme-primary);   }
-.theme-text-secondary { color: var(--theme-secondary);  }
-.theme-text-success   { color: var(--theme-success);    }
 .theme-text-warning   { color: var(--theme-warning);    }
-.theme-text-accent    { color: var(--theme-accent);     }
 .theme-text-dim       { color: var(--theme-text-dim);   }
 
 /* Light theme: headings use black, not gold – gold is for accents only */

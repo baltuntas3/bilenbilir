@@ -28,11 +28,6 @@ class PIN {
     return new PIN(pin);
   }
 
-  equals(other) {
-    if (!(other instanceof PIN)) return false;
-    return this.value === other.value;
-  }
-
   toString() {
     return this.value;
   }

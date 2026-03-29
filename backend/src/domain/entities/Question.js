@@ -47,14 +47,6 @@ class Question {
   }
 
   /**
-   * Update the explanation text
-   * @param {string} text - New explanation text
-   */
-  updateExplanation(text) {
-    this.explanation = this._sanitizeExplanation(text);
-  }
-
-  /**
    * Sanitize and validate image URL
    * @private
    */

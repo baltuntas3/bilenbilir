@@ -36,18 +36,6 @@ class Score {
     return new Score(newValue);
   }
 
-  isGreaterThan(other) {
-    if (!(other instanceof Score)) {
-      throw new ValidationError('Can only compare with another Score');
-    }
-    return this.value > other.value;
-  }
-
-  equals(other) {
-    if (!(other instanceof Score)) return false;
-    return this.value === other.value;
-  }
-
   toString() {
     return this.value.toString();
   }

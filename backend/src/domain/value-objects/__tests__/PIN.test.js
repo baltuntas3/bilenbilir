@@ -65,29 +65,6 @@ describe('PIN', () => {
     });
   });
 
-  describe('equals', () => {
-    it('should return true for same PIN value', () => {
-      const pin1 = new PIN('123456');
-      const pin2 = new PIN('123456');
-
-      expect(pin1.equals(pin2)).toBe(true);
-    });
-
-    it('should return false for different PIN value', () => {
-      const pin1 = new PIN('123456');
-      const pin2 = new PIN('654321');
-
-      expect(pin1.equals(pin2)).toBe(false);
-    });
-
-    it('should return false for non-PIN object', () => {
-      const pin = new PIN('123456');
-
-      expect(pin.equals('123456')).toBe(false);
-      expect(pin.equals({ value: '123456' })).toBe(false);
-    });
-  });
-
   describe('toString', () => {
     it('should return PIN value as string', () => {
       const pin = new PIN('123456');

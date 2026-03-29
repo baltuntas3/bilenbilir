@@ -54,57 +54,6 @@ describe('Score', () => {
     });
   });
 
-  describe('isGreaterThan', () => {
-    it('should return true when greater', () => {
-      const score1 = new Score(500);
-      const score2 = new Score(300);
-
-      expect(score1.isGreaterThan(score2)).toBe(true);
-    });
-
-    it('should return false when less', () => {
-      const score1 = new Score(300);
-      const score2 = new Score(500);
-
-      expect(score1.isGreaterThan(score2)).toBe(false);
-    });
-
-    it('should return false when equal', () => {
-      const score1 = new Score(500);
-      const score2 = new Score(500);
-
-      expect(score1.isGreaterThan(score2)).toBe(false);
-    });
-
-    it('should throw error for non-Score comparison', () => {
-      const score = new Score(500);
-
-      expect(() => score.isGreaterThan(300)).toThrow('Can only compare with another Score');
-    });
-  });
-
-  describe('equals', () => {
-    it('should return true for equal scores', () => {
-      const score1 = new Score(500);
-      const score2 = new Score(500);
-
-      expect(score1.equals(score2)).toBe(true);
-    });
-
-    it('should return false for different scores', () => {
-      const score1 = new Score(500);
-      const score2 = new Score(300);
-
-      expect(score1.equals(score2)).toBe(false);
-    });
-
-    it('should return false for non-Score object', () => {
-      const score = new Score(500);
-
-      expect(score.equals(500)).toBe(false);
-    });
-  });
-
   describe('toString', () => {
     it('should return value as string', () => {
       const score = new Score(500);
