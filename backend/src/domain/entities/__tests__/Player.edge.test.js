@@ -71,11 +71,22 @@ describe('Player edge cases', () => {
       expect(() => player.usePowerUp('FIFTY_FIFTY')).toThrow('No FIFTY_FIFTY power-up remaining');
     });
 
-    it('usePowerUp should decrement and set active', () => {
+    it('usePowerUp should decrement without setting activePowerUp', () => {
       const type = player.usePowerUp('FIFTY_FIFTY');
       expect(type).toBe('FIFTY_FIFTY');
       expect(player.powerUps.FIFTY_FIFTY).toBe(0);
-      expect(player.activePowerUp).toBe('FIFTY_FIFTY');
+      // usePowerUp no longer sets activePowerUp — strategies handle that
+      expect(player.activePowerUp).toBeNull();
+    });
+
+    it('setActivePowerUp should set the active power-up for scoring', () => {
+      player.setActivePowerUp('DOUBLE_POINTS');
+      expect(player.activePowerUp).toBe('DOUBLE_POINTS');
+      expect(player.hasActivePowerUp('DOUBLE_POINTS')).toBe(true);
+    });
+
+    it('setActivePowerUp should reject invalid type', () => {
+      expect(() => player.setActivePowerUp('INVALID')).toThrow('Invalid power-up type');
     });
 
     it('hasActivePowerUp should check type', () => {

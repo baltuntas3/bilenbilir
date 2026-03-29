@@ -50,15 +50,8 @@ class GameFlowUseCases extends SharedUseCases {
   async startAnsweringPhase({ pin, requesterId, pendingAnswers }) {
     const room = await this._getRoomOrThrow(pin);
     this._throwIfNotHost(room, requesterId);
-    // Validate state BEFORE side effects to prevent clearing answers on invalid transitions
-    if (room.state !== RoomState.QUESTION_INTRO) {
-      throw new ValidationError(`Cannot start answering from ${room.state} state (must be in QUESTION_INTRO)`);
-    }
-    if (room.getConnectedPlayerCount() === 0) {
-      throw new ValidationError('Cannot start answering phase: no connected players');
-    }
-    room.clearAllAnswerAttempts();
-    room.setState(RoomState.ANSWERING_PHASE);
+    // Atomic: validates state, transitions, snapshots player count, clears answers
+    room.beginAnsweringPhase();
     await this.roomRepository.save(room);
     if (pendingAnswers) {
       try { pendingAnswers.clearByPrefix(`${pin}:`); } catch (err) {

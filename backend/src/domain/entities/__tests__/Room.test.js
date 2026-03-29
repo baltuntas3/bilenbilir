@@ -1047,24 +1047,48 @@ describe('Room', () => {
     });
   });
 
-  describe('clearAllAnswerAttempts', () => {
-    it('should clear all player answer attempts', () => {
+  describe('beginAnsweringPhase', () => {
+    it('should transition to ANSWERING_PHASE and clear all player answer attempts', () => {
       const player1 = new Player({ id: 'p1', socketId: 's1', nickname: 'P1', roomPin: '123456' });
       const player2 = new Player({ id: 'p2', socketId: 's2', nickname: 'P2', roomPin: '123456' });
 
       room.addPlayer(player1);
       room.addPlayer(player2);
 
+      // Set up state for valid transition: WAITING_PLAYERS → QUESTION_INTRO → ANSWERING_PHASE
+      const quiz = new Quiz({
+        id: 'q1', title: 'Test', createdBy: 'u1',
+        questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
+      });
+      room.startGameSession(quiz.clone());
+
       player1.submitAnswer(0, 1000);
       player2.submitAnswer(1, 2000);
 
       expect(room.getAnsweredCount()).toBe(2);
 
-      room.clearAllAnswerAttempts();
+      room.beginAnsweringPhase();
 
+      expect(room.state).toBe(RoomState.ANSWERING_PHASE);
       expect(room.getAnsweredCount()).toBe(0);
       expect(player1.hasAnswered()).toBe(false);
       expect(player2.hasAnswered()).toBe(false);
+      expect(room.answeringPhasePlayerCount).toBe(2);
+    });
+
+    it('should throw if not in QUESTION_INTRO state', () => {
+      const player = new Player({ id: 'p1', socketId: 's1', nickname: 'P1', roomPin: '123456' });
+      room.addPlayer(player);
+      expect(() => room.beginAnsweringPhase()).toThrow('Cannot start answering');
+    });
+
+    it('should throw if no connected players', () => {
+      const quiz = new Quiz({
+        id: 'q1', title: 'Test', createdBy: 'u1',
+        questions: [new Question({ id: 'q1', text: 'Q?', type: QuestionType.MULTIPLE_CHOICE, options: ['A', 'B'], correctAnswerIndex: 0 })]
+      });
+      room.startGameSession(quiz.clone());
+      expect(() => room.beginAnsweringPhase()).toThrow('no connected players');
     });
   });
 

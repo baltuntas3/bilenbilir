@@ -96,7 +96,7 @@ export function GameProvider({ children }) {
       'question_intro', 'answering_started', 'answer_received', 'answer_count_updated',
       'all_players_answered', 'show_results', 'leaderboard', 'game_over',
       'final_results', 'fifty_fifty_result', 'power_up_activated', 'power_up_used',
-      'time_extended', 'power_up_refund_failed', 'timer_started', 'time_expired', 'timer_sync',
+      'time_extended', 'power_up_refund_failed', 'timer_started', 'timer_tick', 'time_expired', 'timer_sync',
       'game_paused', 'game_resumed', 'reaction_received', 'room_closed',
       'host_disconnected', 'host_disconnected_warning', 'host_returned', 'error'
     ];
@@ -276,7 +276,7 @@ export function GameProvider({ children }) {
         hasAnswered: false,
         lastAnswer: null,
         answeredCount: 0,
-        connectedPlayerCount: 0,
+        // Keep previous connectedPlayerCount — will be updated by answering_started/answer_count_updated
         answerDistribution: null,
         correctAnswerIndex: null,
         explanation: null,
@@ -380,6 +380,16 @@ export function GameProvider({ children }) {
       try {
         const adjustedEndTime = calcAdjustedEndTime(endTime, serverTime, duration * 1000);
         timerRef.current.startTimer(duration, adjustedEndTime);
+      } catch { /* timer may be unavailable */ }
+    });
+    // Re-sync client timer on every server tick to prevent drift
+    socketService.on('timer_tick', (data) => {
+      try {
+        if (!data) return;
+        const { remainingMs, endTime, serverTime } = data;
+        if (typeof remainingMs !== 'number' || typeof endTime !== 'number' || typeof serverTime !== 'number') return;
+        const adjustedEndTime = calcAdjustedEndTime(endTime, serverTime, remainingMs);
+        timerRef.current.syncTimer(Math.ceil(remainingMs / 1000), adjustedEndTime);
       } catch { /* timer may be unavailable */ }
     });
     socketService.on('time_expired', () => {

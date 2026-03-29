@@ -164,7 +164,14 @@ const buildPodiumPayload = (room) => {
   return payload;
 };
 
+/**
+ * Validate PIN format from client data.
+ * @param {*} pin - PIN value to validate
+ * @returns {boolean} true if PIN is a non-empty string
+ */
+const isValidPin = (pin) => !!pin && typeof pin === 'string' && pin.trim().length > 0;
+
 module.exports = {
   createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, validateToken, autoAdvanceToResults,
-  buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload
+  buildShowResultsPayload, buildLeaderboardPayload, buildPodiumPayload, isValidPin
 };

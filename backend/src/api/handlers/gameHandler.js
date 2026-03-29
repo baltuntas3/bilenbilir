@@ -1,5 +1,5 @@
 const { handleSocketError } = require('../middlewares/errorHandler');
-const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults } = require('./socketHandlerUtils');
+const { createRateLimiter, createAuthChecker, toPlayerDTO, toPlayerQuestionDTO, toShowResultsDTO, autoAdvanceToResults, isValidPin } = require('./socketHandlerUtils');
 const { MAX_TIMER_EXTENSION_MS, GAME_FLOW_LOCK_TIMEOUT_MS } = require('../../shared/config/constants');
 const { LockManager } = require('../../shared/utils/LockManager');
 const { DEFAULT_POWER_UPS } = require('../../domain/value-objects/PowerUp');
@@ -31,6 +31,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       requireAuth(); // JWT required for host
       const { pin, questionCount } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       // Validate questionCount before passing to use case
       let parsedQuestionCount;
@@ -81,6 +82,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await gameUseCases.startAnsweringPhase({
         pin,
@@ -115,6 +117,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
 
       const { pin, answerIndex } = data || {};
+      if (!isValidPin(pin)) { if (typeof ack === 'function') ack({ ok: false, error: 'Valid PIN is required' }); return; }
 
       // SECURITY: Only use pin and answerIndex from client
       // Elapsed time MUST be calculated server-side to prevent manipulation
@@ -184,6 +187,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       // Acquire lock FIRST to prevent race with timer callback auto-transition
       if (!endAnsweringLocks.acquire(pin)) {
@@ -221,6 +225,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await gameUseCases.showLeaderboard({
         pin,
@@ -252,6 +257,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       requireAuth(); // JWT required for host
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       // Check lock to prevent double-call race (rapid next_question clicks)
       if (!nextQuestionLocks.acquire(pin)) {
@@ -387,9 +393,14 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
 
       const { pin, powerUpType } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
-      // Pre-check: reject TIME_EXTENSION if timer can't be extended further
+      // Pre-check: reject TIME_EXTENSION if timer is inactive or budget exhausted
       if (powerUpType === 'TIME_EXTENSION') {
+        if (!timerService.isTimerActive(pin)) {
+          sendAck(ack, { ok: false, error: 'No active timer to extend' });
+          return;
+        }
         const remaining = timerService.getRemainingExtensionBudget(pin);
         if (remaining <= 0) {
           sendAck(ack, { ok: false, error: 'Time extension limit reached for this question' });
@@ -475,6 +486,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       requireAuth();
 
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       // Stop timer before pause to prevent desync — if pause fails, timer is already idle
       // (no active answering phase timer should keep running while paused)
@@ -506,6 +518,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       requireAuth();
 
       const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
       const result = await gameUseCases.resumeGame({
         pin,

@@ -101,7 +101,13 @@ powerUpRegistry.register(PowerUpType.FIFTY_FIFTY, {
 });
 
 powerUpRegistry.register(PowerUpType.DOUBLE_POINTS, {
-  execute() {
+  execute({ room, socketId }) {
+    // DOUBLE_POINTS must persist as "active" until answer submission,
+    // unlike FIFTY_FIFTY/TIME_EXTENSION which have immediate effects.
+    const player = room.getPlayer(socketId);
+    if (player) {
+      player.setActivePowerUp(PowerUpType.DOUBLE_POINTS);
+    }
     return { type: PowerUpType.DOUBLE_POINTS, activated: true };
   },
   getEmitActions() {

@@ -346,10 +346,20 @@ class Room {
   }
 
   /**
-   * Clear all player answer attempts and snapshot connected player count for answering phase.
-   * Maintains Aggregate Root encapsulation.
+   * Atomically transition to ANSWERING_PHASE: validate state, transition,
+   * snapshot connected player count, and clear answer attempts.
+   * If state transition fails, no side effects are written.
    */
-  clearAllAnswerAttempts() {
+  beginAnsweringPhase() {
+    if (this.state !== RoomState.QUESTION_INTRO) {
+      throw new ValidationError(`Cannot start answering from ${this.state} state (must be in QUESTION_INTRO)`);
+    }
+    if (this.getConnectedPlayerCount() === 0) {
+      throw new ValidationError('Cannot start answering phase: no connected players');
+    }
+    // State transition validates via validTransitions — if it throws, nothing changes
+    this.setState(RoomState.ANSWERING_PHASE);
+    // Only apply side effects after state transition succeeds
     this.answeringPhasePlayerCount = this.getConnectedPlayerCount();
     this.players.forEach(player => {
       player.clearAnswerAttempt();

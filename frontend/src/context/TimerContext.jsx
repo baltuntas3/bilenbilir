@@ -63,6 +63,13 @@ export function TimerProvider({ children }) {
     endTimeRef._intervalId = timerRef.current;
   }, []);
 
+  // Lightweight sync: only update endTime reference without resetting interval.
+  // The existing interval will pick up the new endTime on its next tick.
+  const syncTimer = useCallback((duration, endTime) => {
+    if (!timerRef.current) return; // No active timer to sync
+    endTimeRef.current = endTime;
+  }, []);
+
   const resetTimer = useCallback(() => {
     stopTimer();
     setRemainingTime(0);
@@ -75,8 +82,9 @@ export function TimerProvider({ children }) {
     startTimer,
     stopTimer,
     extendTimer,
+    syncTimer,
     resetTimer,
-  }), [remainingTime, timeLimit, startTimer, stopTimer, extendTimer, resetTimer]);
+  }), [remainingTime, timeLimit, startTimer, stopTimer, extendTimer, syncTimer, resetTimer]);
 
   return <TimerContext.Provider value={value}>{children}</TimerContext.Provider>;
 }

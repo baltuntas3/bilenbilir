@@ -126,7 +126,10 @@ class Player extends BaseParticipant {
   }
 
   /**
-   * Use a power-up: validates, decrements count, sets as active
+   * Use a power-up: validates and decrements count.
+   * Does NOT set activePowerUp — that is the responsibility of the
+   * power-up strategy (only DOUBLE_POINTS needs deferred activation).
+   * This allows combining multiple power-ups in the same question.
    * @param {string} type - PowerUpType
    * @returns {string} The power-up type used
    */
@@ -134,15 +137,23 @@ class Player extends BaseParticipant {
     if (!PowerUpType[type]) {
       throw new ValidationError(`Invalid power-up type: ${type}`);
     }
-    if (this.activePowerUp !== null) {
-      throw new ValidationError('A power-up is already active for this question');
-    }
     if ((this.powerUps[type] || 0) <= 0) {
       throw new ValidationError(`No ${type} power-up remaining`);
     }
     this.powerUps[type]--;
-    this.activePowerUp = type;
     return type;
+  }
+
+  /**
+   * Mark a power-up as active for scoring (e.g. DOUBLE_POINTS).
+   * Called by the power-up strategy after successful execution.
+   * @param {string} type - PowerUpType
+   */
+  setActivePowerUp(type) {
+    if (!PowerUpType[type]) {
+      throw new ValidationError(`Invalid power-up type: ${type}`);
+    }
+    this.activePowerUp = type;
   }
 
   /**
@@ -154,9 +165,6 @@ class Player extends BaseParticipant {
     return this.activePowerUp === type;
   }
 
-  /**
-   * Clear the active power-up
-   */
   /**
    * Set eliminated options for 50:50 power-up (persisted for reconnect)
    * @param {number[]} options - Array of eliminated option indices

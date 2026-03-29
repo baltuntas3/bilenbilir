@@ -160,11 +160,11 @@ export default function HostGame() {
                         color: 'var(--theme-primary)',
                       }}
                     >
-                      {answeredCount}/{connectedPlayerCount || totalPlayersInPhase || connectedPlayers.length}
+                      {answeredCount}/{totalPlayersInPhase || connectedPlayerCount || connectedPlayers.length || '-'}
                     </Text>
                   </Group>
                   <Progress
-                    value={(answeredCount / Math.max(connectedPlayerCount || totalPlayersInPhase || connectedPlayers.length, 1)) * 100}
+                    value={(answeredCount / Math.max(totalPlayersInPhase || connectedPlayerCount || connectedPlayers.length, 1)) * 100}
                     size="xs"
                     
                     style={{ width: 80 }}
@@ -259,7 +259,7 @@ export default function HostGame() {
             <AnswerDistribution
               distribution={answerDistribution}
               correctAnswerIndex={correctAnswerIndex}
-              totalPlayers={connectedPlayers.length || answeredCount}
+              totalPlayers={totalPlayersInPhase || connectedPlayers.length || answeredCount}
               options={currentQuestion?.options}
             />
 

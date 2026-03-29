@@ -149,12 +149,25 @@ describe('PowerUpRegistry', () => {
   });
 
   describe('DOUBLE_POINTS strategy', () => {
-    it('should execute and return activation', () => {
-      const { result, emitActions } = powerUpRegistry.execute(PowerUpType.DOUBLE_POINTS, {});
+    it('should execute, set activePowerUp on player, and return activation', () => {
+      const mockPlayer = { setActivePowerUp: jest.fn() };
+      const mockRoom = { getPlayer: jest.fn().mockReturnValue(mockPlayer) };
+      const { result, emitActions } = powerUpRegistry.execute(PowerUpType.DOUBLE_POINTS, {
+        room: mockRoom, socketId: 'sock-1'
+      });
       expect(result.type).toBe('DOUBLE_POINTS');
       expect(result.activated).toBe(true);
+      expect(mockPlayer.setActivePowerUp).toHaveBeenCalledWith('DOUBLE_POINTS');
       expect(emitActions.playerEmits[0].event).toBe('power_up_activated');
       expect(emitActions.timerAction).toBeNull();
+    });
+
+    it('should handle missing player gracefully', () => {
+      const mockRoom = { getPlayer: jest.fn().mockReturnValue(null) };
+      const { result } = powerUpRegistry.execute(PowerUpType.DOUBLE_POINTS, {
+        room: mockRoom, socketId: 'sock-1'
+      });
+      expect(result.activated).toBe(true);
     });
   });
 
@@ -174,7 +187,9 @@ describe('PowerUpRegistry', () => {
 
 describe('executePowerUp (backward-compat wrapper)', () => {
   it('should return result without emitActions', () => {
-    const result = executePowerUp(PowerUpType.DOUBLE_POINTS, {});
+    const mockPlayer = { setActivePowerUp: jest.fn() };
+    const mockRoom = { getPlayer: jest.fn().mockReturnValue(mockPlayer) };
+    const result = executePowerUp(PowerUpType.DOUBLE_POINTS, { room: mockRoom, socketId: 'sock-1' });
     expect(result.type).toBe('DOUBLE_POINTS');
     expect(result.activated).toBe(true);
   });
