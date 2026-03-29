@@ -262,7 +262,8 @@
     "playersOnline": "{{count}} players",
     "spectatorCount": "{{count}} watching",
     "allPlayersDisconnected": "All players have disconnected. Waiting for reconnection...",
-    "noPlayersToAdvance": "Cannot continue: no connected players"
+    "noPlayersToAdvance": "Cannot continue: no connected players",
+    "endGameEarly": "End Game"
   },
   "share": {
     "qrLink": "QR / Share Link",

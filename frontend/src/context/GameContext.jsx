@@ -597,6 +597,7 @@ export function GameProvider({ children }) {
   const nextQuestion = useCallback(() => room.hostEmit('next_question'), [room]);
   const pauseGame = useCallback(() => room.hostEmit('pause_game'), [room]);
   const resumeGame = useCallback(() => room.hostEmit('resume_game'), [room]);
+  const endGameEarly = useCallback(() => room.hostEmit('end_game_early'), [room]);
 
   const requestTimerSync = useCallback(() => {
     if (!room.roomPin) return Promise.resolve(null);
@@ -668,14 +669,14 @@ export function GameProvider({ children }) {
     // Game actions
     startGame, startAnswering, submitAnswer, usePowerUp,
     endAnswering, showLeaderboard, nextQuestion,
-    pauseGame, resumeGame,
+    pauseGame, resumeGame, endGameEarly,
     requestTimerSync, getResults, sendReaction,
     resetGame,
   }), [
     room, timer.remainingTime, timer.timeLimit, state,
     startGame, startAnswering, submitAnswer, usePowerUp,
     endAnswering, showLeaderboard, nextQuestion,
-    pauseGame, resumeGame,
+    pauseGame, resumeGame, endGameEarly,
     requestTimerSync, getResults, sendReaction,
     resetGame,
   ]);

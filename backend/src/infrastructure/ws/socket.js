@@ -103,6 +103,11 @@ const initializeSocket = (server) => {
             reason: 'connection_lost'
           });
 
+          // Notify host when all players have left during an active game
+          if (result.connectedPlayerCount === 0 && result.isActiveGame) {
+            io.to(result.pin).emit('all_players_left');
+          }
+
           // Auto-advance if remaining connected players have all answered
           if (result.shouldAutoAdvance) {
             await autoAdvanceToResults({ io, pin: result.pin, endAnsweringLocks, timerService, gameUseCases });

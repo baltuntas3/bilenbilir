@@ -305,14 +305,21 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
 
       socket.leave(pin);
 
+      const connectedPlayerCount = result.room.getConnectedPlayerCount();
       io.to(pin).emit('player_left', {
         playerId: result.player.id,
         nickname: result.player.nickname,
         playerCount: result.room.getPlayerCount(),
-        connectedPlayerCount: result.room.getConnectedPlayerCount(),
+        connectedPlayerCount,
         disconnected: result.wasDisconnected,
         reason: result.wasDisconnected ? 'left_active_game' : 'left'
       });
+
+      // Notify host when all players have left during an active game
+      const isActiveGame = result.room.state !== RoomState.WAITING_PLAYERS && result.room.state !== RoomState.PODIUM;
+      if (connectedPlayerCount === 0 && isActiveGame) {
+        io.to(pin).emit('all_players_left');
+      }
 
       // Auto-advance if remaining connected players have all answered
       if (result.shouldAutoAdvance) {
@@ -672,12 +679,19 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       }
 
       // Notify room
+      const connectedAfterKick = result.room.getConnectedPlayerCount();
       io.to(pin).emit(isBan ? 'player_banned' : 'player_kicked', {
         playerId: result.player.id,
         nickname: result.player.nickname,
         playerCount: result.room.getPlayerCount(),
-        connectedPlayerCount: result.room.getConnectedPlayerCount()
+        connectedPlayerCount: connectedAfterKick
       });
+
+      // Notify host when all players have been removed during an active game
+      const isActiveGame = result.room.state !== RoomState.WAITING_PLAYERS && result.room.state !== RoomState.PODIUM;
+      if (connectedAfterKick === 0 && isActiveGame) {
+        io.to(pin).emit('all_players_left');
+      }
 
       // Auto-advance inline while still holding the lock to prevent race conditions.
       // We do NOT release the lock before auto-advance — releasing first would create a

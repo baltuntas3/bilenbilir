@@ -196,6 +196,10 @@ class RoomCleanupService {
             }
             // Auto-advance check AFTER save — autoAdvance loads fresh room from repo
             if (stalePlayers.length > 0) {
+              // Notify host when all players have left during an active game
+              if (room.getConnectedPlayerCount() === 0 && this._isActiveGame(room) && this.io) {
+                this.io.to(room.pin).emit('all_players_left');
+              }
               await this._checkAutoAdvanceAfterRemoval(room);
             }
             continue;
@@ -234,6 +238,10 @@ class RoomCleanupService {
 
             // Auto-advance check AFTER save — autoAdvance loads fresh room from repo
             if (stalePlayers.length > 0) {
+              // Notify host when all players have left during an active game
+              if (room.getConnectedPlayerCount() === 0 && this._isActiveGame(room) && this.io) {
+                this.io.to(room.pin).emit('all_players_left');
+              }
               await this._checkAutoAdvanceAfterRemoval(room);
             }
           }
@@ -335,7 +343,16 @@ class RoomCleanupService {
             }
           }
 
-          // Check if room is empty for too long (skip if game is active with no players - edge case)
+          // Active game with no connected players — host is stuck.
+          // Give host 2 minutes to end the game manually before auto-closing.
+          if (!shouldDelete && isActiveGame && !hasDisconnectedHost && room.getConnectedPlayerCount() === 0) {
+            if (hasNoPlayers || roomAge > this.playerGracePeriod) {
+              shouldDelete = true;
+              reason = 'Active game with no players (all players left)';
+            }
+          }
+
+          // Check if room is empty for too long (no players at all)
           if (!shouldDelete && hasNoPlayers && !isActiveGame) {
             if (roomAge > this.emptyRoomTimeout) {
               shouldDelete = true;

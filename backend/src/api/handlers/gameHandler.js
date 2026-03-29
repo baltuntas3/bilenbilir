@@ -403,6 +403,47 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
     }
   });
 
+  // Host ends game early (when all players leave) - requires authentication
+  socket.on('end_game_early', async (data, ack) => {
+    try {
+      if (!checkRateLimit('end_game_early')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
+      requireAuth();
+      const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
+
+      // Stop any running timer
+      timerService.stopTimer(pin);
+
+      const result = await gameUseCases.endGameEarly({
+        pin,
+        requesterId: socket.id
+      });
+
+      const gameOverPayload = {
+        podium: result.podium.map(toLeaderboardPlayerDTO),
+        leaderboard: result.leaderboard.map(toLeaderboardPlayerDTO)
+      };
+      if (result.teamPodium) gameOverPayload.teamPodium = result.teamPodium;
+      if (result.teamLeaderboard) gameOverPayload.teamLeaderboard = result.teamLeaderboard;
+      io.to(pin).emit('game_over', gameOverPayload);
+
+      // Archive the game
+      try {
+        await gameUseCases.archiveGame({ pin });
+      } catch (archiveError) {
+        console.error('Failed to archive early-ended game:', archiveError.message);
+      }
+
+      sendAck(ack, { ok: true, isGameOver: true });
+    } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
+      handleSocketError(socket, error, { hasAck: true });
+    }
+  });
+
   // ==================== POWER-UP EVENTS ====================
 
   socket.on('use_power_up', async (data, ack) => {

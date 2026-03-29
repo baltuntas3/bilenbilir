@@ -262,7 +262,8 @@
     "playersOnline": "{{count}} oyuncu",
     "spectatorCount": "{{count}} izliyor",
     "allPlayersDisconnected": "Tüm oyuncuların bağlantısı kesildi. Yeniden bağlanma bekleniyor...",
-    "noPlayersToAdvance": "Devam edilemiyor: bağlı oyuncu yok"
+    "noPlayersToAdvance": "Devam edilemiyor: bağlı oyuncu yok",
+    "endGameEarly": "Oyunu Bitir"
   },
   "share": {
     "qrLink": "QR / Link Paylaş",

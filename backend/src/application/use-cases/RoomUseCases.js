@@ -174,6 +174,7 @@ class RoomUseCases extends SharedUseCases {
       }
       await this.roomRepository.save(room);
 
+      const isActiveGame = room.state !== RoomState.WAITING_PLAYERS && room.state !== RoomState.PODIUM;
       return {
         type: 'player_disconnected',
         pin: room.pin,
@@ -181,7 +182,8 @@ class RoomUseCases extends SharedUseCases {
         playerCount: room.getPlayerCount(),
         connectedPlayerCount: room.getConnectedPlayerCount(),
         canReconnect: room.state !== RoomState.WAITING_PLAYERS,
-        shouldAutoAdvance: room.shouldAutoAdvance()
+        shouldAutoAdvance: room.shouldAutoAdvance(),
+        isActiveGame
       };
     }
 

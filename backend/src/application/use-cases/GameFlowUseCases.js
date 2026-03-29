@@ -149,6 +149,37 @@ class GameFlowUseCases extends SharedUseCases {
     };
   }
 
+  /**
+   * End the game early (skip to PODIUM). Used when all players leave
+   * and the host wants to finish rather than wait.
+   * Allowed from any active game state except PODIUM itself.
+   */
+  async endGameEarly({ pin, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+    if (!room.hasQuizSnapshot()) {
+      throw new ValidationError('Game has not started');
+    }
+    if (room.state === RoomState.PODIUM) {
+      throw new ValidationError('Game has already ended');
+    }
+    if (room.state === RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Game has not started yet');
+    }
+    // Direct state assignment — normal transitions don't allow jumping to PODIUM
+    // from arbitrary states. This is an exceptional host-initiated early termination.
+    room.state = RoomState.PODIUM;
+    room.podiumReachedAt = new Date();
+    await this.roomRepository.save(room);
+
+    const result = { room, podium: room.getPodium(), leaderboard: room.getLeaderboard() };
+    if (room.isTeamMode()) {
+      result.teamPodium = room.getTeamPodium();
+      result.teamLeaderboard = room.getTeamLeaderboard();
+    }
+    return result;
+  }
+
   async getResults({ pin }) {
     const room = await this._getRoomOrThrow(pin);
     if (room.state !== RoomState.PODIUM) {

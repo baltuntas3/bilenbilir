@@ -68,6 +68,7 @@ export default function HostGame() {
     closeRoom,
     pauseGame,
     resumeGame,
+    endGameEarly,
     teamMode,
     teamLeaderboard,
     teamPodium,
@@ -84,6 +85,7 @@ export default function HostGame() {
   const handleEndAnswering = useGameAction(endAnswering);
   const handleShowLeaderboard = useGameAction(showLeaderboard);
   const handleEndGame = useGameAction(closeRoom, { onSuccess: () => navigate('/my-quizzes') });
+  const handleEndGameEarly = useGameAction(endGameEarly);
   const handlePauseGame = useGameAction(pauseGame);
   const handleResumeGame = useGameAction(resumeGame);
 
@@ -488,7 +490,21 @@ export default function HostGame() {
                 color="red"
                 variant="light"
                 title={t('game.allPlayersDisconnected')}
-              />
+              >
+                {gameState !== GAME_STATES.PODIUM && gameState !== GAME_STATES.WAITING_PLAYERS && (
+                  <Button
+                    variant="light"
+                    color="red"
+                    size="xs"
+                    mt="xs"
+                    leftSection={<IconTrophy size={16} />}
+                    onClick={handleEndGameEarly}
+                    style={{ border: '1px solid var(--theme-secondary)' }}
+                  >
+                    {t('game.endGameEarly')}
+                  </Button>
+                )}
+              </Alert>
             )}
           </Transition>
 
