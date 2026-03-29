@@ -18,6 +18,7 @@ const appendPhasePayload = (payload, room, snapshot) => {
   if (state === RoomState.ANSWERING_PHASE) {
     payload.answeredCount = room.getAnsweredCount();
     payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
+    payload.connectedPlayerCount = room.getConnectedPlayerCount();
   }
 
   if (state === RoomState.SHOW_RESULTS && snapshot) {

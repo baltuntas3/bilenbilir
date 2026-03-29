@@ -99,6 +99,7 @@ class GameFlowUseCases extends SharedUseCases {
       skippedCount,
       answeredCount: room.getTotalAnsweredCount(),
       totalPlayers: room.answeringPhasePlayerCount,
+      connectedPlayerCount: room.getConnectedPlayerCount(),
       explanation: currentQuestion.explanation || null
     };
   }

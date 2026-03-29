@@ -134,6 +134,9 @@ class Player extends BaseParticipant {
     if (!PowerUpType[type]) {
       throw new ValidationError(`Invalid power-up type: ${type}`);
     }
+    if (this.activePowerUp !== null) {
+      throw new ValidationError('A power-up is already active for this question');
+    }
     if ((this.powerUps[type] || 0) <= 0) {
       throw new ValidationError(`No ${type} power-up remaining`);
     }

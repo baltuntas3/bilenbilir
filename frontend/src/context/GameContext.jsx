@@ -47,6 +47,7 @@ const initialGameState = {
   correctAnswerIndex: null,
   answeredCount: 0,
   totalPlayersInPhase: 0,
+  connectedPlayerCount: 0,
   hasAnswered: false,
   reactions: [],
   teamLeaderboard: [],
@@ -127,7 +128,7 @@ export function GameProvider({ children }) {
       const {
         state, score, streak, powerUps, eliminatedOptions, hasAnswered, lastAnswer,
         currentQuestionIndex, totalQuestions, currentQuestion, timerSync, playerToken,
-        answeredCount, totalPlayersInPhase, correctAnswerIndex, distribution, explanation,
+        answeredCount, totalPlayersInPhase, connectedPlayerCount, correctAnswerIndex, distribution, explanation,
         leaderboard, podium, teamLeaderboard, teamPodium, pausedFromState
       } = data || {};
       const updates = {};
@@ -143,6 +144,7 @@ export function GameProvider({ children }) {
       if (currentQuestion) updates.currentQuestion = currentQuestion;
       if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
       if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
+      if (typeof connectedPlayerCount === 'number') updates.connectedPlayerCount = connectedPlayerCount;
       if (typeof correctAnswerIndex === 'number') updates.correctAnswerIndex = correctAnswerIndex;
       if (distribution) updates.answerDistribution = distribution;
       if (explanation !== undefined) updates.explanation = explanation;
@@ -174,7 +176,7 @@ export function GameProvider({ children }) {
         state, currentQuestionIndex, totalQuestions, currentQuestion,
         players, timerSync, leaderboard, podium,
         correctAnswerIndex, distribution, explanation,
-        answeredCount, totalPlayersInPhase,
+        answeredCount, totalPlayersInPhase, connectedPlayerCount,
         teamLeaderboard, teamPodium, pausedFromState
       } = data || {};
       const updates = {};
@@ -187,6 +189,7 @@ export function GameProvider({ children }) {
       if (explanation !== undefined) updates.explanation = explanation;
       if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
       if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
+      if (typeof connectedPlayerCount === 'number') updates.connectedPlayerCount = connectedPlayerCount;
       if (leaderboard) updates.leaderboard = leaderboard;
       if (podium) updates.podium = podium;
       if (teamLeaderboard) updates.teamLeaderboard = teamLeaderboard;
@@ -216,7 +219,7 @@ export function GameProvider({ children }) {
     const applySpectatorSnapshot = (data) => {
       const {
         state, currentQuestionIndex, totalQuestions, currentQuestion,
-        answeredCount, totalPlayersInPhase, correctAnswerIndex, distribution, explanation,
+        answeredCount, totalPlayersInPhase, connectedPlayerCount, correctAnswerIndex, distribution, explanation,
         leaderboard, podium, teamLeaderboard, teamPodium, timerSync, pausedFromState
       } = data || {};
       const updates = {};
@@ -226,6 +229,7 @@ export function GameProvider({ children }) {
       if (currentQuestion) updates.currentQuestion = currentQuestion;
       if (typeof answeredCount === 'number') updates.answeredCount = answeredCount;
       if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
+      if (typeof connectedPlayerCount === 'number') updates.connectedPlayerCount = connectedPlayerCount;
       if (typeof correctAnswerIndex === 'number') updates.correctAnswerIndex = correctAnswerIndex;
       if (distribution) updates.answerDistribution = distribution;
       if (explanation !== undefined) updates.explanation = explanation;
@@ -272,6 +276,7 @@ export function GameProvider({ children }) {
         hasAnswered: false,
         lastAnswer: null,
         answeredCount: 0,
+        connectedPlayerCount: 0,
         answerDistribution: null,
         correctAnswerIndex: null,
         explanation: null,
@@ -302,23 +307,26 @@ export function GameProvider({ children }) {
       });
     });
 
-    socketService.on('answer_count_updated', ({ answeredCount, totalPlayersInPhase }) => {
+    socketService.on('answer_count_updated', ({ answeredCount, totalPlayersInPhase, connectedPlayerCount }) => {
       const updates = { answeredCount };
       if (typeof totalPlayersInPhase === 'number') updates.totalPlayersInPhase = totalPlayersInPhase;
+      if (typeof connectedPlayerCount === 'number') updates.connectedPlayerCount = connectedPlayerCount;
       updateState(updates);
     });
     socketService.on('all_players_answered', () => { /* auto-transition to show_results follows */ });
 
-    socketService.on('show_results', ({ correctAnswerIndex, distribution, answeredCount, totalPlayersInPhase, explanation }) => {
+    socketService.on('show_results', ({ correctAnswerIndex, distribution, answeredCount, totalPlayersInPhase, connectedPlayerCount, explanation }) => {
       try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
-      updateState({
+      const updates = {
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
         answerDistribution: distribution,
         answeredCount: typeof answeredCount === 'number' ? answeredCount : 0,
         totalPlayersInPhase,
         explanation: explanation || null,
-      });
+      };
+      if (typeof connectedPlayerCount === 'number') updates.connectedPlayerCount = connectedPlayerCount;
+      updateState(updates);
     });
 
     socketService.on('leaderboard', ({ leaderboard, teamLeaderboard }) => {

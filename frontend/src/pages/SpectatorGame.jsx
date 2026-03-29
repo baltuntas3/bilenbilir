@@ -49,6 +49,7 @@ export default function SpectatorGame() {
     answerDistribution,
     answeredCount,
     totalPlayersInPhase,
+    connectedPlayerCount,
     explanation,
     leaveSpectator,
     teamMode,
@@ -235,11 +236,11 @@ export default function SpectatorGame() {
                         color: 'var(--theme-primary)',
                       }}
                     >
-                      {answeredCount}/{totalPlayersInPhase || connectedPlayers.length}
+                      {answeredCount}/{connectedPlayerCount || totalPlayersInPhase || connectedPlayers.length}
                     </Text>
                   </Group>
                   <Progress
-                    value={(answeredCount / Math.max(totalPlayersInPhase || connectedPlayers.length, 1)) * 100}
+                    value={(answeredCount / Math.max(connectedPlayerCount || totalPlayersInPhase || connectedPlayers.length, 1)) * 100}
                     size="xs"
                     
                     style={{ width: 80 }}

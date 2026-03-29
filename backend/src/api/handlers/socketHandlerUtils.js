@@ -70,6 +70,7 @@ const toShowResultsDTO = (endResult) => ({
   skippedCount: endResult.skippedCount || 0,
   answeredCount: endResult.answeredCount,
   totalPlayersInPhase: endResult.totalPlayers,
+  connectedPlayerCount: endResult.connectedPlayerCount,
   explanation: endResult.explanation || null
 });
 
@@ -137,7 +138,8 @@ const buildShowResultsPayload = (room, snapshot) => {
     skippedCount,
     explanation: question.explanation || null,
     answeredCount: room.getTotalAnsweredCount(),
-    totalPlayersInPhase: room.answeringPhasePlayerCount
+    totalPlayersInPhase: room.answeringPhasePlayerCount,
+    connectedPlayerCount: room.getConnectedPlayerCount()
   };
 };
 

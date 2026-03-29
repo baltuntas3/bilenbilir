@@ -139,7 +139,8 @@ class AnswerUseCases extends SharedUseCases {
 
   async refundPowerUp({ pin, socketId, powerUpType }) {
     if (!pin || !socketId || !powerUpType) return;
-    const room = await this._getRoomOrThrow(pin);
+    const room = await this.roomRepository.findByPin(pin);
+    if (!room) return; // Room already deleted — nothing to refund
     const player = room.getPlayer(socketId);
     if (!player) return;
     // refundPowerUp validates powerUpType internally via PowerUpType check

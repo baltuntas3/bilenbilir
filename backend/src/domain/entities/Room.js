@@ -498,6 +498,7 @@ class Room {
       b.score - a.score
       || b.correctAnswers - a.correctAnswers
       || b.longestStreak - a.longestStreak
+      || a.joinedAt.getTime() - b.joinedAt.getTime()
     );
   }
 
