@@ -187,7 +187,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, payload);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -247,7 +247,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -321,7 +321,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { success: true, role: 'player' });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -351,7 +351,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, payload);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -380,7 +380,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { success: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -452,7 +452,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       socket.to(pin).emit('host_returned');
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -540,7 +540,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -563,7 +563,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, result);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -605,7 +605,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, payload);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -639,7 +639,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -718,7 +718,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       await handleKickOrBan(pin, playerId, false, ack);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -735,7 +735,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       await handleKickOrBan(pin, playerId, true, ack);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -761,7 +761,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -785,7 +785,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, payload);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -851,7 +851,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -877,7 +877,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -922,7 +922,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -952,7 +952,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, payload);
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -982,7 +982,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -1010,7 +1010,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -1038,7 +1038,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -1066,7 +1066,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -1095,7 +1095,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 };

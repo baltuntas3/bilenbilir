@@ -71,7 +71,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -118,7 +118,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -149,7 +149,6 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         elapsedTimeMs = gameUseCases.getServerElapsedTime(timerService, pin);
       } catch (err) {
         if (typeof ack === 'function') ack({ ok: false, error: err.message });
-        socket.emit('error', { error: err.message });
         return;
       }
 
@@ -190,7 +189,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
     } catch (error) {
       if (typeof ack === 'function') ack({ ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -225,13 +224,13 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         sendAck(ack, { ok: true });
       } catch (error) {
         sendAck(ack, { ok: false, error: error.message });
-        handleSocketError(socket, error);
+        handleSocketError(socket, error, { hasAck: true });
       } finally {
         endAnsweringLocks.release(pin);
       }
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -263,7 +262,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       sendAck(ack, { ok: true });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -336,7 +335,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -370,7 +369,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       if (typeof ack === 'function') ack(finalResultsPayload);
     } catch (error) {
       if (typeof ack === 'function') ack({ ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -400,7 +399,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
     } catch (error) {
       if (typeof ack === 'function') ack({ ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -496,7 +495,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       sendAck(ack, { ok: true, powerUpType });
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -547,7 +546,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 
@@ -654,7 +653,7 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       }
     } catch (error) {
       sendAck(ack, { ok: false, error: error.message });
-      handleSocketError(socket, error);
+      handleSocketError(socket, error, { hasAck: true });
     }
   });
 

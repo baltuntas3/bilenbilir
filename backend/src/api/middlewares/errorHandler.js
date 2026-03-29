@@ -63,10 +63,21 @@ const errorHandler = (err, req, res, next) => {
  * Socket.io error handler
  * For use in WebSocket handlers
  * Uses same { error: ... } format as REST API for consistency
+ *
+ * @param {Socket} socket - Socket.IO socket instance
+ * @param {Error} error - The error to handle
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.hasAck=false] - If true, operational errors are NOT emitted
+ *   via the 'error' event because the ack callback already delivered the error to the client.
+ *   Only unexpected/programming errors are emitted to ensure they are surfaced.
  */
-const handleSocketError = (socket, error) => {
+const handleSocketError = (socket, error, { hasAck = false } = {}) => {
   if (error instanceof AppError && error.isOperational) {
-    socket.emit('error', { error: error.message });
+    // When an ack callback is present, the caller already sent the error via ack.
+    // Emitting it again via the 'error' event would cause duplicate error display on the client.
+    if (!hasAck) {
+      socket.emit('error', { error: error.message });
+    }
     return;
   }
 
@@ -76,7 +87,7 @@ const handleSocketError = (socket, error) => {
     return;
   }
 
-  // Unknown errors
+  // Unknown/programming errors — always emit regardless of ack
   console.error('Socket error:', error);
   socket.emit('error', { error: 'An unexpected error occurred' });
 };
