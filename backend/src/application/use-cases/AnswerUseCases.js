@@ -149,13 +149,18 @@ class AnswerUseCases extends SharedUseCases {
 
   async refundPowerUp({ pin, socketId, powerUpType }) {
     if (!pin || !socketId || !powerUpType) return;
-    const room = await this.roomRepository.findByPin(pin);
-    if (!room) return; // Room already deleted — nothing to refund
-    const player = room.getPlayer(socketId);
-    if (!player) return;
-    // refundPowerUp validates powerUpType internally via PowerUpType check
-    player.refundPowerUp(powerUpType);
-    await this.roomRepository.save(room);
+    const playerKey = `${pin}:${socketId}`;
+    // Use same per-player lock as submitAnswer to prevent concurrent read-modify-write
+    return this.pendingAnswers.withLock(playerKey, 'Refund in progress', async () => {
+      const room = await this.roomRepository.findByPin(pin);
+      if (!room) return; // Room already deleted — nothing to refund
+      const player = room.getPlayer(socketId);
+      if (!player) return;
+      player.refundPowerUp(powerUpType);
+      await this.roomRepository.save(room);
+    }).catch(() => {
+      // Lock contention — refund will be retried by caller or is no longer needed
+    });
   }
 
   getServerElapsedTime(timerService, pin) {

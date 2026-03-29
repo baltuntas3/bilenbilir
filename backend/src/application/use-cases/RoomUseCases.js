@@ -392,9 +392,9 @@ class RoomUseCases extends SharedUseCases {
     const room = await this._getRoomOrThrow(pin);
     this._throwIfNotHost(room, requesterId);
 
-    // Auto-assign color based on current team count
-    const colorIndex = room.getAllTeams().length % TEAM_COLORS.length;
-    const color = TEAM_COLORS[colorIndex];
+    // Pick first unused color to avoid duplicates after remove+add cycles
+    const usedColors = new Set(room.getAllTeams().map(t => t.color));
+    const color = TEAM_COLORS.find(c => !usedColors.has(c)) || TEAM_COLORS[room.getAllTeams().length % TEAM_COLORS.length];
 
     const team = new Team({
       id: generateId(),

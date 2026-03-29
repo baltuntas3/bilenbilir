@@ -113,6 +113,14 @@ class GameArchiveUseCases extends SharedUseCases {
         const room = await this.roomRepository.findByPin(pin);
         if (!room || !room.hasQuizSnapshot()) return null;
 
+        // Skip rooms in PODIUM state — they were already archived as 'completed' by archiveGame.
+        // Re-archiving would create a duplicate GameSession record.
+        if (room.state === RoomState.PODIUM) {
+          try { await this.roomRepository.delete(pin); }
+          catch (err) { console.error(`Failed to delete completed room ${pin}:`, err.message); }
+          return null;
+        }
+
         const sessionData = this._buildSessionData(room, 'interrupted', {
           interruptionReason: reason,
           lastQuestionIndex: room.currentQuestionIndex,

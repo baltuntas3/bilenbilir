@@ -50,20 +50,23 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         questionCount: parsedQuestionCount
       });
 
+      const gameStartedBase = {
+        totalQuestions: result.totalQuestions,
+        questionIndex: 0,
+        powerUps: DEFAULT_POWER_UPS,
+        teamMode: result.room.isTeamMode()
+      };
+
       // Send to host with full question data
       socket.emit('game_started', {
-        totalQuestions: result.totalQuestions,
-        currentQuestion: result.currentQuestion,
-        questionIndex: 0,
-        powerUps: DEFAULT_POWER_UPS
+        ...gameStartedBase,
+        currentQuestion: result.currentQuestion
       });
 
       // Send to players without answer
       socket.to(pin).emit('game_started', {
-        totalQuestions: result.totalQuestions,
-        currentQuestion: toPlayerQuestionDTO(result.currentQuestion),
-        questionIndex: 0,
-        powerUps: DEFAULT_POWER_UPS
+        ...gameStartedBase,
+        currentQuestion: toPlayerQuestionDTO(result.currentQuestion)
       });
       sendAck(ack, { ok: true });
     } catch (error) {
@@ -89,13 +92,20 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         pin,
         requesterId: socket.id
       });
-      // Start server-side timer silently — emit timer_started AFTER answering_started
+      // Start server-side timer silently �� emit timer_started AFTER answering_started
       // to guarantee clients receive state transition before timer data.
-      const timerInfo = timerService.startTimer(pin, result.timeLimit, async () => {
-        // Timer expired — emit time_expired before auto-advancing
-        io.to(pin).emit('time_expired');
-        await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
-      }, { silent: true });
+      let timerInfo;
+      try {
+        timerInfo = timerService.startTimer(pin, result.timeLimit, async () => {
+          // Timer expired — emit time_expired before auto-advancing
+          io.to(pin).emit('time_expired');
+          await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
+        }, { silent: true });
+      } catch (timerErr) {
+        // Timer failed — rollback state to prevent stuck ANSWERING_PHASE without timer
+        await gameUseCases.rollbackAnsweringPhase({ pin });
+        throw timerErr;
+      }
 
       io.to(pin).emit('answering_started', {
         timeLimit: result.timeLimit,
@@ -123,6 +133,12 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
 
       const { pin, answerIndex } = data || {};
       if (!isValidPin(pin)) { if (typeof ack === 'function') ack({ ok: false, error: 'Valid PIN is required' }); return; }
+
+      // Verify socket is a member of the room
+      if (!socket.rooms.has(pin)) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Not a member of this room' });
+        return;
+      }
 
       // SECURITY: Only use pin and answerIndex from client
       // Elapsed time MUST be calculated server-side to prevent manipulation
@@ -400,6 +416,11 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       const { pin, powerUpType } = data || {};
       if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
+      if (!socket.rooms.has(pin)) {
+        sendAck(ack, { ok: false, error: 'Not a member of this room' });
+        return;
+      }
+
       // Pre-check: reject TIME_EXTENSION if timer is inactive or budget exhausted
       if (powerUpType === 'TIME_EXTENSION') {
         if (!timerService.isTimerActive(pin)) {
@@ -565,18 +586,29 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
           // Start timer silently FIRST, then emit state transition + timer data
           // in guaranteed order. Same pattern as start_answering handler.
           const remainingSeconds = Math.max(1, Math.round(result.timerState.remainingMs / 1000));
-          const timerInfo = timerService.startTimer(pin, remainingSeconds, async () => {
+          let timerInfo;
+          try {
+            timerInfo = timerService.startTimer(pin, remainingSeconds, async () => {
+              io.to(pin).emit('time_expired');
+              await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
+            }, {
+              silent: true,
+              minDuration: 1,
+              maxDuration: MAX_EXTENDED_TIMER_SECONDS,
+              originalDurationMs: result.timerState.originalDurationMs
+            });
+          } catch (timerErr) {
+            // Timer failed after resume — auto-advance to prevent stuck state
             io.to(pin).emit('time_expired');
             await autoAdvanceToResults({ io, pin, endAnsweringLocks, timerService, gameUseCases });
-          }, {
-            silent: true,
-            minDuration: 1,
-            maxDuration: MAX_EXTENDED_TIMER_SECONDS,
-            originalDurationMs: result.timerState.originalDurationMs
-          });
+            sendAck(ack, { ok: true });
+            return;
+          }
+          const timerSync = timerService.getTimerSync(pin);
           io.to(pin).emit('game_resumed', {
             state: result.resumedState,
-            pauseDuration: result.pauseDuration
+            pauseDuration: result.pauseDuration,
+            timerSync
           });
           io.to(pin).emit('timer_started', timerInfo);
         }

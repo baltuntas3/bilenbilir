@@ -163,10 +163,15 @@ export function GameProvider({ children }) {
         } catch { /* timer may be unavailable */ }
       }
 
-      // Save rotated token to session storage
-      if (playerToken) {
-        roomRef.current.updateRoomState({ playerToken });
-        saveSession({ playerToken });
+      // Save rotated token and restore room-level state (team mode, lightning round)
+      const roomUpdates = {};
+      if (playerToken) roomUpdates.playerToken = playerToken;
+      if (typeof data.teamMode === 'boolean') roomUpdates.teamMode = data.teamMode;
+      if (data.teams) roomUpdates.teams = data.teams;
+      if (data.lightningRound) roomUpdates.lightningRound = data.lightningRound;
+      if (Object.keys(roomUpdates).length > 0) {
+        roomRef.current.updateRoomState(roomUpdates);
+        if (playerToken) saveSession({ playerToken });
       }
     });
 
@@ -197,10 +202,13 @@ export function GameProvider({ children }) {
       if (pausedFromState) updates.previousState = pausedFromState;
       if (Object.keys(updates).length > 0) updateState(updates);
 
-      // Restore players list and rotated host token in RoomContext
+      // Restore players list, rotated host token, and room-level config in RoomContext
       const roomUpdates = {};
       if (players) roomUpdates.players = players;
       if (data.hostToken) roomUpdates.hostToken = data.hostToken;
+      if (typeof data.teamMode === 'boolean') roomUpdates.teamMode = data.teamMode;
+      if (data.teams) roomUpdates.teams = data.teams;
+      if (data.lightningRound) roomUpdates.lightningRound = data.lightningRound;
       if (Object.keys(roomUpdates).length > 0) {
         roomRef.current.updateRoomState(roomUpdates);
         if (data.hostToken) saveSession({ hostToken: data.hostToken });
@@ -240,6 +248,14 @@ export function GameProvider({ children }) {
       if (pausedFromState) updates.previousState = pausedFromState;
       if (Object.keys(updates).length > 0) updateState(updates);
 
+      // Restore room-level config (team mode, lightning round)
+      const roomUpdates = {};
+      if (typeof data.teamMode === 'boolean') roomUpdates.teamMode = data.teamMode;
+      if (data.teams) roomUpdates.teams = data.teams;
+      if (data.lightningRound) roomUpdates.lightningRound = data.lightningRound;
+      if (data.spectatorToken) roomUpdates.spectatorToken = data.spectatorToken;
+      if (Object.keys(roomUpdates).length > 0) roomRef.current.updateRoomState(roomUpdates);
+
       if (timerSync && timerSync.remainingMs > 0) {
         try {
           const adjustedEndTime = calcAdjustedEndTime(timerSync.endTime, timerSync.serverTime, timerSync.remainingMs);
@@ -252,7 +268,11 @@ export function GameProvider({ children }) {
 
     // Game flow events
     socketService.on('game_started', (data) => {
-      const { totalQuestions, currentQuestion, questionIndex, powerUps } = data || {};
+      const { totalQuestions, currentQuestion, questionIndex, powerUps, teamMode } = data || {};
+      // Sync teamMode to RoomContext so UI components render team tabs
+      if (typeof teamMode === 'boolean') {
+        roomRef.current.updateRoomState({ teamMode });
+      }
       setState((prev) => ({
         ...prev,
         gameState: GAME_STATES.QUESTION_INTRO,
@@ -291,6 +311,10 @@ export function GameProvider({ children }) {
         timeLimit,
         isLightning: isLightning || false,
         answeredCount: 0,
+        // Defensive reset: if question_intro was missed (network hiccup),
+        // ensure player can still answer in this phase
+        hasAnswered: false,
+        lastAnswer: null,
       };
       if (typeof connectedPlayerCount === 'number') {
         updates.totalPlayersInPhase = connectedPlayerCount;
@@ -431,11 +455,19 @@ export function GameProvider({ children }) {
       }));
       showToast.info('Game paused by host');
     });
-    socketService.on('game_resumed', ({ state: resumedState }) => {
+    socketService.on('game_resumed', ({ state: resumedState, timerSync: resumeTimerSync }) => {
       setState(prev => {
         const targetState = resumedState || prev.previousState || GAME_STATES.LEADERBOARD;
         return { ...prev, gameState: targetState, previousState: null };
       });
+      // If server included timer data in resume payload, start timer immediately
+      // to avoid gap between game_resumed and timer_started events
+      if (resumeTimerSync && resumeTimerSync.remainingMs > 0) {
+        try {
+          const adjustedEndTime = calcAdjustedEndTime(resumeTimerSync.endTime, resumeTimerSync.serverTime, resumeTimerSync.remainingMs);
+          timerRef.current.startTimer(Math.ceil(resumeTimerSync.remainingMs / 1000), adjustedEndTime, true);
+        } catch { /* timer may be unavailable */ }
+      }
       showToast.info('Game resumed');
     });
 

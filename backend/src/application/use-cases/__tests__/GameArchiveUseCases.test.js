@@ -148,9 +148,27 @@ describe('GameArchiveUseCases', () => {
   });
 
   describe('saveInterruptedGame', () => {
+    beforeEach(() => {
+      // saveInterruptedGame skips PODIUM rooms (already archived as 'completed'),
+      // so use a non-PODIUM state for interrupted game tests
+      mocks.room.state = 'ANSWERING_PHASE';
+    });
+
+    afterEach(() => {
+      mocks.room.state = 'PODIUM';
+    });
+
     it('should save interrupted game', async () => {
       const result = await uc.saveInterruptedGame({ pin: '123456', reason: 'host_disconnect' });
       expect(result.session).toBeDefined();
+    });
+
+    it('should skip PODIUM rooms to avoid double-archival', async () => {
+      mocks.room.state = 'PODIUM';
+      const result = await uc.saveInterruptedGame({ pin: '123456', reason: 'cleanup' });
+      expect(result).toBeNull();
+      expect(mocks.roomRepo.delete).toHaveBeenCalledWith('123456');
+      expect(mocks.sessionRepo.save).not.toHaveBeenCalled();
     });
 
     it('should return null if no session repo', async () => {
@@ -181,8 +199,11 @@ describe('GameArchiveUseCases', () => {
 
   describe('saveAllInterruptedGames', () => {
     it('should save all games with snapshots', async () => {
+      // Use non-PODIUM state — PODIUM rooms are skipped (already archived as 'completed')
+      mocks.room.state = 'ANSWERING_PHASE';
       const result = await uc.saveAllInterruptedGames('server_shutdown');
       expect(result.saved).toBe(1);
+      mocks.room.state = 'PODIUM';
     });
 
     it('should handle failures', async () => {

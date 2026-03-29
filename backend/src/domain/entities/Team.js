@@ -9,12 +9,13 @@ class Team {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       throw new ValidationError('Team name is required');
     }
-    if (name.length > MAX_TEAM_NAME) {
+    const trimmedName = name.trim();
+    if (trimmedName.length > MAX_TEAM_NAME) {
       throw new ValidationError(`Team name must be at most ${MAX_TEAM_NAME} characters`);
     }
 
     this.id = id;
-    this.name = name.trim();
+    this.name = trimmedName;
     this.color = color;
     this.playerIds = [...playerIds];
   }

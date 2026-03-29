@@ -24,10 +24,10 @@ class Score {
     if (typeof points !== 'number' || isNaN(points)) {
       throw new ValidationError('Points must be a number');
     }
-    const newValue = this.value + points;
-    if (newValue < 0) {
-      throw new ValidationError('Resulting score cannot be negative');
+    if (points < 0) {
+      throw new ValidationError('Points cannot be negative');
     }
+    const newValue = this.value + points;
     // Cap at MAX_SCORE with warning for tracking purposes
     if (newValue > MAX_SCORE) {
       console.warn(`[Score] Score capped at MAX_SCORE: attempted ${newValue}, capped to ${MAX_SCORE}`);

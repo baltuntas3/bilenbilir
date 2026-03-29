@@ -15,6 +15,15 @@ const { endAnsweringLocks } = require('./gameHandler');
 const appendPhasePayload = (payload, room, snapshot) => {
   const state = room.state;
 
+  // Always include team mode config so reconnecting clients can render team UI
+  if (room.isTeamMode()) {
+    payload.teamMode = true;
+    payload.teams = room.getAllTeams().map(toTeamDTO);
+  }
+
+  // Always include lightning round config for reconnecting clients
+  payload.lightningRound = room.getLightningConfig();
+
   if (state === RoomState.ANSWERING_PHASE) {
     payload.answeredCount = room.getAnsweredCount();
     payload.totalPlayersInPhase = room.answeringPhasePlayerCount;
@@ -582,7 +591,7 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
       io.in(pin).socketsLeave(pin);
 
       // Delete room only if saveInterruptedGame didn't already delete it
-      const roomStillExists = await gameUseCases.roomExists(pin);
+      const roomStillExists = gameUseCases ? await gameUseCases.roomExists(pin) : await roomUseCases.getRoom({ pin }).then(() => true).catch(() => false);
       const result = roomStillExists
         ? await roomUseCases.forceCloseHostRoom({ hostUserId: socket.user.userId })
         : { closed: true, pin };

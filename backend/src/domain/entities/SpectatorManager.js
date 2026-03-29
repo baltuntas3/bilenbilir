@@ -79,12 +79,17 @@ class SpectatorManager {
   }
 
   removeStaleDisconnected(gracePeriodMs) {
-    const stale = this.spectators.filter(s =>
-      s.isDisconnected() && s.getDisconnectedDuration() > gracePeriodMs
-    );
-    this.spectators = this.spectators.filter(s =>
-      !s.isDisconnected() || s.getDisconnectedDuration() <= gracePeriodMs
-    );
+    // Single pass partition to avoid time-dependent double evaluation
+    const stale = [];
+    const remaining = [];
+    for (const spectator of this.spectators) {
+      if (spectator.isDisconnected() && spectator.getDisconnectedDuration() > gracePeriodMs) {
+        stale.push(spectator);
+      } else {
+        remaining.push(spectator);
+      }
+    }
+    if (stale.length > 0) this.spectators = remaining;
     return stale;
   }
 

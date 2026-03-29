@@ -483,6 +483,10 @@ export function RoomProvider({ children }) {
           await reconnectSpectator(session.pin, session.spectatorToken);
           updateRoomState({ isReconnecting: false });
           showToast.success('Reconnected as spectator!');
+        } else {
+          // No matching reconnection path (e.g. host session but not authenticated)
+          clearSession();
+          updateRoomState({ isReconnecting: false });
         }
       } catch (error) {
         showToast.error('Failed to reconnect: ' + error.message);

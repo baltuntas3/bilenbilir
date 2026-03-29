@@ -70,6 +70,19 @@ class GameFlowUseCases extends SharedUseCases {
     return { room, timeLimit, optionCount: currentQuestion.options.length, isLightning };
   }
 
+  /**
+   * Rollback from ANSWERING_PHASE to QUESTION_INTRO when timer fails to start.
+   * Prevents the game from being stuck in ANSWERING_PHASE without a running timer.
+   */
+  async rollbackAnsweringPhase({ pin }) {
+    const room = await this._getRoomOrThrow(pin);
+    if (room.state !== RoomState.ANSWERING_PHASE) return;
+    // Direct state assignment for rollback — validTransitions doesn't allow ANSWERING_PHASE → QUESTION_INTRO
+    room.state = RoomState.QUESTION_INTRO;
+    room.answeringPhasePlayerCount = 0;
+    await this.roomRepository.save(room);
+  }
+
   async endAnsweringPhase({ pin, requesterId, isSystemTriggered = false }) {
     const room = await this._getRoomOrThrow(pin);
     if (room.state !== RoomState.ANSWERING_PHASE) throw new ValidationError('Not in answering phase');
@@ -118,10 +131,6 @@ class GameFlowUseCases extends SharedUseCases {
 
     const totalQuestions = snapshot.getTotalQuestions();
     const hasMore = room.nextQuestion(requesterId, totalQuestions);
-    if (hasMore) {
-      // Clear previous round's answers so reconnecting players see hasAnswered=false
-      room.resetPlayerAnswersForNextQuestion();
-    }
     await this.roomRepository.save(room);
 
     if (!hasMore) {

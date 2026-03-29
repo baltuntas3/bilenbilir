@@ -47,6 +47,7 @@ class GameUseCases {
   getResults(params) { return this._flow.getResults(params); }
   pauseGame(params) { return this._flow.pauseGame(params); }
   resumeGame(params) { return this._flow.resumeGame(params); }
+  rollbackAnsweringPhase(params) { return this._flow.rollbackAnsweringPhase(params); }
 
   // Answer delegation
   submitAnswer(params) { return this._answer.submitAnswer(params); }

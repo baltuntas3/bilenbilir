@@ -129,7 +129,7 @@ class Room {
     // All validations passed — apply atomically
     this.quizSnapshot = quizSnapshot;
     this.gameStartedAt = new Date();
-    this.state = RoomState.QUESTION_INTRO;
+    this.setState(RoomState.QUESTION_INTRO);
   }
 
   /**
@@ -230,7 +230,9 @@ class Room {
       throw new ValidationError('Players can only join during lobby phase');
     }
 
-    if (this.players.length >= MAX_PLAYERS) {
+    // Only count connected players toward the limit — disconnected players in lobby
+    // are stale and should not block new joins
+    if (this.getConnectedPlayerCount() >= MAX_PLAYERS) {
       throw new ValidationError(`Room is full (maximum ${MAX_PLAYERS} players)`);
     }
 
@@ -313,24 +315,23 @@ class Room {
    * @returns {Player[]} Removed players
    */
   removeStaleDisconnectedPlayers(gracePeriodMs) {
-    const stalePlayers = this.players.filter(p =>
-      p.isDisconnected() && p.getDisconnectedDuration() > gracePeriodMs
-    );
+    // Single pass: partition players into stale and remaining to avoid
+    // time-dependent double evaluation between two separate filter calls
+    const stalePlayers = [];
+    const remainingPlayers = [];
+    for (const player of this.players) {
+      if (player.isDisconnected() && player.getDisconnectedDuration() > gracePeriodMs) {
+        stalePlayers.push(player);
+      } else {
+        remainingPlayers.push(player);
+      }
+    }
 
     if (stalePlayers.length > 0) {
-      // Remove team assignments for stale players
       for (const player of stalePlayers) {
         this._teamManager.removePlayer(player.id);
       }
-
-      this.players = this.players.filter(p =>
-        !p.isDisconnected() || p.getDisconnectedDuration() <= gracePeriodMs
-      );
-
-      // answeringPhasePlayerCount is NOT decremented here because stale players
-      // are by definition disconnected. The snapshot only tracks connected players
-      // at phase start, and setPlayerDisconnected() already excludes them from
-      // auto-advance checks via haveAllPlayersAnswered().
+      this.players = remainingPlayers;
     }
 
     return stalePlayers;
@@ -454,6 +455,7 @@ class Room {
       return false;
     }
     this.currentQuestionIndex++;
+    this.resetPlayerAnswersForNextQuestion();
     this.setState(RoomState.QUESTION_INTRO);
     return true;
   }
@@ -843,10 +845,22 @@ class Room {
   }
 
   addTeam(team) {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Teams can only be modified in lobby');
+    }
+    if (!this._teamManager.isEnabled()) {
+      throw new ValidationError('Team mode is not enabled');
+    }
     this._teamManager.addTeam(team);
   }
 
   removeTeam(teamId) {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Teams can only be modified in lobby');
+    }
+    if (!this._teamManager.isEnabled()) {
+      throw new ValidationError('Team mode is not enabled');
+    }
     this._teamManager.removeTeam(teamId);
   }
 

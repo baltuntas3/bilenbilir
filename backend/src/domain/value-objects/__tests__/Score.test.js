@@ -46,11 +46,10 @@ describe('Score', () => {
       expect(score.value).toBe(500); // Original unchanged
     });
 
-    it('should handle negative addition', () => {
+    it('should reject negative addition', () => {
       const score = new Score(500);
-      const newScore = score.add(-200);
 
-      expect(newScore.value).toBe(300);
+      expect(() => score.add(-200)).toThrow('Points cannot be negative');
     });
   });
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 
 const TimerContext = createContext(null);
 
@@ -75,6 +75,13 @@ export function TimerProvider({ children }) {
     setRemainingTime(0);
     setTimeLimit(30);
   }, [stopTimer]);
+
+  // Clear interval on unmount to prevent memory leak and state updates on unmounted component
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   const value = useMemo(() => ({
     remainingTime,

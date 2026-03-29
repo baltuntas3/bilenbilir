@@ -181,7 +181,10 @@ const buildPodiumPayload = (room) => {
     podium: room.getPodium().map(toLeaderboardPlayerDTO),
     leaderboard: room.getLeaderboard().map(toLeaderboardPlayerDTO)
   };
-  if (room.isTeamMode()) payload.teamPodium = room.getTeamPodium();
+  if (room.isTeamMode()) {
+    payload.teamPodium = room.getTeamPodium();
+    payload.teamLeaderboard = room.getTeamLeaderboard();
+  }
   return payload;
 };
 
