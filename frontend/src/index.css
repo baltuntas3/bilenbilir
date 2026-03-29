@@ -231,14 +231,6 @@ body {
   100%{opacity:0;transform:translateY(-80vh) scale(.8)}
 }
 
-@keyframes glitch {
-  0%,100%{transform:translate(0)}
-  20%{transform:translate(-2px,2px)}
-  40%{transform:translate(2px,-2px)}
-  60%{transform:translate(-1px,-1px)}
-  80%{transform:translate(1px,1px)}
-}
-
 /* ===== SAFE AREA ===== */
 .safe-bottom { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
 

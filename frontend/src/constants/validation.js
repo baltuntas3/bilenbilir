@@ -55,11 +55,6 @@ export const QUIZ_CATEGORIES = [
   'Diğer'
 ];
 
-export const quizCategoryValidation = (value) => {
-  if (value && !QUIZ_CATEGORIES.includes(value)) return 'Invalid category';
-  return null;
-};
-
 export const quizTagsValidation = (value) => {
   if (!value || !Array.isArray(value)) return null;
   if (value.length > 5) return 'Maximum 5 tags allowed';
@@ -73,23 +68,6 @@ export const quizTagsValidation = (value) => {
 // Question validations
 export const questionTextValidation = (value) => {
   if (!value) return 'Question text is required';
-  return null;
-};
-
-export const questionOptionsValidation = (value, values) => {
-  if (!value || !Array.isArray(value)) return 'Options are required';
-  const minOptions = values?.type === 'TRUE_FALSE' ? 2 : 2;
-  const maxOptions = values?.type === 'TRUE_FALSE' ? 2 : 6;
-  if (value.length < minOptions) return `At least ${minOptions} options required`;
-  if (value.length > maxOptions) return `At most ${maxOptions} options allowed`;
-  if (value.some(opt => !opt || !opt.trim())) return 'All options must have text';
-  return null;
-};
-
-export const questionCorrectAnswerValidation = (value, values) => {
-  if (value === null || value === undefined) return 'Correct answer is required';
-  if (value < 0) return 'Please select a correct answer';
-  if (values?.options && value >= values.options.length) return 'Invalid correct answer';
   return null;
 };
 

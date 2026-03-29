@@ -25,11 +25,6 @@ class GameUseCases {
 
   async roomExists(pin) { return await this.roomRepository.exists(pin); }
 
-  async isInState(pin, state) {
-    const room = await this.roomRepository.findByPin(pin);
-    return room ? room.state === state : false;
-  }
-
   async getNicknameForSocket(pin, socketId) {
     const room = await this.roomRepository.findByPin(pin);
     if (!room) return null;

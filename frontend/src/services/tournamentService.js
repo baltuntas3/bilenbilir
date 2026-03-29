@@ -7,7 +7,6 @@ const tournamentService = {
   addRound: (id, quizId) => api.post(`/tournaments/${id}/rounds`, { quizId }).then(r => r.data),
   removeRound: (id, index) => api.delete(`/tournaments/${id}/rounds/${index}`).then(r => r.data),
   start: (id) => api.post(`/tournaments/${id}/start`).then(r => r.data),
-  completeRound: (id, roundIndex, results) => api.post(`/tournaments/${id}/complete-round`, { roundIndex, results }).then(r => r.data),
   nextRound: (id) => api.post(`/tournaments/${id}/next-round`).then(r => r.data),
   delete: (id) => api.delete(`/tournaments/${id}`).then(r => r.data),
 };

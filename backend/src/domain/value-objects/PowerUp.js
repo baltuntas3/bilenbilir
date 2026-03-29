@@ -136,12 +136,6 @@ powerUpRegistry.register(PowerUpType.TIME_EXTENSION, {
   }
 });
 
-// Backward-compatible wrapper
-function executePowerUp(type, context) {
-  const { result } = powerUpRegistry.execute(type, context);
-  return result;
-}
-
 class PowerUp {
   constructor(type, count = 1) {
     if (!PowerUpType[type]) {
@@ -164,4 +158,4 @@ class PowerUp {
   }
 }
 
-module.exports = { PowerUp, PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpRegistry, executePowerUp };
+module.exports = { PowerUp, PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpRegistry };

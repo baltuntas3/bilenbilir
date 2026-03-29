@@ -1,4 +1,4 @@
-const { PowerUp, PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpRegistry, executePowerUp } = require('../PowerUp');
+const { PowerUp, PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpRegistry } = require('../PowerUp');
 
 describe('PowerUp class', () => {
   describe('constructor', () => {
@@ -185,12 +185,3 @@ describe('PowerUpRegistry', () => {
   });
 });
 
-describe('executePowerUp (backward-compat wrapper)', () => {
-  it('should return result without emitActions', () => {
-    const mockPlayer = { setActivePowerUp: jest.fn() };
-    const mockRoom = { getPlayer: jest.fn().mockReturnValue(mockPlayer) };
-    const result = executePowerUp(PowerUpType.DOUBLE_POINTS, { room: mockRoom, socketId: 'sock-1' });
-    expect(result.type).toBe('DOUBLE_POINTS');
-    expect(result.activated).toBe(true);
-  });
-});

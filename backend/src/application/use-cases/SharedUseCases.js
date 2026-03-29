@@ -35,11 +35,6 @@ class SharedUseCases {
     if (!question) throw new NotFoundError(`Question at index ${index} not found`);
     return question;
   }
-
-  async isInState(pin, state) {
-    const room = await this.roomRepository.findByPin(pin);
-    return room ? room.state === state : false;
-  }
 }
 
 module.exports = { SharedUseCases };

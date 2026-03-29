@@ -34,16 +34,6 @@ export const quizService = {
     return response.data;
   },
 
-  getCategories: async () => {
-    const response = await api.get('/quizzes/categories');
-    return response.data;
-  },
-
-  getPopularTags: async (limit = 20) => {
-    const response = await api.get('/quizzes/tags/popular', { params: { limit } });
-    return response.data;
-  },
-
   getMy: async (page = 1, limit = 20) => {
     const response = await api.get('/quizzes/my', { params: { page, limit } });
     return response.data;
@@ -72,11 +62,6 @@ export const quizService = {
 
   deleteQuestion: async (quizId, questionId) => {
     await api.delete(`/quizzes/${quizId}/questions/${questionId}`);
-  },
-
-  reorderQuestions: async (quizId, questionOrder) => {
-    const response = await api.put(`/quizzes/${quizId}/questions/reorder`, { questionOrder });
-    return response.data;
   },
 
   // Import/Export
