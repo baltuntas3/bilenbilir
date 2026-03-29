@@ -23,6 +23,8 @@
  * - Handle timer state restoration (pause/resume logic)
  * - Notify players of recovery with sync data
  */
+const { RoomState } = require('../../domain/entities');
+
 class RoomRepository {
   constructor() {
     this.rooms = new Map(); // pin -> Room
@@ -332,7 +334,7 @@ class RoomRepository {
     if (!hostUserId) return null;
 
     for (const room of this.rooms.values()) {
-      if (room.hostUserId === hostUserId && room.state !== 'PODIUM') {
+      if (room.hostUserId === hostUserId && room.state !== RoomState.PODIUM) {
         return room;
       }
     }

@@ -651,28 +651,43 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
    * @private
    */
   const handleKickOrBan = async (pin, playerId, isBan, ack) => {
-    const result = isBan
-      ? await roomUseCases.banPlayer({ pin, playerId, requesterId: socket.id })
-      : await roomUseCases.kickPlayer({ pin, playerId, requesterId: socket.id });
-
-    // Notify kicked/banned player
-    const targetSocket = io.sockets.sockets.get(result.player.socketId);
-    if (targetSocket) {
-      targetSocket.emit('you_were_kicked', { reason: isBan ? 'banned' : 'kicked' });
-      targetSocket.leave(pin);
+    // Acquire endAnsweringLocks to prevent race with concurrent auto-advance.
+    // Kick reduces player count, which may trigger shouldAutoAdvance() — this must be
+    // mutually exclusive with timer-driven or all-answered auto-advance.
+    if (!endAnsweringLocks.acquire(pin)) {
+      sendAck(ack, { ok: false, error: 'Game state transition in progress' });
+      return;
     }
 
-    // Notify room
-    io.to(pin).emit(isBan ? 'player_banned' : 'player_kicked', {
-      playerId: result.player.id,
-      nickname: result.player.nickname,
-      playerCount: result.room.getPlayerCount(),
-      connectedPlayerCount: result.room.getConnectedPlayerCount()
-    });
+    try {
+      const result = isBan
+        ? await roomUseCases.banPlayer({ pin, playerId, requesterId: socket.id })
+        : await roomUseCases.kickPlayer({ pin, playerId, requesterId: socket.id });
 
-    // Auto-advance if remaining connected players have all answered
-    await checkAllAnsweredAfterRemoval(result.room);
-    sendAck(ack, { ok: true });
+      // Notify kicked/banned player
+      const targetSocket = io.sockets.sockets.get(result.player.socketId);
+      if (targetSocket) {
+        targetSocket.emit('you_were_kicked', { reason: isBan ? 'banned' : 'kicked' });
+        targetSocket.leave(pin);
+      }
+
+      // Notify room
+      io.to(pin).emit(isBan ? 'player_banned' : 'player_kicked', {
+        playerId: result.player.id,
+        nickname: result.player.nickname,
+        playerCount: result.room.getPlayerCount(),
+        connectedPlayerCount: result.room.getConnectedPlayerCount()
+      });
+
+      // Auto-advance if remaining connected players have all answered
+      // Release lock BEFORE auto-advance since autoAdvanceToResults acquires its own lock
+      endAnsweringLocks.release(pin);
+      await checkAllAnsweredAfterRemoval(result.room);
+      sendAck(ack, { ok: true });
+    } catch (error) {
+      endAnsweringLocks.release(pin);
+      throw error;
+    }
   };
 
   // Host kicks a player

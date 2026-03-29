@@ -136,26 +136,4 @@ powerUpRegistry.register(PowerUpType.TIME_EXTENSION, {
   }
 });
 
-class PowerUp {
-  constructor(type, count = 1) {
-    if (!PowerUpType[type]) {
-      throw new ValidationError(`Invalid power-up type: ${type}`);
-    }
-    this.type = type;
-    this.count = Math.max(0, count);
-    Object.freeze(this);
-  }
-
-  canUse() {
-    return this.count > 0;
-  }
-
-  use() {
-    if (!this.canUse()) {
-      throw new ValidationError(`No ${POWER_UP_LABELS[this.type]} remaining`);
-    }
-    return new PowerUp(this.type, this.count - 1);
-  }
-}
-
-module.exports = { PowerUp, PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpRegistry };
+module.exports = { PowerUpType, POWER_UP_LABELS, DEFAULT_POWER_UPS, powerUpRegistry };

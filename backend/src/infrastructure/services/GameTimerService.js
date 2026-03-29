@@ -3,6 +3,8 @@ const { ValidationError } = require('../../shared/errors');
 // Timer duration bounds
 const MIN_DURATION_SECONDS = 5;
 const MAX_DURATION_SECONDS = 120;
+const MAX_EXTENSION_PER_CALL_MS = 30000;
+const MAX_TOTAL_EXTENSION_MS = 30000; // 30s max total extensions per question
 
 /**
  * Game Timer Service
@@ -226,8 +228,6 @@ class GameTimerService {
     }
 
     // Cap per-call extension and enforce cumulative cap per question
-    const MAX_EXTENSION_PER_CALL_MS = 30000;
-    const MAX_TOTAL_EXTENSION_MS = 30000; // 30s max total extensions per question
     const remainingBudget = Math.max(0, MAX_TOTAL_EXTENSION_MS - timer.totalExtensionMs);
     if (remainingBudget <= 0) return 0;
     const safeExtraMs = Math.min(Math.max(0, extraMs), MAX_EXTENSION_PER_CALL_MS, remainingBudget);
@@ -275,7 +275,6 @@ class GameTimerService {
   getRemainingExtensionBudget(pin) {
     const timer = this.activeTimers.get(pin);
     if (!timer || timer.stopped) return 0;
-    const MAX_TOTAL_EXTENSION_MS = 30000;
     return Math.max(0, MAX_TOTAL_EXTENSION_MS - timer.totalExtensionMs);
   }
 

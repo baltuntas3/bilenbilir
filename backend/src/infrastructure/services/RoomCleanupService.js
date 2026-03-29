@@ -178,7 +178,9 @@ class RoomCleanupService {
                   this.io.to(room.pin).emit('player_removed', {
                     playerId: player.id,
                     nickname: player.nickname,
-                    reason: 'reconnection_timeout'
+                    reason: 'reconnection_timeout',
+                    playerCount: room.getPlayerCount(),
+                    connectedPlayerCount: room.getConnectedPlayerCount()
                   });
                 });
                 staleSpectators.forEach(spectator => {
