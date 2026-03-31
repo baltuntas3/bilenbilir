@@ -80,6 +80,7 @@ export default function HostLobby() {
     lightningRound,
     setLightningRound,
     spectators,
+    reconnectHost,
   } = useGame();
 
   const [loading, setLoading] = useState(true);
@@ -139,7 +140,7 @@ export default function HostLobby() {
   }, [quizId, roomPin, isHost, createRoom, getMyRoom, navigate]);
 
   useEffect(() => {
-    if (gameState === GAME_STATES.QUESTION_INTRO) {
+    if (gameState && gameState !== GAME_STATES.IDLE && gameState !== GAME_STATES.WAITING_PLAYERS) {
       navigate('/host');
     }
   }, [gameState, navigate]);
@@ -159,8 +160,25 @@ export default function HostLobby() {
     }
   };
 
-  const handleRejoinExisting = () => {
-    navigate(`/host/${existingRoom.quizId}`);
+  const [rejoining, setRejoining] = useState(false);
+
+  const handleRejoinExisting = async () => {
+    setRejoining(true);
+    try {
+      const response = await reconnectHost(existingRoom.pin, existingRoom.hostToken);
+      setExistingRoom(null);
+      // Navigate based on room state: lobby for waiting, game page for active/finished
+      const state = response?.state || existingRoom.state;
+      if (state === 'WAITING_PLAYERS') {
+        navigate(`/host/${existingRoom.quizId}`);
+      } else {
+        navigate('/host');
+      }
+    } catch (error) {
+      showToast.error(error.message || 'Failed to rejoin room');
+    } finally {
+      setRejoining(false);
+    }
   };
 
   const connectedPlayers = players.filter(p => !p.disconnected);
@@ -379,7 +397,8 @@ export default function HostLobby() {
             <Button
               leftSection={<IconRefresh size={18} />}
               onClick={handleRejoinExisting}
-              
+              loading={rejoining}
+
               style={{ boxShadow: 'var(--theme-glow-primary)' }}
             >
               {t('game.rejoinExisting')}

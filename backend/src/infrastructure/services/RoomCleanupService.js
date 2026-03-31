@@ -266,8 +266,12 @@ class RoomCleanupService {
           }
 
           // Check for orphan room: host disconnected AND no connected players
-          // This handles the case where everyone abandons an active game
-          if (!shouldDelete && room.isHostDisconnected() && room.getConnectedPlayerCount() === 0) {
+          // This handles the case where everyone abandons an active game.
+          // Skip for WAITING_PLAYERS — the host may have shared the PIN and will
+          // reconnect; having no players is normal in that state, so we let the
+          // regular host grace period handle cleanup instead of closing early.
+          if (!shouldDelete && room.isHostDisconnected() && room.getConnectedPlayerCount() === 0
+              && room.state !== RoomState.WAITING_PLAYERS) {
             const hostDisconnectedDuration = room.getHostDisconnectedDuration();
             // Use shorter timeout for orphan rooms since no one can interact
             const orphanTimeout = Math.min(this.hostGracePeriod, this.playerGracePeriod);
