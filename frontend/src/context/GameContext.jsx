@@ -437,7 +437,6 @@ export function GameProvider({ children }) {
     });
     socketService.on('time_expired', () => {
       try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
-      updateState({ remainingTime: 0 });
     });
     socketService.on('timer_sync', (data) => {
       try {
@@ -519,6 +518,56 @@ export function GameProvider({ children }) {
     if (room.roomPin) setupSocketListeners();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.roomPin]);
+
+  // Apply pending reconnect data from page refresh reconnection.
+  // When the page refreshes, attemptReconnection fires before GameContext listeners
+  // are set up, so the player_reconnected/host_reconnected event is lost.
+  // The reconnect response is stored in pendingReconnectData and applied here.
+  useEffect(() => {
+    const data = room.pendingReconnectData;
+    if (!data) return;
+
+    const updates = {};
+    if (data.state && GAME_STATES[data.state]) updates.gameState = data.state;
+    if (typeof data.score === 'number') updates.score = data.score;
+    if (typeof data.streak === 'number') updates.streak = data.streak;
+    if (data.powerUps) updates.powerUps = data.powerUps;
+    if (Array.isArray(data.eliminatedOptions)) updates.eliminatedOptions = data.eliminatedOptions;
+    if (typeof data.hasAnswered === 'boolean') updates.hasAnswered = data.hasAnswered;
+    if (data.lastAnswer) updates.lastAnswer = data.lastAnswer;
+    if (typeof data.currentQuestionIndex === 'number') updates.currentQuestionIndex = data.currentQuestionIndex;
+    if (typeof data.totalQuestions === 'number') updates.totalQuestions = data.totalQuestions;
+    if (data.currentQuestion) updates.currentQuestion = data.currentQuestion;
+    if (typeof data.answeredCount === 'number') updates.answeredCount = data.answeredCount;
+    if (typeof data.totalPlayersInPhase === 'number') updates.totalPlayersInPhase = data.totalPlayersInPhase;
+    if (typeof data.connectedPlayerCount === 'number') updates.connectedPlayerCount = data.connectedPlayerCount;
+    if (typeof data.correctAnswerIndex === 'number') updates.correctAnswerIndex = data.correctAnswerIndex;
+    if (data.distribution) updates.answerDistribution = data.distribution;
+    if (data.explanation !== undefined) updates.explanation = data.explanation;
+    if (data.leaderboard) updates.leaderboard = data.leaderboard;
+    if (data.podium) updates.podium = data.podium;
+    if (data.teamLeaderboard) updates.teamLeaderboard = data.teamLeaderboard;
+    if (data.teamPodium) updates.teamPodium = data.teamPodium;
+    if (data.pausedFromState) updates.previousState = data.pausedFromState;
+    if (Object.keys(updates).length > 0) updateState(updates);
+
+    // Restore timer if in answering phase
+    if (data.timerSync && data.timerSync.remainingMs > 0) {
+      try {
+        const adjustedEndTime = calcAdjustedEndTime(data.timerSync.endTime, data.timerSync.serverTime, data.timerSync.remainingMs);
+        timerRef.current.startTimer(Math.ceil(data.timerSync.remainingMs / 1000), adjustedEndTime, true);
+      } catch { /* timer may be unavailable */ }
+    }
+
+    // Sync room-level state (may be redundant with RoomContext but harmless)
+    const roomUpdates = { pendingReconnectData: null };
+    if (typeof data.teamMode === 'boolean') roomUpdates.teamMode = data.teamMode;
+    if (data.teams) roomUpdates.teams = data.teams;
+    if (data.lightningRound) roomUpdates.lightningRound = data.lightningRound;
+    if (data.role === 'host' && data.players) roomUpdates.players = data.players;
+    roomRef.current.updateRoomState(roomUpdates);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.pendingReconnectData]);
 
   // Game actions
   const startGame = useCallback((questionCount) => {

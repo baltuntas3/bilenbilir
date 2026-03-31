@@ -429,6 +429,26 @@ class RoomUseCases extends SharedUseCases {
 
     return { room };
   }
+
+  async shuffleTeams({ pin, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    room.shuffleTeams();
+    await this.roomRepository.save(room);
+
+    return { room };
+  }
+
+  async swapTeamPlayers({ pin, playerIdA, playerIdB, requesterId }) {
+    const room = await this._getRoomOrThrow(pin);
+    this._throwIfNotHost(room, requesterId);
+
+    room.swapTeamPlayers(playerIdA, playerIdB);
+    await this.roomRepository.save(room);
+
+    return { room };
+  }
 }
 
 module.exports = { RoomUseCases };

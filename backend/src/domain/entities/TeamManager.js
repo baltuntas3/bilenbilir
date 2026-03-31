@@ -48,6 +48,49 @@ class TeamManager {
     targetTeam.addPlayer(playerId);
   }
 
+  /**
+   * Randomly distribute given player IDs across all teams using round-robin
+   * on a shuffled player list. Clears existing assignments first.
+   */
+  shufflePlayers(playerIds) {
+    if (this.teams.length < 2) {
+      throw new ValidationError('At least 2 teams are required to shuffle');
+    }
+    if (playerIds.length === 0) {
+      throw new ValidationError('No players to shuffle');
+    }
+    // Clear all existing assignments
+    for (const team of this.teams) {
+      team.playerIds = [];
+    }
+    // Fisher-Yates shuffle
+    const shuffled = [...playerIds];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    // Round-robin assignment
+    for (let i = 0; i < shuffled.length; i++) {
+      this.teams[i % this.teams.length].addPlayer(shuffled[i]);
+    }
+  }
+
+  /**
+   * Swap two players between their teams atomically.
+   * Both players must already be assigned to different teams.
+   */
+  swapPlayers(playerIdA, playerIdB) {
+    const teamA = this.getTeamForPlayer(playerIdA);
+    const teamB = this.getTeamForPlayer(playerIdB);
+    if (!teamA) throw new ValidationError('First player is not assigned to any team');
+    if (!teamB) throw new ValidationError('Second player is not assigned to any team');
+    if (teamA.id === teamB.id) throw new ValidationError('Players are already on the same team');
+    teamA.removePlayer(playerIdA);
+    teamB.removePlayer(playerIdB);
+    teamA.addPlayer(playerIdB);
+    teamB.addPlayer(playerIdA);
+  }
+
   removePlayer(playerId) {
     for (const team of this.teams) {
       team.removePlayer(playerId);

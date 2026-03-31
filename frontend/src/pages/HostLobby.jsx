@@ -75,6 +75,8 @@ export default function HostLobby() {
     addTeam,
     removeTeam,
     assignTeam,
+    shuffleTeams,
+    swapTeamPlayers,
     lightningRound,
     setLightningRound,
     spectators,
@@ -89,6 +91,7 @@ export default function HostLobby() {
   const [newTeamName, setNewTeamName] = useState('');
   const [lightningEnabled, setLightningEnabled] = useState(lightningRound?.enabled || false);
   const [lightningCount, setLightningCount] = useState(lightningRound?.questionCount || 3);
+  const [swapSourceId, setSwapSourceId] = useState(null);
 
   useEffect(() => {
     if (totalQuestions > 0 && questionCount === 0) {
@@ -265,6 +268,31 @@ export default function HostLobby() {
     } catch (error) {
       showToast.error(error.message || 'Failed to assign player to team');
     }
+  };
+
+  const handleShuffleTeams = async () => {
+    try {
+      await shuffleTeams();
+    } catch (error) {
+      showToast.error(error.message || t('team.shuffleFailed'));
+    }
+  };
+
+  const handleSwapClick = async (playerId) => {
+    if (!swapSourceId) {
+      setSwapSourceId(playerId);
+      return;
+    }
+    if (swapSourceId === playerId) {
+      setSwapSourceId(null);
+      return;
+    }
+    try {
+      await swapTeamPlayers(swapSourceId, playerId);
+    } catch (error) {
+      showToast.error(error.message || t('team.swapFailed'));
+    }
+    setSwapSourceId(null);
   };
 
   // Existing room dialog
@@ -599,6 +627,18 @@ export default function HostLobby() {
                   ))}
                 </Stack>
               )}
+
+              {teams.length >= 2 && players.length > 0 && (
+                <Button
+                  leftSection={<IconArrowsShuffle size={16} />}
+                  onClick={handleShuffleTeams}
+                  variant="light"
+                  color="violet"
+                  fullWidth
+                >
+                  {t('team.shuffle')}
+                </Button>
+              )}
             </Stack>
           </Paper>
         )}
@@ -694,6 +734,9 @@ export default function HostLobby() {
                   ? teams.find((t) => t.playerIds?.includes(player.id))
                   : null;
 
+                const isSwapSource = swapSourceId === player.id;
+                const isSwapTarget = swapSourceId && !isSwapSource && teamMode && playerTeam;
+
                 return (
                   <Card
                     key={player.id}
@@ -702,14 +745,20 @@ export default function HostLobby() {
                     className={`slide-up slide-up-d${Math.min(idx + 1, 4)}`}
                     style={{
                       background: 'var(--theme-surface)',
-                      border: '1px solid var(--theme-border)',
+                      border: isSwapSource
+                        ? '2px solid var(--theme-warning)'
+                        : isSwapTarget
+                          ? '1px dashed var(--theme-warning)'
+                          : '1px solid var(--theme-border)',
                       transition: 'border-color 0.3s',
+                      cursor: isSwapTarget ? 'pointer' : undefined,
                     }}
+                    onClick={isSwapTarget ? () => handleSwapClick(player.id) : undefined}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--theme-primary)';
+                      if (!isSwapSource) e.currentTarget.style.borderColor = isSwapTarget ? 'var(--theme-warning)' : 'var(--theme-primary)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--theme-border)';
+                      if (!isSwapSource) e.currentTarget.style.borderColor = isSwapTarget ? 'var(--theme-warning)' : 'var(--theme-border)';
                     }}
                   >
                     <Stack gap={4}>
@@ -750,27 +799,42 @@ export default function HostLobby() {
                       </Group>
 
                       {teamMode && teams.length > 0 && (
-                        <Select
-                          size="xs"
-                          placeholder={t('team.selectTeam')}
-                          data={teams.map((t) => ({
-                            value: t.id,
-                            label: t.name,
-                          }))}
-                          value={playerTeam?.id || null}
-                          onChange={(teamId) => {
-                            if (teamId) handleAssignTeam(player.id, teamId);
-                          }}
-                          clearable={false}
-                          styles={{
-                            input: {
-                              background: 'var(--theme-bg)',
-                              border: '1px solid var(--theme-border)',
-                              color: 'var(--theme-text)',
-                              fontSize: '0.75rem',
-                            },
-                          }}
-                        />
+                        <Group gap={4} wrap="nowrap">
+                          <Select
+                            size="xs"
+                            placeholder={t('team.selectTeam')}
+                            data={teams.map((t) => ({
+                              value: t.id,
+                              label: t.name,
+                            }))}
+                            value={playerTeam?.id || null}
+                            onChange={(teamId) => {
+                              if (teamId) handleAssignTeam(player.id, teamId);
+                            }}
+                            clearable={false}
+                            style={{ flex: 1 }}
+                            styles={{
+                              input: {
+                                background: 'var(--theme-bg)',
+                                border: '1px solid var(--theme-border)',
+                                color: 'var(--theme-text)',
+                                fontSize: '0.75rem',
+                              },
+                            }}
+                          />
+                          {playerTeam && (
+                            <Tooltip label={isSwapSource ? t('team.swapCancel') : t('team.swapSelect')}>
+                              <ActionIcon
+                                variant={isSwapSource ? 'filled' : 'subtle'}
+                                color="yellow"
+                                size="sm"
+                                onClick={(e) => { e.stopPropagation(); handleSwapClick(player.id); }}
+                              >
+                                <IconArrowsShuffle size={14} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
+                        </Group>
                       )}
                     </Stack>
                   </Card>

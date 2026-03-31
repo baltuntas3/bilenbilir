@@ -92,6 +92,7 @@ const initialRoomState = {
   bannedNicknames: [],
   quiz: null,
   isReconnecting: false,
+  pendingReconnectData: null,
   teams: [],
   teamMode: false,
   lightningRound: { enabled: false, questionCount: 3 },
@@ -374,7 +375,7 @@ export function RoomProvider({ children }) {
     if (!response.hostToken) {
       console.warn('[RoomContext] Server did not return a new hostToken on reconnect; using previous token as fallback.');
     }
-    updateRoomState({ roomPin: response.pin, isHost: true, hostToken: rotatedToken });
+    updateRoomState({ roomPin: response.pin, isHost: true, hostToken: rotatedToken, pendingReconnectData: { role: 'host', ...response } });
     saveSession({ pin: response.pin, hostToken: rotatedToken, role: 'host' });
     return response;
   }, [isAuthenticated, connectSocket, updateRoomState, emitWithResponse]);
@@ -389,6 +390,7 @@ export function RoomProvider({ children }) {
     updateRoomState({
       roomPin: response.pin, isHost: false, playerId: response.playerId,
       playerToken: rotatedToken, nickname: response.nickname,
+      pendingReconnectData: { role: 'player', ...response },
     });
     saveSession({ pin: response.pin, playerToken: rotatedToken, role: 'player', nickname: response.nickname });
     return response;
@@ -405,6 +407,7 @@ export function RoomProvider({ children }) {
       roomPin: response.pin, isHost: false, isSpectator: true,
       spectatorId: response.spectatorId, spectatorToken: rotatedToken,
       nickname: response.nickname,
+      pendingReconnectData: { role: 'spectator', ...response },
     });
     saveSession({ pin: response.pin, spectatorToken: rotatedToken, role: 'spectator', nickname: response.nickname });
     return response;
@@ -454,6 +457,8 @@ export function RoomProvider({ children }) {
   const addTeam = useCallback((name) => hostEmit('add_team', { name }), [hostEmit]);
   const removeTeam = useCallback((teamId) => hostEmit('remove_team', { teamId }), [hostEmit]);
   const assignTeam = useCallback((playerId, teamId) => hostEmit('assign_team', { playerId, teamId }), [hostEmit]);
+  const shuffleTeams = useCallback(() => hostEmit('shuffle_teams'), [hostEmit]);
+  const swapTeamPlayers = useCallback((playerIdA, playerIdB) => hostEmit('swap_team_players', { playerIdA, playerIdB }), [hostEmit]);
 
   // Lightning round
   const setLightningRound = useCallback((enabled, questionCount) => hostEmit('set_lightning_round', { enabled, questionCount }), [hostEmit]);
@@ -523,7 +528,7 @@ export function RoomProvider({ children }) {
     reconnectHost, reconnectPlayer, reconnectSpectator,
     kickPlayer, banPlayer, getPlayers, getSpectators,
     unbanNickname, getBannedNicknames,
-    enableTeamMode, disableTeamMode, addTeam, removeTeam, assignTeam,
+    enableTeamMode, disableTeamMode, addTeam, removeTeam, assignTeam, shuffleTeams, swapTeamPlayers,
     setLightningRound,
     resetRoom, updateRoomState,
     hostEmit, emitWithResponse,
@@ -536,7 +541,7 @@ export function RoomProvider({ children }) {
     reconnectHost, reconnectPlayer, reconnectSpectator,
     kickPlayer, banPlayer, getPlayers, getSpectators,
     unbanNickname, getBannedNicknames,
-    enableTeamMode, disableTeamMode, addTeam, removeTeam, assignTeam,
+    enableTeamMode, disableTeamMode, addTeam, removeTeam, assignTeam, shuffleTeams, swapTeamPlayers,
     setLightningRound,
     resetRoom, updateRoomState,
     hostEmit, emitWithResponse,

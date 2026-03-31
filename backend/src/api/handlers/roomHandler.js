@@ -1084,6 +1084,62 @@ const createRoomHandler = (io, socket, roomUseCases, timerService = null, gameUs
     }
   });
 
+  // Randomly distribute all players across teams
+  socket.on('shuffle_teams', async (data, ack) => {
+    try {
+      if (!checkRateLimit('shuffle_teams')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
+      requireAuth();
+
+      const { pin } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
+
+      const result = await roomUseCases.shuffleTeams({
+        pin,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('teams_updated', {
+        teams: result.room.getAllTeams().map(toTeamDTO)
+      });
+      sendAck(ack, { ok: true });
+    } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
+      handleSocketError(socket, error, { hasAck: true });
+    }
+  });
+
+  // Swap two players between teams
+  socket.on('swap_team_players', async (data, ack) => {
+    try {
+      if (!checkRateLimit('swap_team_players')) {
+        sendAck(ack, { ok: false, error: 'Too many requests' });
+        return;
+      }
+      requireAuth();
+
+      const { pin, playerIdA, playerIdB } = data || {};
+      if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
+
+      const result = await roomUseCases.swapTeamPlayers({
+        pin,
+        playerIdA,
+        playerIdB,
+        requesterId: socket.id
+      });
+
+      io.to(pin).emit('teams_updated', {
+        teams: result.room.getAllTeams().map(toTeamDTO)
+      });
+      sendAck(ack, { ok: true });
+    } catch (error) {
+      sendAck(ack, { ok: false, error: error.message });
+      handleSocketError(socket, error, { hasAck: true });
+    }
+  });
+
   // Assign player to team
   socket.on('assign_team', async (data, ack) => {
     try {

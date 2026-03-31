@@ -877,6 +877,27 @@ class Room {
     this._teamManager.assignPlayer(playerId, teamId, (id) => this.getPlayerById(id));
   }
 
+  shuffleTeams() {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Team shuffle can only be done in lobby');
+    }
+    if (!this._teamManager.isEnabled()) {
+      throw new ValidationError('Team mode is not enabled');
+    }
+    const playerIds = this.players.map(p => p.id);
+    this._teamManager.shufflePlayers(playerIds);
+  }
+
+  swapTeamPlayers(playerIdA, playerIdB) {
+    if (this.state !== RoomState.WAITING_PLAYERS) {
+      throw new ValidationError('Team swaps can only be done in lobby');
+    }
+    if (!this._teamManager.isEnabled()) {
+      throw new ValidationError('Team mode is not enabled');
+    }
+    this._teamManager.swapPlayers(playerIdA, playerIdB);
+  }
+
   getTeamForPlayer(playerId) {
     return this._teamManager.getTeamForPlayer(playerId);
   }
