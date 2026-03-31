@@ -60,7 +60,7 @@ export default function HostLobby() {
     gameState,
     players,
     quiz,
-    totalQuestions,
+    totalQuestions: gameTotalQuestions,
     createRoom,
     closeRoom,
     getMyRoom,
@@ -82,6 +82,8 @@ export default function HostLobby() {
     spectators,
     reconnectHost,
   } = useGame();
+
+  const totalQuestions = gameTotalQuestions || quiz?.questionCount || 0;
 
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);

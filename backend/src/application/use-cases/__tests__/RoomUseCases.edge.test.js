@@ -100,11 +100,11 @@ describe('RoomUseCases comprehensive', () => {
       expect(result.type).toBe('host_disconnected');
     });
 
-    it('should handle player disconnect in lobby (removes)', async () => {
+    it('should handle player disconnect in lobby (marks disconnected for reconnect)', async () => {
       await roomUseCases.joinRoom({ pin: roomPin, nickname: 'Player1', socketId: 'p-sock' });
       const result = await roomUseCases.handleDisconnect({ socketId: 'p-sock' });
       expect(result.type).toBe('player_disconnected');
-      expect(result.canReconnect).toBe(false);
+      expect(result.canReconnect).toBe(true);
     });
 
     it('should handle spectator disconnect', async () => {

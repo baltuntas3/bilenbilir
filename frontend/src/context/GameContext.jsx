@@ -485,9 +485,14 @@ export function GameProvider({ children }) {
 
     // Room closed
     socketService.on('room_closed', ({ reason } = {}) => {
-      const message = reason === 'Host reconnection timeout'
-        ? 'The game was closed because the host did not reconnect'
-        : 'The game has been closed by the host';
+      let message;
+      if (reason === 'Host reconnection timeout') {
+        message = 'The game was closed because the host did not reconnect';
+      } else if (reason === 'host_left' || reason === 'Host closed the room') {
+        message = 'The game has been closed by the host';
+      } else {
+        message = 'The game room has been closed';
+      }
       showToast.info(message);
       resetGame();
       socketService.disconnect();

@@ -165,7 +165,9 @@ class RoomCleanupService {
 
           // Fast path: skip rooms that are clearly healthy
           // (host connected, has players, not idle, game active or recently created)
-          if (!hasDisconnectedHost && !hasNoPlayers && roomAge < this.emptyRoomTimeout) {
+          // Exclude PODIUM — finished games need their own timeout check.
+          if (!hasDisconnectedHost && !hasNoPlayers && roomAge < this.emptyRoomTimeout
+              && room.state !== RoomState.PODIUM) {
             // Collect all stale removals BEFORE saving — single save prevents stale reference issues
             const stalePlayers = room.removeStaleDisconnectedPlayers(this.playerGracePeriod);
             const staleSpectators = room.removeStaleDisconnectedSpectators(this.spectatorGracePeriod);
@@ -356,8 +358,10 @@ class RoomCleanupService {
             }
           }
 
-          // Check if room is empty for too long (no players at all)
-          if (!shouldDelete && hasNoPlayers && !isActiveGame) {
+          // Check if room is empty for too long (no players at all).
+          // Skip if host is connected — they're actively waiting for players.
+          // The idle room timeout is the safety net for long-lived empty rooms.
+          if (!shouldDelete && hasNoPlayers && !isActiveGame && hasDisconnectedHost) {
             if (roomAge > this.emptyRoomTimeout) {
               shouldDelete = true;
               reason = 'Empty room timeout';

@@ -167,11 +167,10 @@ class RoomUseCases extends SharedUseCases {
     }
 
     if (role === 'player' && player) {
-      if (room.state === RoomState.WAITING_PLAYERS) {
-        room.removePlayer(socketId);
-      } else {
-        room.setPlayerDisconnected(socketId);
-      }
+      // Always mark as disconnected (not removed) so Socket.IO auto-reconnect
+      // can restore the player using their token. The cleanup service handles
+      // permanent removal after the player grace period expires.
+      room.setPlayerDisconnected(socketId);
       await this.roomRepository.save(room);
 
       const isActiveGame = room.state !== RoomState.WAITING_PLAYERS && room.state !== RoomState.PODIUM;
@@ -181,7 +180,7 @@ class RoomUseCases extends SharedUseCases {
         player,
         playerCount: room.getPlayerCount(),
         connectedPlayerCount: room.getConnectedPlayerCount(),
-        canReconnect: room.state !== RoomState.WAITING_PLAYERS,
+        canReconnect: true,
         shouldAutoAdvance: room.shouldAutoAdvance(),
         isActiveGame
       };
