@@ -74,13 +74,15 @@ export default function HostGame() {
     teamPodium,
     isLightning,
     spectators,
+    isReconnecting,
   } = useGame();
 
   useEffect(() => {
+    if (isReconnecting) return;
     if (!isHost || !roomPin) {
       navigate('/');
     }
-  }, [isHost, roomPin, navigate]);
+  }, [isHost, roomPin, isReconnecting, navigate]);
 
   const handleEndAnswering = useGameAction(endAnswering);
   const handleShowLeaderboard = useGameAction(showLeaderboard);

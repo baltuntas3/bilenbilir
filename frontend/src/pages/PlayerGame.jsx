@@ -64,6 +64,7 @@ export default function PlayerGame() {
     teamPodium,
     eliminatedOptions,
     isLightning,
+    isReconnecting,
   } = useGame();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -75,10 +76,11 @@ export default function PlayerGame() {
   }, [currentQuestionIndex]);
 
   useEffect(() => {
+    if (isReconnecting) return;
     if (!roomPin || isHost) {
       navigate('/join');
     }
-  }, [roomPin, isHost, navigate]);
+  }, [roomPin, isHost, isReconnecting, navigate]);
 
   // Confetti on correct answer
   useEffect(() => {

@@ -56,13 +56,15 @@ export default function SpectatorGame() {
     teamLeaderboard,
     teamPodium,
     isLightning,
+    isReconnecting,
   } = useGame();
 
   useEffect(() => {
+    if (isReconnecting) return;
     if (!roomPin || !isSpectator) {
       navigate('/join');
     }
-  }, [roomPin, isSpectator, navigate]);
+  }, [roomPin, isSpectator, isReconnecting, navigate]);
 
   const handleLeave = () => {
     leaveSpectator();

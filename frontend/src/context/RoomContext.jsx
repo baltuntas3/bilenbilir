@@ -98,9 +98,27 @@ const initialRoomState = {
   lightningRound: { enabled: false, questionCount: 3 },
 };
 
+// Pre-populate state from localStorage so game page guards don't redirect
+// before the async reconnection completes.
+const getInitialRoomState = () => {
+  const session = getSession();
+  if (!session) return initialRoomState;
+  const base = { ...initialRoomState, roomPin: session.pin, isReconnecting: true };
+  if (session.role === 'host' && session.hostToken) {
+    return { ...base, isHost: true, hostToken: session.hostToken };
+  }
+  if (session.role === 'player' && session.playerToken) {
+    return { ...base, playerToken: session.playerToken, nickname: session.nickname };
+  }
+  if (session.role === 'spectator' && session.spectatorToken) {
+    return { ...base, isSpectator: true, spectatorToken: session.spectatorToken, nickname: session.nickname };
+  }
+  return initialRoomState;
+};
+
 export function RoomProvider({ children }) {
   const { isAuthenticated } = useAuth();
-  const [roomState, setRoomState] = useState(initialRoomState);
+  const [roomState, setRoomState] = useState(getInitialRoomState);
 
   const updateRoomState = useCallback((updates) => {
     setRoomState((prev) => ({ ...prev, ...updates }));
@@ -465,6 +483,7 @@ export function RoomProvider({ children }) {
 
   // Auto-reconnection
   const reconnectingRef = useRef(false);
+  const needsInitialReconnect = useRef(roomState.isReconnecting);
   const roomPinRef = useRef(roomState.roomPin);
   roomPinRef.current = roomState.roomPin;
 
@@ -492,12 +511,12 @@ export function RoomProvider({ children }) {
         } else {
           // No matching reconnection path (e.g. host session but not authenticated)
           clearSession();
-          updateRoomState({ isReconnecting: false });
+          setRoomState({ ...initialRoomState });
         }
       } catch (error) {
         showToast.error('Failed to reconnect: ' + error.message);
         clearSession();
-        updateRoomState({ isReconnecting: false });
+        setRoomState({ ...initialRoomState });
       } finally {
         reconnectingRef.current = false;
       }
@@ -512,7 +531,10 @@ export function RoomProvider({ children }) {
     });
 
     const session = getSession();
-    if (session && !roomPinRef.current) attemptReconnection();
+    if (session && needsInitialReconnect.current) {
+      needsInitialReconnect.current = false;
+      attemptReconnection();
+    }
 
     return () => {
       socketService.setReconnectCallback(null);
