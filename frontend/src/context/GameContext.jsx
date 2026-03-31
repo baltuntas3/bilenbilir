@@ -305,12 +305,11 @@ export function GameProvider({ children }) {
       }));
     });
 
-    socketService.on('answering_started', ({ timeLimit, isLightning, connectedPlayerCount }) => {
+    socketService.on('answering_started', ({ isLightning, connectedPlayerCount }) => {
       setState(prev => {
         const updates = {
           ...prev,
           gameState: GAME_STATES.ANSWERING_PHASE,
-          timeLimit,
           isLightning: isLightning || false,
           answeredCount: 0,
         };
@@ -710,11 +709,12 @@ export function GameProvider({ children }) {
   const value = useMemo(() => ({
     // Spread room state for backward compatibility
     ...room,
-    // Timer state
+    // Game state (before timer — timer values are authoritative and must not be overridden)
+    ...state,
+    // Timer state (always last among data spreads to prevent state fields like
+    // timeLimit or remainingTime from overriding the timer's live values)
     remainingTime: timer.remainingTime,
     timeLimit: timer.timeLimit,
-    // Game state
-    ...state,
     // Game actions
     startGame, startAnswering, submitAnswer, usePowerUp,
     endAnswering, showLeaderboard, nextQuestion,
