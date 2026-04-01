@@ -1,5 +1,6 @@
 const { SharedUseCases } = require('./SharedUseCases');
 const { RoomState } = require('../../domain/entities');
+const { PowerUpType } = require('../../domain/value-objects/PowerUp');
 const { ValidationError } = require('../../shared/errors');
 const { MIN_QUESTION_TIME } = require('../../shared/config/constants');
 
@@ -91,8 +92,8 @@ class GameFlowUseCases extends SharedUseCases {
     // Refund DOUBLE_POINTS for players who didn't submit an answer to avoid punishing them twice
     room.getAllPlayers().forEach(player => {
       if (!player.hasAnswered()) {
-        if (player.hasActivePowerUp('DOUBLE_POINTS')) {
-          player.refundPowerUp('DOUBLE_POINTS');
+        if (player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS)) {
+          player.refundPowerUp(PowerUpType.DOUBLE_POINTS);
         }
         player.clearActivePowerUp(); // Safeguard: clear any other hanging state
       }
