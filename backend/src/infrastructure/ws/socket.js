@@ -93,6 +93,16 @@ const initializeSocket = (server) => {
           io.to(result.pin).emit('host_disconnected', {
             message: 'Host disconnected. Waiting for reconnection...'
           });
+        } else if (result.type === 'player_left') {
+          // Lobby disconnect: player permanently removed — no reconnection needed
+          io.to(result.pin).emit('player_left', {
+            playerId: result.player.id,
+            nickname: result.player.nickname,
+            playerCount: result.playerCount,
+            connectedPlayerCount: result.connectedPlayerCount,
+            disconnected: false,
+            reason: 'connection_lost'
+          });
         } else if (result.type === 'player_disconnected') {
           io.to(result.pin).emit('player_left', {
             playerId: result.player.id,

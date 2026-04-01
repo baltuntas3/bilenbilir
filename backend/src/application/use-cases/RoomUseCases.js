@@ -167,13 +167,26 @@ class RoomUseCases extends SharedUseCases {
     }
 
     if (role === 'player' && player) {
-      // Always mark as disconnected (not removed) so Socket.IO auto-reconnect
+      if (room.state === RoomState.WAITING_PLAYERS) {
+        // Lobby: permanently remove — no game data to preserve.
+        // Mirrors leaveRoom() behavior. Player can rejoin fresh.
+        room.removePlayer(socketId);
+        await this.roomRepository.save(room);
+        return {
+          type: 'player_left',
+          pin: room.pin,
+          player,
+          playerCount: room.getPlayerCount(),
+          connectedPlayerCount: room.getConnectedPlayerCount()
+        };
+      }
+
+      // Active game: mark as disconnected so Socket.IO auto-reconnect
       // can restore the player using their token. The cleanup service handles
       // permanent removal after the player grace period expires.
       room.setPlayerDisconnected(socketId);
       await this.roomRepository.save(room);
 
-      const isActiveGame = room.state !== RoomState.WAITING_PLAYERS && room.state !== RoomState.PODIUM;
       return {
         type: 'player_disconnected',
         pin: room.pin,
@@ -182,7 +195,7 @@ class RoomUseCases extends SharedUseCases {
         connectedPlayerCount: room.getConnectedPlayerCount(),
         canReconnect: true,
         shouldAutoAdvance: room.shouldAutoAdvance(),
-        isActiveGame
+        isActiveGame: true
       };
     }
 
