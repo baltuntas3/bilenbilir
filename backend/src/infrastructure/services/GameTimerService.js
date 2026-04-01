@@ -67,7 +67,7 @@ class GameTimerService {
    * @throws {ValidationError} If duration is invalid
    */
   startTimer(pin, durationSeconds, onExpire, options = {}) {
-    const { minDuration = MIN_DURATION_SECONDS, originalDurationMs = null, silent = false } = options;
+    const { minDuration = MIN_DURATION_SECONDS, originalDurationMs = null, silent = false, preElapsedMs = 0 } = options;
     // Resumed timers with TIME_EXTENSION may exceed MAX_DURATION_SECONDS.
     // Allow callers to raise the ceiling via maxDuration option.
     const effectiveMax = options.maxDuration || MAX_DURATION_SECONDS;
@@ -83,8 +83,10 @@ class GameTimerService {
     this.stopTimer(pin);
 
     const durationMs = durationSeconds * 1000;
-    const startTime = Date.now();
-    const endTime = startTime + durationMs;
+    // Roll back startTime by pre-pause elapsed time so getElapsedTime()
+    // returns the total elapsed across pause/resume cycles.
+    const startTime = Date.now() - preElapsedMs;
+    const endTime = Date.now() + durationMs;
 
     // Create timer entry first to track state
     const timerEntry = {

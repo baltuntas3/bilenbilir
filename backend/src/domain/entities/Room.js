@@ -386,7 +386,10 @@ class Room {
     // Only apply side effects after state transition succeeds.
     // Answer attempts are already cleared by resetPlayerAnswersForNextQuestion()
     // when entering QUESTION_INTRO — no need to clear again here.
-    this.answeringPhasePlayerCount = this.getConnectedPlayerCount();
+    // Use total player count (not just connected) to prevent UI overflow when
+    // a disconnected player reconnects and answers (e.g. "6/5 Answered").
+    // Permanently removed players are already filtered out of this.players.
+    this.answeringPhasePlayerCount = this.players.length;
   }
 
   /**

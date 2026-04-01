@@ -574,13 +574,15 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
         // Capture timer state BEFORE pause — needed for ANSWERING_PHASE resume
         const timerRemainingMs = timerService.getRemainingTime(pin);
         const originalDurationMs = timerService.getOriginalDuration(pin);
+        const elapsedBeforePauseMs = timerService.getElapsedTime(pin) || 0;
 
         // Pause FIRST — if pause fails (wrong state), timer stays intact
         const result = await gameUseCases.pauseGame({
           pin,
           requesterId: socket.id,
           timerRemainingMs,
-          originalDurationMs
+          originalDurationMs,
+          elapsedBeforePauseMs
         });
 
         // Only stop timer after successful state transition
@@ -670,7 +672,8 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
                 silent: true,
                 minDuration: 1,
                 maxDuration: MAX_EXTENDED_TIMER_SECONDS,
-                originalDurationMs: result.timerState.originalDurationMs
+                originalDurationMs: result.timerState.originalDurationMs,
+                preElapsedMs: result.timerState.elapsedBeforePauseMs || 0
               });
             } catch (timerErr) {
               // Timer failed after resume — auto-advance to prevent stuck state
