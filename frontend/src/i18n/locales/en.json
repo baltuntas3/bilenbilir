@@ -262,6 +262,7 @@
     "noTeamData": "No team data",
     "playersOnline": "{{count}} players",
     "spectatorCount": "{{count}} watching",
+    "playerDisconnected": "{{nickname}} disconnected",
     "allPlayersDisconnected": "All players have disconnected. Waiting for reconnection...",
     "noPlayersToAdvance": "Cannot continue: no connected players",
     "endGameEarly": "End Game"

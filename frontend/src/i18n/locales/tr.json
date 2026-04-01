@@ -262,6 +262,7 @@
     "noTeamData": "Takım verisi yok",
     "playersOnline": "{{count}} oyuncu",
     "spectatorCount": "{{count}} izliyor",
+    "playerDisconnected": "{{nickname}} bağlantısı koptu",
     "allPlayersDisconnected": "Tüm oyuncuların bağlantısı kesildi. Yeniden bağlanma bekleniyor...",
     "noPlayersToAdvance": "Devam edilemiyor: bağlı oyuncu yok",
     "endGameEarly": "Oyunu Bitir"

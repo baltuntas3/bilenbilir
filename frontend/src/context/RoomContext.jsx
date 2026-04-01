@@ -172,7 +172,7 @@ export function RoomProvider({ children }) {
       }));
     });
 
-    socketService.on('player_left', ({ playerId, disconnected }) => {
+    socketService.on('player_left', ({ playerId, nickname, disconnected, reason }) => {
       setRoomState(prev => {
         if (disconnected) {
           return {
@@ -187,6 +187,9 @@ export function RoomProvider({ children }) {
           players: prev.players.filter(p => p.id !== playerId),
         };
       });
+      if (reason === 'connection_lost' && nickname) {
+        showToast.warning(`${nickname} disconnected`);
+      }
     });
 
     // Cleanup service removes stale disconnected players after grace period
