@@ -36,6 +36,27 @@ class GameTimerService {
   }
 
   /**
+   * Reschedule (or create) the main timeout for a timer entry.
+   * @private
+   */
+  _rescheduleTimeout(pin, delayMs) {
+    const timer = this.activeTimers.get(pin);
+    if (!timer) return;
+    if (timer.timerId) clearTimeout(timer.timerId);
+    const onExpire = timer.onExpire;
+    timer.timerId = setTimeout(async () => {
+      this.stopTimer(pin);
+      if (onExpire) {
+        try {
+          await onExpire();
+        } catch (err) {
+          console.error(`[GameTimerService] Timer expire callback failed for pin ${pin}:`, err.message);
+        }
+      }
+    }, delayMs);
+  }
+
+  /**
    * Start a timer for a room's answering phase
    * @param {string} pin - Room PIN
    * @param {number} durationSeconds - Timer duration in seconds
@@ -80,16 +101,8 @@ class GameTimerService {
       totalExtensionMs: 0 // Track cumulative extensions per question
     };
 
-    timerEntry.timerId = setTimeout(async () => {
-      this.stopTimer(pin);
-      if (onExpire) {
-        try {
-          await onExpire();
-        } catch (err) {
-          console.error(`[GameTimerService] Timer expire callback failed for pin ${pin}:`, err.message);
-        }
-      }
-    }, durationMs);
+    this.activeTimers.set(pin, timerEntry);
+    this._rescheduleTimeout(pin, durationMs);
 
     const intervalId = setInterval(() => {
       // Check if timer was stopped to prevent zombie intervals
@@ -108,8 +121,6 @@ class GameTimerService {
       }
     }, 1000);
     timerEntry.intervalId = intervalId;
-
-    this.activeTimers.set(pin, timerEntry);
 
     // When silent=true, caller is responsible for emitting timer_started
     // after its own state event (e.g. answering_started) to guarantee ordering.
@@ -240,22 +251,8 @@ class GameTimerService {
     timer.endTime += safeExtraMs;
     timer.duration += safeExtraMs;
 
-    // Reschedule the main timeout with stored onExpire callback
-    if (timer.timerId) {
-      clearTimeout(timer.timerId);
-    }
-    const remainingMs = Math.max(0, timer.endTime - Date.now());
-    const onExpire = timer.onExpire;
-    timer.timerId = setTimeout(async () => {
-      this.stopTimer(pin);
-      if (onExpire) {
-        try {
-          await onExpire();
-        } catch (err) {
-          console.error(`[GameTimerService] Timer expire callback failed for pin ${pin}:`, err.message);
-        }
-      }
-    }, remainingMs);
+    // Reschedule the main timeout
+    this._rescheduleTimeout(pin, Math.max(0, timer.endTime - Date.now()));
 
     // Emit updated timer info so clients can re-sync
     this.io.to(pin).emit('timer_started', {
@@ -276,6 +273,39 @@ class GameTimerService {
     const timer = this.activeTimers.get(pin);
     if (!timer || timer.stopped) return 0;
     return Math.max(0, MAX_TOTAL_EXTENSION_MS - timer.totalExtensionMs);
+  }
+
+  /**
+   * Shorten the active timer to the given number of seconds.
+   * If remaining time is already <= shortenTo, returns false (caller should end immediately).
+   * Otherwise reschedules the timer, emits timer_shortened to all clients, and returns true.
+   * @param {string} pin - Room PIN
+   * @param {number} shortenToSeconds - Target remaining seconds (e.g. 5)
+   * @returns {boolean} true if timer was shortened, false if it should end immediately
+   */
+  shortenTimer(pin, shortenToSeconds) {
+    const timer = this.activeTimers.get(pin);
+    if (!timer || timer.stopped) return false;
+
+    const remainingMs = Math.max(0, timer.endTime - Date.now());
+    const shortenToMs = shortenToSeconds * 1000;
+
+    // Already at or below the target — caller should end immediately
+    if (remainingMs <= shortenToMs) return false;
+
+    // Set new end time and reschedule
+    timer.endTime = Date.now() + shortenToMs;
+    timer.duration = timer.endTime - timer.startTime;
+    this._rescheduleTimeout(pin, shortenToMs);
+
+    // Notify all clients
+    const syncData = this._buildTimerSync(timer.endTime, timer.startTime, timer.duration);
+    this.io.to(pin).emit('timer_shortened', {
+      ...syncData,
+      shortenedTo: shortenToSeconds
+    });
+
+    return true;
   }
 
   /**

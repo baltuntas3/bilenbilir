@@ -206,7 +206,16 @@ const createGameHandler = (io, socket, gameUseCases, timerService) => {
       const { pin } = data || {};
       if (!isValidPin(pin)) { sendAck(ack, { ok: false, error: 'Valid PIN is required' }); return; }
 
-      // Acquire lock FIRST to prevent race with timer callback auto-transition
+      // Try to shorten the timer to 5 seconds first — gives players a last chance
+      const SHORTEN_TO_SECONDS = 5;
+      const wasShortened = timerService.shortenTimer(pin, SHORTEN_TO_SECONDS);
+      if (wasShortened) {
+        // Timer was shortened — it will expire naturally and trigger endAnsweringPhase
+        sendAck(ack, { ok: true, shortened: true });
+        return;
+      }
+
+      // Remaining time is already ≤ 5s (or no timer) — end immediately
       if (!endAnsweringLocks.acquire(pin)) {
         sendAck(ack, { ok: true, alreadyEnding: true });
         return;

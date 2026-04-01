@@ -75,6 +75,7 @@ export default function HostGame() {
     isLightning,
     spectators,
     isReconnecting,
+    timerShortened,
   } = useGame();
 
   useEffect(() => {
@@ -234,9 +235,10 @@ export default function HostGame() {
                 leftSection={<IconPlayerSkipForward size={20} />}
                 onClick={handleEndAnswering}
                 color="red"
+                disabled={timerShortened}
                 style={{ border: '1px solid var(--theme-secondary)' }}
               >
-                {t('game.endEarly')}
+                {timerShortened ? t('game.timerShortened') : t('game.endEarly')}
               </Button>
             </Center>
           </Stack>

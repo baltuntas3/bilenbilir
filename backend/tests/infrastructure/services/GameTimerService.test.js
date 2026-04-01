@@ -238,6 +238,71 @@ describe('GameTimerService', () => {
     });
   });
 
+  describe('shortenTimer', () => {
+    it('should shorten timer and emit timer_shortened', () => {
+      jest.useFakeTimers();
+
+      timerService.startTimer('123456', 30, jest.fn());
+      mockIo.emit.mockClear();
+
+      const result = timerService.shortenTimer('123456', 5);
+
+      expect(result).toBe(true);
+      expect(mockIo.emit).toHaveBeenCalledWith('timer_shortened', expect.objectContaining({
+        shortenedTo: 5,
+        remaining: 5,
+      }));
+
+      jest.useRealTimers();
+    });
+
+    it('should return false if remaining time is already <= target', () => {
+      jest.useFakeTimers();
+
+      timerService.startTimer('123456', 5, jest.fn());
+      jest.advanceTimersByTime(1000);
+
+      const result = timerService.shortenTimer('123456', 5);
+      expect(result).toBe(false);
+
+      jest.useRealTimers();
+    });
+
+    it('should call onExpire after shortened duration elapses', () => {
+      jest.useFakeTimers();
+
+      const onExpire = jest.fn();
+      timerService.startTimer('123456', 30, onExpire);
+
+      timerService.shortenTimer('123456', 5);
+
+      // Should not have fired yet
+      jest.advanceTimersByTime(4000);
+      expect(onExpire).not.toHaveBeenCalled();
+
+      // Should fire after 5 seconds
+      jest.advanceTimersByTime(1500);
+      expect(onExpire).toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+
+    it('should return false for non-existent timer', () => {
+      expect(timerService.shortenTimer('nonexistent', 5)).toBe(false);
+    });
+
+    it('should return false for stopped timer', () => {
+      jest.useFakeTimers();
+
+      timerService.startTimer('123456', 30, jest.fn());
+      timerService.stopTimer('123456');
+
+      expect(timerService.shortenTimer('123456', 5)).toBe(false);
+
+      jest.useRealTimers();
+    });
+  });
+
   describe('getTimerSync', () => {
     it('should return sync data for active timer', () => {
       jest.useFakeTimers();

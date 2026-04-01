@@ -88,6 +88,16 @@ class GameFlowUseCases extends SharedUseCases {
     if (room.state !== RoomState.ANSWERING_PHASE) throw new ValidationError('Not in answering phase');
     if (!isSystemTriggered) this._throwIfNotHost(room, requesterId);
 
+    // Refund DOUBLE_POINTS for players who didn't submit an answer to avoid punishing them twice
+    room.getAllPlayers().forEach(player => {
+      if (!player.hasAnswered()) {
+        if (player.hasActivePowerUp('DOUBLE_POINTS')) {
+          player.refundPowerUp('DOUBLE_POINTS');
+        }
+        player.clearActivePowerUp(); // Safeguard: clear any other hanging state
+      }
+    });
+
     room.setState(RoomState.SHOW_RESULTS);
     await this.roomRepository.save(room);
 

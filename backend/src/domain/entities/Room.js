@@ -498,7 +498,7 @@ class Room {
 
     // Create a snapshot of player answers to prevent race conditions
     const answerSnapshots = this.players
-      .filter(player => player.hasAnswered() && player.answerAttempt)
+      .filter(player => player.hasAnswered())
       .map(player => ({
         nickname: player.nickname,
         answerIndex: player.answerAttempt.answerIndex

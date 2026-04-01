@@ -56,6 +56,7 @@ const initialGameState = {
   powerUps: { FIFTY_FIFTY: 1, DOUBLE_POINTS: 1, TIME_EXTENSION: 1 },
   eliminatedOptions: [],
   isLightning: false,
+  timerShortened: false,
 };
 
 export function GameProvider({ children }) {
@@ -96,7 +97,7 @@ export function GameProvider({ children }) {
       'question_intro', 'answering_started', 'answer_received', 'answer_count_updated',
       'all_players_answered', 'show_results', 'leaderboard', 'game_over',
       'final_results', 'fifty_fifty_result', 'power_up_activated', 'power_up_used',
-      'time_extended', 'power_up_refund_failed', 'timer_started', 'timer_tick', 'time_expired', 'timer_sync',
+      'time_extended', 'power_up_refund_failed', 'timer_started', 'timer_tick', 'time_expired', 'timer_sync', 'timer_shortened',
       'game_paused', 'game_resumed', 'reaction_received', 'room_closed',
       'host_disconnected', 'host_disconnected_warning', 'host_returned', 'error'
     ];
@@ -312,6 +313,7 @@ export function GameProvider({ children }) {
           gameState: GAME_STATES.ANSWERING_PHASE,
           isLightning: isLightning || false,
           answeredCount: 0,
+          timerShortened: false,
         };
         // Only reset hasAnswered if transitioning from a non-answered state.
         // Prevents discarding a valid answer if answer_received arrived before answering_started (out-of-order).
@@ -362,6 +364,7 @@ export function GameProvider({ children }) {
       const updates = {
         gameState: GAME_STATES.SHOW_RESULTS,
         correctAnswerIndex,
+        timerShortened: false,
         answerDistribution: distribution,
         answeredCount: typeof answeredCount === 'number' ? answeredCount : 0,
         totalPlayersInPhase,
@@ -436,6 +439,17 @@ export function GameProvider({ children }) {
     });
     socketService.on('time_expired', () => {
       try { timerRef.current.stopTimer(); } catch { /* timer may be unavailable */ }
+    });
+    socketService.on('timer_shortened', (data) => {
+      try {
+        if (!data) return;
+        const { remainingMs, endTime, serverTime, shortenedTo } = data;
+        if (typeof remainingMs !== 'number' || typeof endTime !== 'number' || typeof serverTime !== 'number') return;
+        const adjustedEndTime = calcAdjustedEndTime(endTime, serverTime, remainingMs);
+        timerRef.current.startTimer(shortenedTo, adjustedEndTime, true);
+        setState(prev => ({ ...prev, timerShortened: true }));
+        showToast.warning('Son 5 saniye! Host süreyi kısalttı.');
+      } catch { /* timer may be unavailable */ }
     });
     socketService.on('timer_sync', (data) => {
       try {

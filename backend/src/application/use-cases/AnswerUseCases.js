@@ -57,6 +57,7 @@ class AnswerUseCases extends SharedUseCases {
 
       player.submitAnswer(answerIndex, validElapsedTime);
       let actualScore = 0;
+      let archiveBaseScore = answer.score;
       const hasDoublePoints = player.hasActivePowerUp(PowerUpType.DOUBLE_POINTS);
       // Clear active power-up after checking — consumed on correct, refunded on incorrect
       player.clearActivePowerUp();
@@ -73,8 +74,10 @@ class AnswerUseCases extends SharedUseCases {
           // use-case layer orchestrates the interaction between Answer scoring and power-ups.
           // Only double the base score; streak bonus is a fixed reward, not subject to multipliers
           actualScore = Math.min(baseScore * 2 + streakBonus, MAX_ANSWER_SCORE);
+          archiveBaseScore = Math.max(0, actualScore - streakBonus); // Keep base score separate from streak bonus
         } else {
           actualScore = answer.getTotalScore();
+          archiveBaseScore = baseScore;
         }
         player.addScore(actualScore);
       } else {
@@ -94,7 +97,7 @@ class AnswerUseCases extends SharedUseCases {
         answerIndex,
         isCorrect: answer.isCorrect,
         elapsedTimeMs: validElapsedTime,
-        score: actualScore,
+        score: archiveBaseScore,
         streak: streakBeforeAnswer,
         streakBonus: answer.streakBonus,
         optionCount: currentQuestion.options.length
