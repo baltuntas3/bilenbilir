@@ -114,10 +114,9 @@ class GameArchiveUseCases extends SharedUseCases {
         if (!room || !room.hasQuizSnapshot()) return null;
 
         // Skip rooms in PODIUM state — they were already archived as 'completed' by archiveGame.
-        // Re-archiving would create a duplicate GameSession record.
+        // Room deletion is left to the caller (closeRoom / RoomCleanupService) so that
+        // room_closed can still be broadcast to connected clients before the room is removed.
         if (room.state === RoomState.PODIUM) {
-          try { await this.roomRepository.delete(pin); }
-          catch (err) { console.error(`Failed to delete completed room ${pin}:`, err.message); }
           return null;
         }
 

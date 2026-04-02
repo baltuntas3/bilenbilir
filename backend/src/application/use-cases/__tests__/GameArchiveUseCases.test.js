@@ -167,7 +167,8 @@ describe('GameArchiveUseCases', () => {
       mocks.room.state = 'PODIUM';
       const result = await uc.saveInterruptedGame({ pin: '123456', reason: 'cleanup' });
       expect(result).toBeNull();
-      expect(mocks.roomRepo.delete).toHaveBeenCalledWith('123456');
+      // Room deletion is left to the caller (closeRoom / RoomCleanupService)
+      expect(mocks.roomRepo.delete).not.toHaveBeenCalled();
       expect(mocks.sessionRepo.save).not.toHaveBeenCalled();
     });
 
