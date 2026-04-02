@@ -157,6 +157,8 @@ export function RoomProvider({ children }) {
 
   const setupRoomListeners = useCallback(() => {
     const currentSocketId = socketService.getSocketId();
+    // Skip if socket is not available yet (will be retried after reconnection)
+    if (!currentSocketId) return;
     if (roomListenersSetupRef.current && lastRoomSocketIdRef.current === currentSocketId) return;
 
     // Always cleanup before re-attaching to prevent listener accumulation
@@ -188,7 +190,7 @@ export function RoomProvider({ children }) {
         };
       });
       if (reason === 'connection_lost' && nickname) {
-        showToast.warning(`${nickname} disconnected`);
+        showToast.warning(`${nickname} disconnected`, `player-conn-${playerId}`);
       }
     });
 
@@ -198,7 +200,7 @@ export function RoomProvider({ children }) {
         ...prev,
         players: prev.players.filter(p => p.id !== playerId),
       }));
-      if (nickname) showToast.info(`${nickname} removed (reconnection timeout)`);
+      if (nickname) showToast.info(`${nickname} removed (reconnection timeout)`, `player-conn-${playerId}`);
     });
 
     socketService.on('player_kicked', ({ playerId, nickname }) => {
@@ -234,7 +236,7 @@ export function RoomProvider({ children }) {
           players: [...prev.players, { id: playerId, nickname, disconnected: false }],
         };
       });
-      showToast.info(`${nickname} reconnected`);
+      showToast.info(`${nickname} reconnected`, `player-conn-${playerId}`);
     });
 
     // Spectator events
@@ -269,7 +271,7 @@ export function RoomProvider({ children }) {
           spectators: [...prev.spectators, { id: spectatorId, nickname, disconnected: false }],
         };
       });
-      if (nickname) showToast.info(`${nickname} reconnected`);
+      if (nickname) showToast.info(`${nickname} reconnected`, `spectator-conn-${spectatorId}`);
     });
 
     // Team mode events
@@ -497,27 +499,30 @@ export function RoomProvider({ children }) {
       if (!session) return;
       reconnectingRef.current = true;
       updateRoomState({ isReconnecting: true });
-      showToast.info('Reconnecting...');
+      showToast.info('Reconnecting...', 'self-reconnect');
       try {
         if (session.role === 'host' && session.hostToken && isAuthenticated) {
           await reconnectHost(session.pin, session.hostToken);
+          setupRoomListeners();
           updateRoomState({ isReconnecting: false });
-          showToast.success('Reconnected as host!');
+          showToast.success('Reconnected as host!', 'self-reconnect');
         } else if (session.role === 'player' && session.playerToken) {
           await reconnectPlayer(session.pin, session.playerToken);
+          setupRoomListeners();
           updateRoomState({ isReconnecting: false });
-          showToast.success('Reconnected to game!');
+          showToast.success('Reconnected to game!', 'self-reconnect');
         } else if (session.role === 'spectator' && session.spectatorToken) {
           await reconnectSpectator(session.pin, session.spectatorToken);
+          setupRoomListeners();
           updateRoomState({ isReconnecting: false });
-          showToast.success('Reconnected as spectator!');
+          showToast.success('Reconnected as spectator!', 'self-reconnect');
         } else {
           // No matching reconnection path (e.g. host session but not authenticated)
           clearSession();
           setRoomState({ ...initialRoomState });
         }
       } catch (error) {
-        showToast.error('Failed to reconnect: ' + error.message);
+        showToast.error('Failed to reconnect: ' + error.message, 'self-reconnect');
         clearSession();
         setRoomState({ ...initialRoomState });
       } finally {
@@ -529,7 +534,7 @@ export function RoomProvider({ children }) {
     socketService.setDisconnectCallback((reason) => {
       // Use ref to avoid stale closure — roomPin changes shouldn't re-run this effect
       if (roomPinRef.current && reason !== 'io client disconnect') {
-        showToast.warning('Connection lost. Attempting to reconnect...');
+        showToast.warning('Connection lost. Attempting to reconnect...', 'self-reconnect');
       }
     });
 
@@ -543,7 +548,7 @@ export function RoomProvider({ children }) {
       socketService.setReconnectCallback(null);
       socketService.setDisconnectCallback(null);
     };
-  }, [isAuthenticated, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState]);
+  }, [isAuthenticated, reconnectHost, reconnectPlayer, reconnectSpectator, updateRoomState, setupRoomListeners]);
 
   const value = useMemo(() => ({
     ...roomState,

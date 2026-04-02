@@ -107,6 +107,8 @@ export function GameProvider({ children }) {
   // Socket event handlers
   const setupSocketListeners = useCallback(() => {
     const currentSocketId = socketService.getSocketId();
+    // Skip if socket is not available yet (will be retried after reconnection)
+    if (!currentSocketId) return;
     if (listenersSetupRef.current && lastSocketIdRef.current === currentSocketId) return;
 
     // Always cleanup before re-attaching to prevent listener accumulation
@@ -513,12 +515,12 @@ export function GameProvider({ children }) {
     });
 
     socketService.on('host_disconnected', ({ message }) => {
-      showToast.warning(message || 'Host disconnected. Waiting for reconnection...');
+      showToast.warning(message || 'Host disconnected. Waiting for reconnection...', 'host-conn');
     });
     socketService.on('host_disconnected_warning', ({ remainingSeconds, message }) => {
-      showToast.warning(`${message} (${remainingSeconds}s remaining)`);
+      showToast.warning(`${message} (${remainingSeconds}s remaining)`, 'host-conn');
     });
-    socketService.on('host_returned', () => showToast.success('Host has reconnected!'));
+    socketService.on('host_returned', () => showToast.success('Host has reconnected!', 'host-conn'));
     socketService.on('error', ({ error, message, code }) => {
       // Skip errors with known codes handled by their own ack callbacks
       if (code === 'ANSWER_ERROR' || code === 'POWER_UP_ERROR') return;
@@ -544,6 +546,11 @@ export function GameProvider({ children }) {
   useEffect(() => {
     const data = room.pendingReconnectData;
     if (!data) return;
+
+    // Re-setup listeners now that socket is available.
+    // On page refresh, setupSocketListeners runs before the socket is created,
+    // so listeners silently fail to register. This ensures they are attached.
+    setupSocketListeners();
 
     const updates = {};
     if (data.state && GAME_STATES[data.state]) updates.gameState = data.state;
