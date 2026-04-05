@@ -62,6 +62,7 @@ jobs:
             --timeout=3600 \
             --min-instances=0 \
             --max-instances=1 \
+            --concurrency=1000 \
             --memory=512Mi \
             --cpu=1 \
             --set-env-vars="$ENV_VARS"
