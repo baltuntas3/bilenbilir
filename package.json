@@ -1,0 +1,24 @@
+{
+  "name": "bilenbilir",
+  "version": "1.0.0",
+  "description": "A real-time multiplayer trivia game where players compete by answering questions in hosted rooms.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baltuntas3/bilenbilir.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/baltuntas3/bilenbilir/issues"
+  },
+  "homepage": "https://github.com/baltuntas3/bilenbilir#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}

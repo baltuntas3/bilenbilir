@@ -1,2 +1,10 @@
 .env
 .DS_Store
+
+# Dependencies
+node_modules/
+
+# Playwright artifacts
+playwright-report/
+test-results/
+load-test-bug-report.json
