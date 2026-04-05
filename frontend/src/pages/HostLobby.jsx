@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -102,6 +102,7 @@ export default function HostLobby() {
     }
   }, [totalQuestions, questionCount]);
 
+  const initRoomStartedRef = useRef(false);
   useEffect(() => {
     if (!quizId) {
       navigate('/my-quizzes');
@@ -112,6 +113,11 @@ export default function HostLobby() {
       setLoading(false);
       return;
     }
+
+    // Guard against double-invoke (React StrictMode, re-renders, rapid remounts).
+    // Without this guard, two initRoom calls race on the server's createRoomLock.
+    if (initRoomStartedRef.current) return;
+    initRoomStartedRef.current = true;
 
     const initRoom = async () => {
       try {
@@ -125,7 +131,13 @@ export default function HostLobby() {
         await createRoom(quizId);
         setLoading(false);
       } catch (error) {
-        if (error.message?.includes('already have an active room')) {
+        const msg = error.message || '';
+        // Both "already have an active room" (lock check passed, room exists)
+        // and "Room creation already in progress" (lock is held) mean a room
+        // either exists or is being created — recover by fetching it.
+        if (msg.includes('already have an active room') || msg.includes('Room creation already in progress')) {
+          // Brief delay to allow the in-flight creation to finish.
+          await new Promise((r) => setTimeout(r, 400));
           const existing = await getMyRoom();
           if (existing) {
             setExistingRoom(existing);
@@ -133,7 +145,9 @@ export default function HostLobby() {
             return;
           }
         }
-        showToast.error(error.message || 'Failed to create room');
+        // Allow retry on genuine failure.
+        initRoomStartedRef.current = false;
+        showToast.error(msg || 'Failed to create room');
         navigate('/my-quizzes');
       }
     };
