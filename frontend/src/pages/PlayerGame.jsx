@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -92,7 +92,10 @@ export default function PlayerGame() {
     }
   }, [lastAnswer, gameState, streak]);
 
-  const handleAnswerSelect = async (answerIndex) => {
+  // Memoize so AnswerOptions doesn't get a new onSelect prop on every parent
+  // re-render (which happens frequently during ANSWERING_PHASE as the players
+  // array churns on disconnect/reconnect events).
+  const handleAnswerSelect = useCallback(async (answerIndex) => {
     if (hasAnswered || submitting) return;
 
     setSelectedAnswer(answerIndex);
@@ -106,7 +109,7 @@ export default function PlayerGame() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [hasAnswered, submitting, submitAnswer]);
 
   const handleLeave = () => {
     leaveRoom();

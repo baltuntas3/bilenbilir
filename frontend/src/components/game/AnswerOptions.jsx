@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { SimpleGrid, UnstyledButton, Text, Stack, Progress, Group, Box } from '@mantine/core';
 import { IconCheck, IconX, IconUsers } from '@tabler/icons-react';
 
@@ -14,7 +15,7 @@ const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 const MANTINE_COLORS = ['cyan', 'pink', 'green', 'yellow', 'grape', 'cyan'];
 
-export default function AnswerOptions({
+function AnswerOptions({
   options,
   onSelect,
   disabled,
@@ -172,3 +173,7 @@ export default function AnswerOptions({
     </SimpleGrid>
   );
 }
+
+// Memo skips re-renders when sibling state (e.g., players array) changes
+// without affecting this component's actual inputs.
+export default memo(AnswerOptions);
