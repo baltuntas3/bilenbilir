@@ -21,6 +21,8 @@ class RoomUseCases extends SharedUseCases {
     this.joinLocks = new LockManager(60000);
     // Lock to prevent duplicate room creation by the same host (10s TTL)
     this.createRoomLocks = new LockManager(10000);
+    // Lock to prevent duplicate-reconnect races per (pin, token) (15s TTL)
+    this.reconnectLocks = new LockManager(15000);
   }
 
   /**
@@ -224,16 +226,19 @@ class RoomUseCases extends SharedUseCases {
   }
 
   async reconnectPlayer({ pin, playerToken, newSocketId }) {
-    const room = await this._getRoomOrThrow(pin);
-    const newPlayerToken = generateId();
-    const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod, newPlayerToken);
-    // Only clear active power-up if the player has already answered — eliminatedOptions
-    // are preserved for UI display (50:50 visual state should survive reconnect)
-    if (player.hasAnswered()) {
-      player.clearActivePowerUp();
-    }
-    await this.roomRepository.save(room);
-    return { room, player, newPlayerToken };
+    const lockKey = `${pin}:${playerToken}`;
+    return this.reconnectLocks.withLock(lockKey, 'Reconnect already in progress', async () => {
+      const room = await this._getRoomOrThrow(pin);
+      const newPlayerToken = generateId();
+      const player = room.reconnectPlayer(playerToken, newSocketId, this.playerGracePeriod, newPlayerToken);
+      // Only clear active power-up if the player has already answered — eliminatedOptions
+      // are preserved for UI display (50:50 visual state should survive reconnect)
+      if (player.hasAnswered()) {
+        player.clearActivePowerUp();
+      }
+      await this.roomRepository.save(room);
+      return { room, player, newPlayerToken };
+    });
   }
 
   async findRoomByHostToken({ hostToken }) {
